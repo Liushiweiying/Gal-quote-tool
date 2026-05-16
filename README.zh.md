@@ -97,14 +97,3 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 ├── settings.json
 └── screenshots\
 ```
-
-## 上传至 GitHub
-
-```bash
-cd /d/Galgame-quote-tool
-git init
-git add .gitignore README.md README.zh.md README.ja.md run.bat run.ps1 GalgameQuoteCollector/
-git commit -m "Initial commit"
-git remote add origin https://github.com/your-username/your-repo.git
-git push -u origin master
-```
