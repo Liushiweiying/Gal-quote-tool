@@ -1,0 +1,17 @@
+# Publish output
+publish-*/
+publish-v*/
+publish/
+
+# Build results
+GalgameQuoteCollector/bin/
+GalgameQuoteCollector/obj/
+
+# VS files
+.vs/
+*.user
+*.suo
+
+# OS files
+Thumbs.db
+.DS_Store
