@@ -1,4 +1,6 @@
-# Galgame 语录收藏工具
+# Galgame Quote Collector
+
+[中文](README.zh.md) | [日本語](README.ja.md)
 
 ![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)
 ![.NET](https://img.shields.io/badge/.NET-8.0-purple)
