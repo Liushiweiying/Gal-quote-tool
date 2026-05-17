@@ -81,8 +81,11 @@ public partial class App : Application
 
             if (_startMinimized)
             {
-                MainWindow.Show();
+                // Don't show window at all - tray icon only
+                MainWindow.ShowInTaskbar = false;
                 MainWindow.WindowState = WindowState.Minimized;
+                MainWindow.Show();
+                MainWindow.Hide();
                 _startMinimized = false;
             }
             else

@@ -12,6 +12,9 @@ GalgameQuoteCollector/obj/
 *.user
 *.suo
 
+# Symbol files
+*.pdb
+
 # OS files
 Thumbs.db
 .DS_Store

@@ -516,13 +516,12 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private static (bool ok, string path) TrySetAutoStart(bool enable)
+    private static (bool ok, string detail) TrySetAutoStart(bool enable)
     {
         try
         {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"Software\Microsoft\Windows\CurrentVersion\Run", true);
-            if (key == null) return (false, "无法打开注册表");
+            var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            var shortcutPath = Path.Combine(startupFolder, "GalgameQuoteCollector.lnk");
 
             if (enable)
             {
@@ -530,18 +529,59 @@ public partial class MainViewModel : ObservableObject
                 if (string.IsNullOrEmpty(exePath))
                     return (false, "无法获取程序路径");
 
-                key.SetValue("GalgameQuoteCollector", $"\"{exePath}\" --minimized");
-                return (true, $"已写入: {exePath}");
+                // Create a shortcut in the Startup folder
+                var shellType = Type.GetTypeFromCLSID(new Guid("72C24DD5-D70A-438B-8A42-98424B88AFB8"));
+                if (shellType == null) return (false, "无法创建快捷方式");
+
+                dynamic shell = Activator.CreateInstance(shellType)!;
+                try
+                {
+                    var shortcut = shell.CreateShortcut(shortcutPath);
+                    shortcut.TargetPath = exePath;
+                    shortcut.Arguments = "--minimized";
+                    shortcut.WorkingDirectory = Path.GetDirectoryName(exePath);
+                    shortcut.Description = "Galgame Quote Collector";
+                    shortcut.Save();
+                }
+                finally
+                {
+                    System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
+                }
+
+                return (true, $"已创建快捷方式: {shortcutPath}");
             }
             else
             {
-                key.DeleteValue("GalgameQuoteCollector", false);
+                if (File.Exists(shortcutPath))
+                    File.Delete(shortcutPath);
                 return (true, "已移除开机自启");
             }
         }
         catch (Exception ex)
         {
-            return (false, ex.Message);
+            // Fallback: try registry method
+            try
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Run", true);
+                if (key == null) return (false, $"快捷方式失败，注册表也无法访问: {ex.Message}");
+
+                if (enable)
+                {
+                    var exePath = Environment.ProcessPath;
+                    if (!string.IsNullOrEmpty(exePath))
+                        key.SetValue("GalgameQuoteCollector", $"\"{exePath}\" --minimized");
+                }
+                else
+                {
+                    key.DeleteValue("GalgameQuoteCollector", false);
+                }
+                return (true, "已使用注册表方式（快捷方式不可用）");
+            }
+            catch
+            {
+                return (false, ex.Message);
+            }
         }
     }
 
