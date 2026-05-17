@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using Hardcodet.Wpf.TaskbarNotification;
 
@@ -7,26 +8,49 @@ public partial class App : Application
 {
     private TaskbarIcon? _trayIcon;
     private bool _startMinimized;
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "GalgameQuoteCollector", "startup.log");
+
+    private static void Log(string msg)
+    {
+        try
+        {
+            File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n");
+        }
+        catch { }
+    }
 
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-
-        // Check for --minimized flag (auto-start)
-        _startMinimized = e.Args.Contains("--minimized");
+        Log("=== Startup begin ===");
+        Log($"Args: {string.Join(", ", e.Args)}");
 
         try
         {
-            // Create tray icon first
-            CreateTrayIcon();
+            _startMinimized = e.Args.Contains("--minimized");
+            Log($"Minimized mode: {_startMinimized}");
 
-            // Create and show main window (minimized if auto-start)
+            CreateTrayIcon();
+            Log("Tray icon created");
+
             ShowMainWindow();
+            Log("Main window initialized");
+
+            Log("=== Startup complete ===");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"启动失败: {ex.Message}\n\n{ex.GetType().Name}", "错误",
-                MessageBoxButton.OK, MessageBoxImage.Error);
+            Log($"FATAL: {ex.GetType().Name}: {ex.Message}");
+            Log(ex.StackTrace ?? "");
+            // Cannot show MessageBox during auto-start (no UI),
+            // but during normal launch it's useful
+            if (!_startMinimized)
+            {
+                MessageBox.Show($"启动失败: {ex.Message}", "错误",
+                    MessageBoxButton.OK, MessageBoxImage.Error);
+            }
             Shutdown();
         }
     }
@@ -63,9 +87,9 @@ public partial class App : Application
 
             _trayIcon.TrayMouseDoubleClick += (_, _) => ShowMainWindow();
         }
-        catch
+        catch (Exception ex)
         {
-            // Tray icon not critical
+            Log($"Tray icon failed (non-critical): {ex.Message}");
         }
     }
 
@@ -75,18 +99,19 @@ public partial class App : Application
         {
             if (MainWindow == null)
             {
+                Log("Creating MainWindow...");
                 MainWindow = new MainWindow();
                 MainWindow.Closed += (_, _) => MainWindow = null;
+                Log("MainWindow created");
             }
 
             if (_startMinimized)
             {
-                // Don't show window at all - tray icon only
-                MainWindow.ShowInTaskbar = false;
-                MainWindow.WindowState = WindowState.Minimized;
-                MainWindow.Show();
-                MainWindow.Hide();
+                Log("Auto-start: creating handle silently...");
+                var helper = new System.Windows.Interop.WindowInteropHelper(MainWindow);
+                _ = helper.EnsureHandle();
                 _startMinimized = false;
+                Log("Auto-start: handle created, window hidden");
             }
             else
             {
@@ -106,9 +131,7 @@ public partial class App : Application
     {
         ShowMainWindow();
         if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
-        {
             vm.OpenSettingsCommand.Execute(null);
-        }
     }
 
     protected override void OnExit(ExitEventArgs e)

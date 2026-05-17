@@ -509,7 +509,8 @@ public partial class MainViewModel : ObservableObject
             {
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
-                TrySetAutoStart(newConfig.AutoStart);
+                var (autoOk, autoMsg) = TrySetAutoStart(newConfig.AutoStart);
+                StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
                 MessageBox.Show("热键注册失败，请选择其他组合键", "错误",
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
@@ -518,70 +519,44 @@ public partial class MainViewModel : ObservableObject
 
     private static (bool ok, string detail) TrySetAutoStart(bool enable)
     {
+        var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+
         try
         {
-            var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            var shortcutPath = Path.Combine(startupFolder, "GalgameQuoteCollector.lnk");
-
             if (enable)
             {
                 var exePath = Environment.ProcessPath;
                 if (string.IsNullOrEmpty(exePath))
                     return (false, "无法获取程序路径");
 
-                // Create a shortcut in the Startup folder
-                var shellType = Type.GetTypeFromCLSID(new Guid("72C24DD5-D70A-438B-8A42-98424B88AFB8"));
-                if (shellType == null) return (false, "无法创建快捷方式");
+                // Write a VBScript to startup folder — no admin rights needed, no console flash
+                var vbsPath = Path.Combine(startupFolder, "GalgameQuoteCollector.vbs");
+                var vbsContent = $"CreateObject(\"WScript.Shell\").Run \"\"\"{exePath}\"\" --minimized\", 0, False";
+                File.WriteAllText(vbsPath, vbsContent);
 
-                dynamic shell = Activator.CreateInstance(shellType)!;
-                try
-                {
-                    var shortcut = shell.CreateShortcut(shortcutPath);
-                    shortcut.TargetPath = exePath;
-                    shortcut.Arguments = "--minimized";
-                    shortcut.WorkingDirectory = Path.GetDirectoryName(exePath);
-                    shortcut.Description = "Galgame Quote Collector";
-                    shortcut.Save();
-                }
-                finally
-                {
-                    System.Runtime.InteropServices.Marshal.FinalReleaseComObject(shell);
-                }
+                if (!File.Exists(vbsPath))
+                    return (false, "无法创建启动脚本");
 
-                return (true, $"已创建快捷方式: {shortcutPath}");
+                return (true, $"已创建启动脚本: {vbsPath}");
             }
             else
             {
-                if (File.Exists(shortcutPath))
-                    File.Delete(shortcutPath);
+                // Remove VBS
+                var vbsPath = Path.Combine(startupFolder, "GalgameQuoteCollector.vbs");
+                if (File.Exists(vbsPath))
+                    File.Delete(vbsPath);
+
+                // Also clean up old shortcut if exists
+                var lnkPath = Path.Combine(startupFolder, "GalgameQuoteCollector.lnk");
+                if (File.Exists(lnkPath))
+                    File.Delete(lnkPath);
+
                 return (true, "已移除开机自启");
             }
         }
         catch (Exception ex)
         {
-            // Fallback: try registry method
-            try
-            {
-                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                    @"Software\Microsoft\Windows\CurrentVersion\Run", true);
-                if (key == null) return (false, $"快捷方式失败，注册表也无法访问: {ex.Message}");
-
-                if (enable)
-                {
-                    var exePath = Environment.ProcessPath;
-                    if (!string.IsNullOrEmpty(exePath))
-                        key.SetValue("GalgameQuoteCollector", $"\"{exePath}\" --minimized");
-                }
-                else
-                {
-                    key.DeleteValue("GalgameQuoteCollector", false);
-                }
-                return (true, "已使用注册表方式（快捷方式不可用）");
-            }
-            catch
-            {
-                return (false, ex.Message);
-            }
+            return (false, ex.Message);
         }
     }
 
