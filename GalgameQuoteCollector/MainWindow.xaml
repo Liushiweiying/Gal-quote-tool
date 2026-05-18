@@ -193,9 +193,15 @@
                     <ScrollViewer Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}}"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock Text="游戏" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
+                            <TextBlock Text="游戏名" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
                             <TextBox Text="{Binding EditGameName, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="6,4" Margin="0 0 0 12"/>
+                                     Padding="6,4" Margin="0 0 0 6"/>
+
+                            <TextBlock Text="窗口标题" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
+                            <TextBox Text="{Binding EditWindowTitle, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="6,4" Margin="0 0 0 12" IsReadOnly="True"
+                                     Foreground="#555" Background="#F5F5F5"
+                                     ToolTip="采集时的原始窗口标题，只读"/>
 
                             <TextBlock Text="采集时间" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
                             <Grid Margin="0 0 0 12">

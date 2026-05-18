@@ -28,7 +28,8 @@ public class StorageService : IDisposable
                 GameName        TEXT NOT NULL DEFAULT '',
                 ScreenshotPath  TEXT NOT NULL DEFAULT '',
                 CapturedAt      TEXT NOT NULL,
-                Notes           TEXT NOT NULL DEFAULT ''
+                Notes           TEXT NOT NULL DEFAULT '',
+                WindowTitle     TEXT NOT NULL DEFAULT ''
             );
             CREATE TABLE IF NOT EXISTS Tags (
                 Id   INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -50,14 +51,23 @@ public class StorageService : IDisposable
             );
             """;
         cmd.ExecuteNonQuery();
+
+        // Migration: add WindowTitle column if missing (older database)
+        try
+        {
+            using var mig = _connection.CreateCommand();
+            mig.CommandText = "ALTER TABLE Quotes ADD COLUMN WindowTitle TEXT NOT NULL DEFAULT ''";
+            mig.ExecuteNonQuery();
+        }
+        catch { /* column already exists, ignore */ }
     }
 
     public void InsertQuote(Quote quote)
     {
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = """
-            INSERT INTO Quotes (Text, GameName, ScreenshotPath, CapturedAt, Notes)
-            VALUES (@Text, @GameName, @ScreenshotPath, @CapturedAt, @Notes);
+            INSERT INTO Quotes (Text, GameName, ScreenshotPath, CapturedAt, Notes, WindowTitle)
+            VALUES (@Text, @GameName, @ScreenshotPath, @CapturedAt, @Notes, @WindowTitle);
             SELECT last_insert_rowid();
             """;
         cmd.Parameters.AddWithValue("@Text", quote.Text);
@@ -65,6 +75,7 @@ public class StorageService : IDisposable
         cmd.Parameters.AddWithValue("@ScreenshotPath", quote.ScreenshotPath);
         cmd.Parameters.AddWithValue("@CapturedAt", quote.CapturedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@Notes", quote.Notes);
+        cmd.Parameters.AddWithValue("@WindowTitle", quote.WindowTitle);
 
         var result = cmd.ExecuteScalar();
         if (result is long id)
@@ -75,7 +86,7 @@ public class StorageService : IDisposable
     {
         var quotes = new List<Quote>();
         using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT Id, Text, GameName, ScreenshotPath, CapturedAt, Notes FROM Quotes ORDER BY CapturedAt DESC";
+        cmd.CommandText = "SELECT Id, Text, GameName, ScreenshotPath, CapturedAt, Notes, WindowTitle FROM Quotes ORDER BY CapturedAt DESC";
 
         using var reader = cmd.ExecuteReader();
         while (reader.Read())
@@ -87,7 +98,8 @@ public class StorageService : IDisposable
                 GameName = reader.GetString(2),
                 ScreenshotPath = reader.GetString(3),
                 CapturedAt = DateTime.Parse(reader.GetString(4)),
-                Notes = reader.GetString(5)
+                Notes = reader.GetString(5),
+                WindowTitle = reader.GetString(6)
             });
         }
         return quotes;
@@ -115,7 +127,8 @@ public class StorageService : IDisposable
                 GameName = reader.GetString(2),
                 ScreenshotPath = reader.GetString(3),
                 CapturedAt = DateTime.Parse(reader.GetString(4)),
-                Notes = reader.GetString(5)
+                Notes = reader.GetString(5),
+                WindowTitle = reader.GetString(6)
             });
         }
         return quotes;
@@ -124,11 +137,12 @@ public class StorageService : IDisposable
     public void UpdateQuote(Quote quote)
     {
         using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "UPDATE Quotes SET Text = @Text, GameName = @GameName, CapturedAt = @CapturedAt, Notes = @Notes WHERE Id = @Id";
+        cmd.CommandText = "UPDATE Quotes SET Text = @Text, GameName = @GameName, CapturedAt = @CapturedAt, Notes = @Notes, WindowTitle = @WindowTitle WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Text", quote.Text);
         cmd.Parameters.AddWithValue("@GameName", quote.GameName);
         cmd.Parameters.AddWithValue("@CapturedAt", quote.CapturedAt.ToString("O"));
         cmd.Parameters.AddWithValue("@Notes", quote.Notes);
+        cmd.Parameters.AddWithValue("@WindowTitle", quote.WindowTitle);
         cmd.Parameters.AddWithValue("@Id", quote.Id);
         cmd.ExecuteNonQuery();
     }

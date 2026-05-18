@@ -73,6 +73,9 @@ public partial class MainViewModel : ObservableObject
     private string _editGameName = string.Empty;
 
     [ObservableProperty]
+    private string _editWindowTitle = string.Empty;
+
+    [ObservableProperty]
     private string _editNotes = string.Empty;
 
     [ObservableProperty]
@@ -112,6 +115,7 @@ public partial class MainViewModel : ObservableObject
         {
             EditText = value.Text;
             EditGameName = value.GameName;
+            EditWindowTitle = value.WindowTitle;
             EditNotes = value.Notes;
             EditCapturedAt = value.CapturedAt;
             RefreshCurrentTags();
@@ -166,6 +170,7 @@ public partial class MainViewModel : ObservableObject
             {
                 Text = text,
                 GameName = gameName,
+                WindowTitle = windowTitle,
                 ScreenshotPath = screenshotPath,
                 CapturedAt = DateTime.Now
             };
@@ -569,6 +574,7 @@ public partial class MainViewModel : ObservableObject
 
         SelectedQuote.Text = EditText;
         SelectedQuote.GameName = EditGameName;
+        SelectedQuote.WindowTitle = EditWindowTitle;
         SelectedQuote.Notes = EditNotes;
         SelectedQuote.CapturedAt = EditCapturedAt;
         _storageService.UpdateQuote(SelectedQuote);

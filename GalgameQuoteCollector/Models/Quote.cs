@@ -22,6 +22,9 @@ public partial class Quote : ObservableObject
     [ObservableProperty]
     private string _notes = string.Empty;
 
+    [ObservableProperty]
+    private string _windowTitle = string.Empty;
+
     public string CapturedAtDisplay => CapturedAt.ToString("yyyy-MM-dd HH:mm:ss");
 
     public string PreviewText => Text.Length > 50 ? Text[..50] + "..." : Text;
