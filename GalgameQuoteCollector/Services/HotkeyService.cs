@@ -1,123 +1,98 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
-using System.Windows;
-using System.Windows.Interop;
 
 namespace GalgameQuoteCollector.Services;
 
 public class HotkeyService : IDisposable
 {
-    private const int WM_HOTKEY = 0x0312;
-    private const int HOTKEY_ID = 9000;
+    private const int WH_KEYBOARD_LL = 13;
+    private const int WM_KEYDOWN = 0x0100;
+    private const int WM_SYSKEYDOWN = 0x0104;
 
-    private readonly Window _window;
-    private HwndSource? _source;
-    private bool _registered;
-    private bool _hookAdded;
+    private IntPtr _hookId = IntPtr.Zero;
+    private HookProc? _hookProc; // keep alive
 
-    private uint _currentModifiers;
-    private uint _currentVirtualKey;
+    private uint _modifiers;  // cached modifier state
+    private uint _virtualKey;
+    private bool _winKeyDown;
 
     public event EventHandler? HotkeyPressed;
-
-    /// <summary>
-    /// Human-readable name of the current hotkey, e.g. "Ctrl+Win+Z".
-    /// </summary>
     public string CurrentHotkeyDisplay { get; private set; } = "";
 
-    public HotkeyService(Window window, uint modifiers, uint virtualKey)
+    public HotkeyService(uint modifiers, uint virtualKey)
     {
-        _window = window;
-        _currentModifiers = modifiers;
-        _currentVirtualKey = virtualKey;
+        _modifiers = modifiers;
+        _virtualKey = virtualKey;
         CurrentHotkeyDisplay = FormatKeys(modifiers, virtualKey);
-
-        TryRegister();
-        if (!_registered && !window.IsLoaded)
-        {
-            window.SourceInitialized += OnWindowReady;
-        }
+        InstallHook();
     }
 
-    private void OnWindowReady(object? sender, EventArgs e)
+    private void InstallHook()
     {
-        TryRegister();
+        using var curProcess = Process.GetCurrentProcess();
+        using var curModule = curProcess.MainModule!;
+        _hookProc = HookCallback;
+        _hookId = SetWindowsHookEx(WH_KEYBOARD_LL, _hookProc,
+            GetModuleHandle(curModule.ModuleName), 0);
     }
 
-    private void TryRegister()
-    {
-        _source = PresentationSource.FromVisual(_window) as HwndSource;
-        if (_source == null) return;
-
-        if (!_hookAdded)
-        {
-            _source.AddHook(WndProc);
-            _hookAdded = true;
-        }
-
-        RegisterHotkey(_currentModifiers, _currentVirtualKey);
-    }
-
-    /// <summary>
-    /// Change the hotkey at runtime. Unregisters the old one first.
-    /// Returns true if successful.
-    /// </summary>
     public bool UpdateHotkey(uint modifiers, uint virtualKey)
     {
-        // Unregister old
-        if (_registered && _source != null)
-        {
-            UnregisterHotKey(_source.Handle, HOTKEY_ID);
-            _registered = false;
-        }
-
-        _currentModifiers = modifiers;
-        _currentVirtualKey = virtualKey;
+        _modifiers = modifiers;
+        _virtualKey = virtualKey;
         CurrentHotkeyDisplay = FormatKeys(modifiers, virtualKey);
-
-        // Register new (if source is ready)
-        if (_source != null)
-        {
-            var result = RegisterHotKey(_source.Handle, HOTKEY_ID, modifiers, virtualKey);
-            _registered = result;
-            return result;
-        }
-
-        return false;
+        return true;
     }
 
-    private void RegisterHotkey(uint modifiers, uint virtualKey)
-    {
-        if (_registered || _source == null) return;
+    private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
 
-        var result = RegisterHotKey(_source.Handle, HOTKEY_ID, modifiers, virtualKey);
-        _registered = result;
-        if (!result)
-            throw new InvalidOperationException("热键注册失败，可能被其他程序占用");
+    private IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam)
+    {
+        if (nCode >= 0)
+        {
+            int vkCode = Marshal.ReadInt32(lParam);
+            bool keyDown = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+
+            // Track modifier keys for state
+            switch (vkCode)
+            {
+                case 0xA0: case 0xA1: /* L/R Shift */ break;
+                case 0xA2: case 0xA3: /* L/R Ctrl */ break;
+                case 0xA4: case 0xA5: /* L/R Alt */ break;
+                case 0x5B: case 0x5C: /* L/R Win */ _winKeyDown = keyDown; break;
+            }
+
+            if (keyDown && vkCode == _virtualKey && ModifiersDown())
+            {
+                HotkeyPressed?.Invoke(this, EventArgs.Empty);
+                return (IntPtr)1; // block the key from reaching other apps
+            }
+        }
+
+        return CallNextHookEx(_hookId, nCode, wParam, lParam);
     }
 
-    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    private bool ModifiersDown()
     {
-        if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
-        {
-            HotkeyPressed?.Invoke(this, EventArgs.Empty);
-            handled = true;
-        }
-        return IntPtr.Zero;
+        bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
+        bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
+        bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
+
+        bool wantCtrl = (_modifiers & 0x0002) != 0;
+        bool wantAlt = (_modifiers & 0x0001) != 0;
+        bool wantShift = (_modifiers & 0x0004) != 0;
+        bool wantWin = (_modifiers & 0x0008) != 0;
+
+        return ctrl == wantCtrl && alt == wantAlt && shift == wantShift && _winKeyDown == wantWin;
     }
 
     public void Dispose()
     {
-        if (_registered && _source != null)
+        if (_hookId != IntPtr.Zero)
         {
-            UnregisterHotKey(_source.Handle, HOTKEY_ID);
-            _registered = false;
+            UnhookWindowsHookEx(_hookId);
+            _hookId = IntPtr.Zero;
         }
-        if (_hookAdded && _source != null)
-        {
-            _source.RemoveHook(WndProc);
-            _hookAdded = false;
-        }
-        _window.SourceInitialized -= OnWindowReady;
     }
 
     private static string FormatKeys(uint modifiers, uint virtualKey)
@@ -127,18 +102,22 @@ public class HotkeyService : IDisposable
         if ((modifiers & 0x0001) != 0) parts.Add("Alt");
         if ((modifiers & 0x0004) != 0) parts.Add("Shift");
         if ((modifiers & 0x0008) != 0) parts.Add("Win");
-
-        var keyChar = virtualKey >= 0x41 && virtualKey <= 0x5A
-            ? ((char)virtualKey).ToString()
-            : $"0x{virtualKey:X2}";
-        parts.Add(keyChar);
-
+        parts.Add(((char)virtualKey).ToString());
         return string.Join("+", parts);
     }
 
-    [DllImport("user32.dll")]
-    private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+    [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
 
     [DllImport("user32.dll")]
-    private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+    private static extern bool UnhookWindowsHookEx(IntPtr hhk);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("user32.dll")]
+    private static extern short GetAsyncKeyState(int vKey);
 }

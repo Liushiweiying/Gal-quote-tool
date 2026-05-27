@@ -41,7 +41,7 @@ public partial class MainViewModel : ObservableObject
         var hotkeyConfig = _settingsService.LoadHotkeyConfig();
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
-        _hotkeyService = new HotkeyService(window, hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey);
+        _hotkeyService = new HotkeyService(hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey);
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
 
         LoadQuotes();
