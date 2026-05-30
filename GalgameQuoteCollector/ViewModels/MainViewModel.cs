@@ -21,6 +21,7 @@ public partial class MainViewModel : ObservableObject
     private readonly Window _window;
 
     private readonly string _dataDir;
+    private readonly string _screenshotDir;
     private bool _isCapturing;
     private int _captureDelayMs = 200;
 
@@ -30,10 +31,32 @@ public partial class MainViewModel : ObservableObject
         _dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GalgameQuoteCollector");
+        _screenshotDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            "GalgameQuoteCollector");
         Directory.CreateDirectory(_dataDir);
 
+        // Migrate screenshots from old location to Pictures on first run
+        var oldScreenshotDir = Path.Combine(_dataDir, "screenshots");
+        int migratedCount = 0;
+        if (Directory.Exists(oldScreenshotDir) && !Directory.Exists(_screenshotDir))
+        {
+            try
+            {
+                Directory.CreateDirectory(_screenshotDir);
+                foreach (var f in Directory.GetFiles(oldScreenshotDir, "*.png"))
+                {
+                    File.Copy(f, Path.Combine(_screenshotDir, Path.GetFileName(f)), false);
+                    migratedCount++;
+                }
+            }
+            catch { }
+        }
+        if (migratedCount > 0)
+            StatusText = $"已迁移 {migratedCount} 张截图到 {_screenshotDir}";
+
         _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
-        _captureService = new CaptureService(Path.Combine(_dataDir, "screenshots"));
+        _captureService = new CaptureService(_screenshotDir);
         _ocrService = new OcrService();
         _gameDetectService = new GameDetectService();
         _settingsService = new SettingsService(_dataDir);
@@ -44,8 +67,8 @@ public partial class MainViewModel : ObservableObject
         _hotkeyService = new HotkeyService(hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey);
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
 
-        LoadQuotes();
-        StatusText = $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录";
+        StatusText = $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   正在加载...";
+        _ = LoadQuotesAsync();
     }
 
     [ObservableProperty]
@@ -340,10 +363,19 @@ public partial class MainViewModel : ObservableObject
         }
 
         var tagsByQuote = new Dictionary<int, List<Tag>>();
+        var groupsByQuote = new Dictionary<int, List<QuoteGroup>>();
         foreach (var q in quotes)
+        {
             tagsByQuote[q.Id] = _storageService.GetTagsForQuote(q.Id);
+            groupsByQuote[q.Id] = _storageService.GetGroupsForQuote(q.Id);
+        }
 
-        var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote);
+        var slideshowMode = _settingsService.LoadHotkeyConfig().SlideshowMode;
+        var allGroups = _storageService.GetAllGroups();
+        var allTags = _storageService.GetAllTags();
+
+        var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote,
+            groupsByQuote, allGroups, allTags, slideshowMode);
         win.ShowDialog();
     }
 
@@ -625,18 +657,115 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void CleanupScreenshots()
+    {
+        var screenshotDir = _screenshotDir;
+        if (!Directory.Exists(screenshotDir))
+        {
+            StatusText = "没有截图目录需要清理";
+            return;
+        }
+
+        var allQuotes = _storageService.GetAllQuotes();
+        var referencedPaths = allQuotes
+            .Select(q => q.ScreenshotPath)
+            .Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => Path.GetFullPath(p))
+            .ToHashSet();
+
+        var files = Directory.GetFiles(screenshotDir, "*.png");
+        var orphaned = files.Where(f => !referencedPaths.Contains(Path.GetFullPath(f))).ToList();
+
+        if (orphaned.Count == 0)
+        {
+            StatusText = "没有未引用的截图";
+            return;
+        }
+
+        var result = MessageBox.Show($"发现 {orphaned.Count} 张无引用的截图，确定删除？\n\n（首张: {Path.GetFileName(orphaned[0])}）",
+            "清理截图", MessageBoxButton.YesNo, MessageBoxImage.Question);
+
+        if (result != MessageBoxResult.Yes) return;
+
+        int deleted = 0;
+        foreach (var f in orphaned)
+        {
+            try { File.Delete(f); deleted++; }
+            catch { }
+        }
+
+        StatusText = $"已清理 {deleted} 张无引用截图";
+    }
+
+    [RelayCommand]
+    private void MigrateScreenshots()
+    {
+        var oldDir = Path.Combine(_dataDir, "screenshots");
+        if (!Directory.Exists(oldDir))
+        {
+            StatusText = "没有旧截图需要迁移";
+            return;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(_screenshotDir);
+            int count = 0;
+            foreach (var f in Directory.GetFiles(oldDir, "*.png"))
+            {
+                var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
+                if (!File.Exists(dest))
+                {
+                    File.Copy(f, dest, false);
+                    count++;
+                }
+            }
+            StatusText = $"已迁移 {count} 张截图到 {_screenshotDir}";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"迁移失败: {ex.Message}";
+        }
+    }
+
     private async void OnHotkeyPressed(object? sender, EventArgs e)
     {
         await Capture();
     }
 
-    private void LoadQuotes()
+    private async Task LoadQuotesAsync()
     {
-        _allQuotes = _storageService.GetAllQuotes();
-        RefreshQuotes();
-        OcrAvailable = _ocrService.IsAvailable;
-        RefreshAvailableTags();
-        RefreshAvailableGroups();
+        await Task.Run(() =>
+        {
+            var quotes = _storageService.GetAllQuotes();
+            int updated = 0;
+            foreach (var q in quotes)
+            {
+                var source = !string.IsNullOrWhiteSpace(q.WindowTitle) ? q.WindowTitle : q.GameName;
+                var detected = _gameDetectService.DetectGameName(source);
+                if (!string.IsNullOrWhiteSpace(detected) && detected != q.GameName)
+                {
+                    q.GameName = detected;
+                    _storageService.UpdateQuote(q);
+                    updated++;
+                }
+            }
+
+            // Switch back to UI thread to update bindings
+            System.Windows.Application.Current.Dispatcher.Invoke(() =>
+            {
+                _allQuotes = quotes;
+                RefreshQuotes();
+                OcrAvailable = _ocrService.IsAvailable;
+                RefreshAvailableTags();
+                RefreshAvailableGroups();
+
+                StatusText = updated > 0
+                    ? $"已应用规则，更新了 {updated} 条语录的游戏名"
+                    : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录";
+            });
+        });
     }
 
     partial void OnIsTopmostChanged(bool value)

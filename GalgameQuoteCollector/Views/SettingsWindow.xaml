@@ -4,9 +4,7 @@
         Title="设置"
         Width="440" Height="520"
         WindowStartupLocation="CenterOwner"
-        ResizeMode="CanMinimize"
         ShowInTaskbar="False"
-        Background="#FFF"
         PreviewKeyDown="Window_PreviewKeyDown">
     <ScrollViewer>
         <Grid Margin="24">
@@ -56,7 +54,15 @@
                 </Grid>
             </StackPanel>
 
-            <Separator Grid.Row="7" Margin="0,6,0,6"/>
+            <StackPanel Grid.Row="7" Margin="0,0,0,6">
+                <TextBlock Text="回想模式" FontSize="13" Margin="0,0,0,2"/>
+                <ComboBox x:Name="SlideshowModeCombo" SelectedIndex="{Binding SlideshowMode, FallbackValue=0}">
+                    <ComboBoxItem Content="按时间顺序"/>
+                    <ComboBoxItem Content="随机顺序"/>
+                </ComboBox>
+            </StackPanel>
+
+            <Separator Grid.Row="8" Margin="0,6,0,6"/>
 
             <!-- Game Name Rules -->
             <TextBlock Grid.Row="8" Text="游戏名匹配规则" FontSize="14" FontWeight="SemiBold" Margin="0,0,0,6"/>

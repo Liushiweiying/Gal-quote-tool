@@ -65,7 +65,7 @@ public class HotkeyService : IDisposable
             if (keyDown && vkCode == _virtualKey && ModifiersDown())
             {
                 HotkeyPressed?.Invoke(this, EventArgs.Empty);
-                return (IntPtr)1; // block the key from reaching other apps
+                // Don't block - let the key pass through to other apps
             }
         }
 

@@ -21,6 +21,7 @@ public partial class SettingsWindow : Window
         AutoStartCheckBox.IsChecked = currentConfig.AutoStart;
         DelaySlider.Value = currentConfig.CaptureDelayMs;
         UpdateDelayLabel(currentConfig.CaptureDelayMs);
+        SlideshowModeCombo.SelectedIndex = currentConfig.SlideshowMode;
 
         RulesList.ItemsSource = currentConfig.GameNameRules;
 
@@ -109,6 +110,7 @@ public partial class SettingsWindow : Window
     {
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
+        _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();

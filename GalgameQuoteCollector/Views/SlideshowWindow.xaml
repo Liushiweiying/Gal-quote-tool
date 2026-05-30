@@ -5,24 +5,32 @@
         Width="900" Height="650"
         MinWidth="700" MinHeight="500"
         WindowStartupLocation="CenterOwner"
-        Background="#1A1A2E"
-        Foreground="#EEE"
+        Background="#FFF"
+        Foreground="#333"
         WindowStyle="None"
         ResizeMode="CanResize"
         PreviewKeyDown="OnKeyDown"
         MouseDown="OnWindowMouseDown">
 
+    <Window.Resources>
+        <Style TargetType="ComboBoxItem">
+            <Setter Property="Background" Value="White"/>
+            <Setter Property="Foreground" Value="#333"/>
+            <Setter Property="BorderBrush" Value="#DDD"/>
+        </Style>
+    </Window.Resources>
+
     <Grid>
-        <!-- ===== Normal Mode Layout ===== -->
+        <!-- Normal Layout -->
         <Grid x:Name="NormalLayout">
             <Grid.RowDefinitions>
-                <RowDefinition Height="48"/>
+                <RowDefinition Height="44"/>
                 <RowDefinition Height="*"/>
-                <RowDefinition Height="40"/>
+                <RowDefinition Height="36"/>
             </Grid.RowDefinitions>
 
             <!-- Top Bar -->
-            <Border Grid.Row="0" Background="#16213E" Padding="8,0">
+            <Border Grid.Row="0" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0 0 0 1" Padding="8,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -30,31 +38,31 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <Button Grid.Column="0" Content="← 关闭" x:Name="PrevOrCloseBtn"
                             Click="OnPrevOrClose" Padding="10,4" FontSize="13"
-                            Background="#0F3460" Foreground="#EEE" BorderThickness="0"
-                            Cursor="Hand"/>
+                            Background="#E0E0E0" Foreground="#333" BorderThickness="1" BorderBrush="#CCC" Cursor="Hand"/>
 
                     <Button Grid.Column="1" Content="全屏" x:Name="FullscreenBtn"
                             Click="OnToggleFullscreen" Padding="8,4" FontSize="12" Margin="4,0,0,0"
-                            Background="#0F3460" Foreground="#EEE" BorderThickness="0"
-                            Cursor="Hand"/>
+                            Background="#E0E0E0" Foreground="#333" BorderThickness="1" BorderBrush="#CCC" Cursor="Hand"/>
 
                     <Button Grid.Column="2" Content="置顶" x:Name="TopmostBtn"
                             Click="OnToggleTopmost" Padding="8,4" FontSize="12" Margin="4,0,0,0"
-                            Background="#0F3460" Foreground="#EEE" BorderThickness="0"
-                            Cursor="Hand"/>
+                            Background="#E0E0E0" Foreground="#333" BorderThickness="1" BorderBrush="#CCC" Cursor="Hand"/>
 
-                    <TextBlock Grid.Column="3" x:Name="GameNameText"
-                               FontSize="18" FontWeight="Bold"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="3" x:Name="GameNameText" FontSize="18" FontWeight="Bold"
+                               Foreground="#1976D2" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                    <Button Grid.Column="4" Content="关闭 →" x:Name="NextOrCloseBtn"
-                            Click="OnNextOrClose" Padding="10,4" FontSize="13"
-                            Background="#0F3460" Foreground="#EEE" BorderThickness="0"
-                            Cursor="Hand"/>
+                    <Button Grid.Column="4" Content="下一条 →" x:Name="NextOrCloseBtn"
+                            Click="OnNextOrClose" Padding="10,4" FontSize="13" Margin="0,0,4,0"
+                            Background="#1976D2" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+
+                    <Button Grid.Column="5" Content="×" x:Name="CloseBtn"
+                            Click="OnCloseClick" Width="28" Height="28" FontSize="14" FontWeight="Bold"
+                            Background="#E53935" Foreground="#FFF" BorderThickness="0" Cursor="Hand"/>
                 </Grid>
             </Border>
 
@@ -62,48 +70,47 @@
             <Border Grid.Row="1" Padding="40,16">
                 <Grid>
                     <Grid.RowDefinitions>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
-
-                    <Border Grid.Row="0" x:Name="ScreenshotBox"
-                            Background="#0F3460" CornerRadius="8"
-                            HorizontalAlignment="Center" MaxWidth="800" MaxHeight="380"
-                            Margin="0,0,0,12">
+                    <Border Grid.Row="0" x:Name="ScreenshotBox" Background="#F5F5F5" CornerRadius="8" BorderBrush="#E0E0E0" BorderThickness="1"
+                            HorizontalAlignment="Center" MaxWidth="800" MaxHeight="380" Margin="0,0,0,12">
                         <Image x:Name="ScreenshotImage" Stretch="Uniform" MaxWidth="800" MaxHeight="380"/>
                     </Border>
-
-                    <Border Grid.Row="1" Background="#16213E" CornerRadius="8"
-                            Padding="20,12" Margin="0,0,0,8" HorizontalAlignment="Center">
+                    <Border Grid.Row="1" Background="#FAFAFA" CornerRadius="8" BorderBrush="#E0E0E0" BorderThickness="1"
+                            Padding="20,12" Margin="0,0,0,4" HorizontalAlignment="Center">
                         <TextBlock x:Name="QuoteText" TextWrapping="Wrap" FontSize="20" LineHeight="32"
-                                   TextAlignment="Center" Foreground="#EEE" MaxWidth="700"/>
+                                   TextAlignment="Center" Foreground="#333" MaxWidth="700"/>
                     </Border>
                 </Grid>
             </Border>
 
             <!-- Bottom Bar -->
-            <Border Grid.Row="2" Background="#16213E" Padding="12,0">
-                <Grid>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <TextBlock Grid.Column="0" x:Name="TagsText" FontSize="13" Foreground="#AAA" VerticalAlignment="Center"/>
-                    <TextBlock Grid.Column="2" x:Name="ProgressText" FontSize="13" Foreground="#888" VerticalAlignment="Center"/>
-                </Grid>
+            <Border Grid.Row="2" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0 1 0 0" Padding="8,0">
+                <StackPanel Orientation="Horizontal">
+                    <ComboBox x:Name="GroupFilter" Width="90" FontSize="12"
+                              Background="White" Foreground="#333" BorderBrush="#CCC"
+                              SelectionChanged="OnFilterChanged">
+                        <ComboBoxItem Content="全部" IsSelected="True"/>
+                    </ComboBox>
+
+                    <ComboBox x:Name="TagFilter" Width="90" FontSize="12" Margin="4,0,8,0"
+                              Background="White" Foreground="#333" BorderBrush="#CCC"
+                              SelectionChanged="OnFilterChanged">
+                        <ComboBoxItem Content="全部" IsSelected="True"/>
+                    </ComboBox>
+
+                    <TextBlock x:Name="TagsText" FontSize="12" Foreground="#888" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="ProgressText" FontSize="12" Foreground="#888" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                </StackPanel>
             </Border>
         </Grid>
 
-        <!-- ===== Fullscreen Mode Layout ===== -->
+        <!-- Fullscreen Layout -->
         <Grid x:Name="FullscreenLayout" Visibility="Collapsed" Background="Black">
-            <Image x:Name="FsScreenshotImage" Stretch="Uniform"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
-
-            <!-- Bottom overlay with game name + user's notes -->
+            <Image x:Name="FsScreenshotImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
             <Border x:Name="FsOverlay" VerticalAlignment="Bottom" Background="#80000000" Padding="24,16">
                 <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+                    <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" x:Name="FsGameNameText" FontSize="14" Foreground="#AAA" TextAlignment="Center"/>
                     <TextBlock Grid.Row="1" x:Name="FsNotesText" FontSize="20" LineHeight="30"
                                TextWrapping="Wrap" TextAlignment="Center" Foreground="White" Margin="0,6,0,0"/>

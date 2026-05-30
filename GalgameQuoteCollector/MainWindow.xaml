@@ -9,6 +9,8 @@
         WindowStartupLocation="CenterScreen">
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
+        <conv:ThumbnailConverter x:Key="ThumbConv"/>
+        <conv:SearchHighlightConverter x:Key="HighlightConv"/>
     </Window.Resources>
 
     <Grid Margin="8">
@@ -29,22 +31,14 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <Grid Grid.Column="0">
                     <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             VerticalContentAlignment="Center"
-                             Padding="6,4"/>
-                    <TextBlock Text="搜索语录内容或游戏名..."
-                               Foreground="#AAA"
-                               IsHitTestVisible="False"
-                               VerticalAlignment="Center"
-                               Margin="8,0,0,0">
+                             VerticalContentAlignment="Center" Padding="6,4" MinWidth="120"/>
+                    <TextBlock Text="搜索..."
+                               Foreground="#AAA" IsHitTestVisible="False"
+                               VerticalAlignment="Center" Margin="8,0,0,0">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -58,47 +52,47 @@
                     </TextBlock>
                 </Grid>
 
-                <TextBlock Grid.Column="1"
-                           Visibility="{Binding OcrAvailable, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                           Foreground="Red" Margin="8 0" VerticalAlignment="Center">
+                <TextBlock Grid.Column="1" Visibility="Collapsed" Foreground="Red" Margin="8 0" VerticalAlignment="Center">
                     ⚠ OCR 不可用
                 </TextBlock>
 
                 <ComboBox Grid.Column="2" SelectedIndex="{Binding SortMode}"
-                          Width="80" Margin="4,0,0,0" VerticalAlignment="Center">
-                    <ComboBoxItem Content="按时间"/>
-                    <ComboBoxItem Content="按游戏名"/>
+                          Width="70" Margin="4,0,0,0" VerticalAlignment="Center">
+                    <ComboBoxItem Content="时间"/>
+                    <ComboBoxItem Content="游戏"/>
                 </ComboBox>
 
                 <ComboBox Grid.Column="3" ItemsSource="{Binding AvailableGroups}"
                           DisplayMemberPath="Name"
                           SelectedValue="{Binding SelectedGroupFilter}"
                           SelectedValuePath="Id"
-                          Width="100" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                          Width="90" Margin="4,0,0,0" VerticalAlignment="Center"/>
 
-                <Button Grid.Column="4" Content="导入" Command="{Binding ImportCommand}"
+                <Button Grid.Column="4" Content="回想" Command="{Binding OpenSlideshowCommand}"
                         Padding="12,4" Margin="4,0,0,0"/>
 
-                <Button Grid.Column="5" Content="导出分组" Command="{Binding ExportGroupCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
+                <Button Grid.Column="5" Content="采集" Command="{Binding CaptureCommand}"
+                        Padding="12,4" Margin="4,0,0,0"
+                        Background="#1976D2" Foreground="White" FontWeight="SemiBold"/>
 
-                <Button Grid.Column="6" Content="导出全部" Command="{Binding ExportCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
-
-                <Button Grid.Column="7" Content="设置" Command="{Binding OpenSettingsCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
-
-                <Button Grid.Column="8" Content="回想" Command="{Binding OpenSlideshowCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
-
-                <ToggleButton Grid.Column="9" Content="置顶" IsChecked="{Binding IsTopmost}"
-                              Padding="12,4" Margin="4,0,0,0"/>
-
-                <Button Grid.Column="10" Content="统计" Command="{Binding ShowStatsCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
-
-                <Button Grid.Column="11" Content="采集" Command="{Binding CaptureCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
+                <!-- 更多 → dropdown -->
+                <Button Grid.Column="6" Content="···" x:Name="MoreBtn"
+                        Padding="8,4" Margin="4,0,0,0" FontWeight="Bold"
+                        Click="OnMoreMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="导入" Command="{Binding ImportCommand}"/>
+                            <MenuItem Header="导出全部" Command="{Binding ExportCommand}"/>
+                            <MenuItem Header="导出分组" Command="{Binding ExportGroupCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="设置" Command="{Binding OpenSettingsCommand}"/>
+                            <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="截图迁移" Command="{Binding MigrateScreenshotsCommand}"/>
+                            <MenuItem Header="截图清理" Command="{Binding CleanupScreenshotsCommand}"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
             </Grid>
         </Border>
 
@@ -130,7 +124,7 @@
                                         <!-- Thumbnail -->
                                         <Border Grid.Column="0" Width="42" Height="32" CornerRadius="3"
                                                 Background="#EEE" Margin="0,0,6,0" ClipToBounds="True">
-                                            <Image Source="{Binding ScreenshotPath}" Stretch="UniformToFill"
+                                            <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}" Stretch="UniformToFill"
                                                    MaxWidth="42" MaxHeight="32"/>
                                         </Border>
 
@@ -145,9 +139,15 @@
                                             <TextBlock Grid.Row="0" Text="{Binding GameName}"
                                                        FontWeight="SemiBold" Foreground="#1976D2" FontSize="12"/>
 
-                                            <TextBlock Grid.Row="1" Text="{Binding PreviewText}"
-                                                       TextWrapping="Wrap" MaxHeight="36"
-                                                       TextTrimming="WordEllipsis" Margin="0,1,0,0" FontSize="12"/>
+                                            <ContentControl Grid.Row="1" Margin="0,1,0,0" FontSize="12"
+                                                            MaxHeight="36">
+                                                <ContentControl.Content>
+                                                    <MultiBinding Converter="{StaticResource HighlightConv}">
+                                                        <Binding Path="PreviewText"/>
+                                                        <Binding Path="DataContext.SearchText" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                    </MultiBinding>
+                                                </ContentControl.Content>
+                                            </ContentControl>
 
                                             <TextBlock Grid.Row="2" Text="{Binding CapturedAtDisplay}"
                                                        FontSize="10" Foreground="#999" Margin="0,1,0,0"/>

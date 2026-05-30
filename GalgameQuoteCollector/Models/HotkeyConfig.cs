@@ -12,6 +12,7 @@ public class HotkeyConfig
     public uint VirtualKey { get; set; } = 0x5A; // Z
     public bool AutoStart { get; set; }
     public int CaptureDelayMs { get; set; } = 200;
+    public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public List<GameNameRule> GameNameRules { get; set; } = new();
 
     /// <summary>
@@ -60,6 +61,7 @@ public class HotkeyConfig
             VirtualKey = VirtualKey,
             AutoStart = AutoStart,
             CaptureDelayMs = CaptureDelayMs,
+            SlideshowMode = SlideshowMode,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

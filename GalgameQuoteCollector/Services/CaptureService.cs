@@ -17,6 +17,7 @@ public class CaptureService
 
     /// <summary>
     /// Capture the foreground window and return the screenshot file path.
+    /// Uses PrintWindow for DirectX-aware capture, falls back to CopyFromScreen.
     /// </summary>
     public string CaptureForegroundWindow()
     {
@@ -33,10 +34,23 @@ public class CaptureService
         var filePath = Path.Combine(ScreenshotDir, $"{timestamp}.png");
 
         using var bitmap = new Bitmap(width, height);
-        using var g = Graphics.FromImage(bitmap);
-        g.CopyFromScreen(rect.left, rect.top, 0, 0, new Size(width, height));
-        bitmap.Save(filePath, ImageFormat.Png);
 
+        // Try PrintWindow first (handles DirectX-rendered content)
+        using (var g = Graphics.FromImage(bitmap))
+        {
+            var hdc = g.GetHdc();
+            bool printed = PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT);
+            g.ReleaseHdc(hdc);
+
+            if (!printed)
+            {
+                // Fallback: classic GDI screen capture
+                using var g2 = Graphics.FromImage(bitmap);
+                g2.CopyFromScreen(rect.left, rect.top, 0, 0, new Size(width, height));
+            }
+        }
+
+        bitmap.Save(filePath, ImageFormat.Png);
         return filePath;
     }
 
@@ -54,6 +68,8 @@ public class CaptureService
         return sb.ToString();
     }
 
+    private const int PW_RENDERFULLCONTENT = 0x00000002;
+
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
 
@@ -65,6 +81,9 @@ public class CaptureService
 
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT

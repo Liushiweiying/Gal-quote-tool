@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using GalgameQuoteCollector.ViewModels;
 
@@ -19,6 +20,15 @@ public partial class MainWindow : Window
 
         // Hide instead of close when clicking ×
         Closing += OnClosing;
+    }
+
+    private void OnMoreMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement el && el.ContextMenu != null)
+        {
+            el.ContextMenu.PlacementTarget = el;
+            el.ContextMenu.IsOpen = true;
+        }
     }
 
     private void OnClosing(object? sender, CancelEventArgs e)

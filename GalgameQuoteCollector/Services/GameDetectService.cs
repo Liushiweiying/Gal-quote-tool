@@ -34,15 +34,19 @@ public class GameDetectService
         if (string.IsNullOrWhiteSpace(windowTitle))
             return string.Empty;
 
-        // 1. Custom rules (substring match, case-insensitive)
+        // 1. Custom rules — longest match wins
+        GameNameRule? best = null;
         foreach (var rule in _rules)
         {
             if (!string.IsNullOrWhiteSpace(rule.Match) &&
-                windowTitle.Contains(rule.Match, StringComparison.OrdinalIgnoreCase))
+                windowTitle.Contains(rule.Match, StringComparison.OrdinalIgnoreCase) &&
+                (best == null || rule.Match.Length > best.Match.Length))
             {
-                return rule.Name;
+                best = rule;
             }
         }
+        if (best != null)
+            return best.Name;
 
         // 2. Auto-cleaning
         var cleaned = windowTitle.Trim();
