@@ -64,6 +64,13 @@ public partial class MainViewModel : ObservableObject
         var hotkeyConfig = _settingsService.LoadHotkeyConfig();
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
+
+        // Apply custom font
+        if (!string.IsNullOrWhiteSpace(hotkeyConfig.FontFamily))
+        {
+            try { _window.FontFamily = new System.Windows.Media.FontFamily(hotkeyConfig.FontFamily); }
+            catch { }
+        }
         _hotkeyService = new HotkeyService(hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey);
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
 
@@ -538,6 +545,11 @@ public partial class MainViewModel : ObservableObject
             {
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
+                if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
+                {
+                    try { _window.FontFamily = new System.Windows.Media.FontFamily(newConfig.FontFamily); }
+                    catch { }
+                }
                 var (autoOk, autoMsg) = TrySetAutoStart(newConfig.AutoStart);
                 StatusText = $"热键已更改为: {_hotkeyService.CurrentHotkeyDisplay}";
                 if (!autoOk) StatusText += $" | 自启失败: {autoMsg}";
@@ -546,6 +558,11 @@ public partial class MainViewModel : ObservableObject
             {
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
+                if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
+                {
+                    try { _window.FontFamily = new System.Windows.Media.FontFamily(newConfig.FontFamily); }
+                    catch { }
+                }
                 var (autoOk, autoMsg) = TrySetAutoStart(newConfig.AutoStart);
                 StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
                 MessageBox.Show("热键注册失败，请选择其他组合键", "错误",
@@ -628,10 +645,22 @@ public partial class MainViewModel : ObservableObject
         var quoteToDelete = SelectedQuote;
         _storageService.DeleteQuote(quoteToDelete.Id);
 
-        if (File.Exists(quoteToDelete.ScreenshotPath))
+        // Delete screenshot — check both old (db path) and new (Pictures) locations
+        var pathsToTry = new[] { quoteToDelete.ScreenshotPath };
+        if (!string.IsNullOrEmpty(quoteToDelete.ScreenshotPath))
         {
-            try { File.Delete(quoteToDelete.ScreenshotPath); }
-            catch { }
+            var fileName = Path.GetFileName(quoteToDelete.ScreenshotPath);
+            var newPath = Path.Combine(_screenshotDir, fileName);
+            if (newPath != quoteToDelete.ScreenshotPath)
+                pathsToTry = [quoteToDelete.ScreenshotPath, newPath];
+        }
+        foreach (var p in pathsToTry)
+        {
+            if (File.Exists(p))
+            {
+                try { File.Delete(p); }
+                catch { }
+            }
         }
 
         _allQuotes.Remove(quoteToDelete);

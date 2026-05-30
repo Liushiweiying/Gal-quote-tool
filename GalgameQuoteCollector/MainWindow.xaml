@@ -4,24 +4,26 @@
         xmlns:vm="clr-namespace:GalgameQuoteCollector.ViewModels"
         xmlns:conv="clr-namespace:GalgameQuoteCollector.Converters"
         Title="Galgame 语录收藏"
-        Width="960" Height="640"
-        MinWidth="720" MinHeight="480"
-        WindowStartupLocation="CenterScreen">
+        Width="960" Height="660"
+        MinWidth="720" MinHeight="500"
+        WindowStartupLocation="CenterScreen"
+        Background="#F5F5F7"
+        FontFamily="Segoe UI">
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <conv:ThumbnailConverter x:Key="ThumbConv"/>
         <conv:SearchHighlightConverter x:Key="HighlightConv"/>
     </Window.Resources>
 
-    <Grid Margin="8">
+    <Grid Margin="12,8,12,8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Toolbar -->
-        <Border Grid.Row="0" BorderBrush="#E0E0E0" BorderThickness="0 0 0 1" Padding="0 0 0 8" Margin="0 0 0 8">
+        <!-- ===== Toolbar ===== -->
+        <Border Grid.Row="0" Margin="0,0,0,10" Background="Transparent">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -31,61 +33,83 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
-                <Grid Grid.Column="0">
-                    <TextBox Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
-                             VerticalContentAlignment="Center" Padding="6,4" MinWidth="120"/>
-                    <TextBlock Text="搜索..."
-                               Foreground="#AAA" IsHitTestVisible="False"
-                               VerticalAlignment="Center" Margin="8,0,0,0">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding SearchText}" Value="">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
+                <!-- Search bar (takes remaining space) -->
+                <Border Grid.Column="0" Background="White"
+                        BorderBrush="#E0E0E0" BorderThickness="1"
+                        Height="32" Margin="0,0,8,0" MinWidth="180">
+                    <Grid Margin="10,0,8,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="🔍" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBox Grid.Column="1" x:Name="SearchBox"
+                                 Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 Background="Transparent" BorderThickness="0"
+                                 VerticalContentAlignment="Center" Padding="0"
+                                 FontSize="13" Foreground="#333"/>
+                        <TextBlock Grid.Column="1" Text="搜索语录或游戏..."
+                                   Foreground="#AAA" IsHitTestVisible="False"
+                                   VerticalAlignment="Center" FontSize="13"
+                                   Margin="1,0,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding SearchText}" Value="">
+                                            <Setter Property="Visibility" Value="Visible"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </Grid>
+                </Border>
 
-                <TextBlock Grid.Column="1" Visibility="Collapsed" Foreground="Red" Margin="8 0" VerticalAlignment="Center">
-                    ⚠ OCR 不可用
-                </TextBlock>
+                <!-- Main buttons -->
+                <Button Grid.Column="1" Content="采集" Command="{Binding CaptureCommand}"
+                        Background="#5B6ABF" Foreground="White" BorderThickness="0"
+                        Padding="14,5" FontSize="13" FontWeight="SemiBold"
+                        Margin="0,0,4,0" Cursor="Hand"/>
 
-                <ComboBox Grid.Column="2" SelectedIndex="{Binding SortMode}"
-                          Width="70" Margin="4,0,0,0" VerticalAlignment="Center">
+                <Button Grid.Column="2" Content="回想" Command="{Binding OpenSlideshowCommand}"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"
+                        Padding="14,5" FontSize="13"
+                        Margin="0,0,4,0" Cursor="Hand"/>
+
+                <Button Grid.Column="3" Content="⚙" Command="{Binding OpenSettingsCommand}"
+                        Background="Transparent" Foreground="#888" BorderThickness="0"
+                        Padding="8,5" FontSize="16" ToolTip="设置" Cursor="Hand"/>
+
+                <!-- Sort + Group combos -->
+                <ComboBox Grid.Column="4" SelectedIndex="{Binding SortMode}" Width="65"
+                          FontSize="12" Background="White" BorderBrush="#DDD"
+                          Height="28" VerticalAlignment="Center" Margin="0,0,2,0">
                     <ComboBoxItem Content="时间"/>
                     <ComboBoxItem Content="游戏"/>
                 </ComboBox>
 
-                <ComboBox Grid.Column="3" ItemsSource="{Binding AvailableGroups}"
-                          DisplayMemberPath="Name"
-                          SelectedValue="{Binding SelectedGroupFilter}"
-                          SelectedValuePath="Id"
-                          Width="90" Margin="4,0,0,0" VerticalAlignment="Center"/>
+                <ComboBox Grid.Column="5" ItemsSource="{Binding AvailableGroups}"
+                          DisplayMemberPath="Name" SelectedValue="{Binding SelectedGroupFilter}"
+                          SelectedValuePath="Id" Width="85" FontSize="12"
+                          Background="White" BorderBrush="#DDD"
+                          Height="28" VerticalAlignment="Center" Margin="0,0,4,0"/>
 
-                <Button Grid.Column="4" Content="回想" Command="{Binding OpenSlideshowCommand}"
-                        Padding="12,4" Margin="4,0,0,0"/>
-
-                <Button Grid.Column="5" Content="采集" Command="{Binding CaptureCommand}"
-                        Padding="12,4" Margin="4,0,0,0"
-                        Background="#1976D2" Foreground="White" FontWeight="SemiBold"/>
-
-                <!-- 更多 → dropdown -->
+                <!-- "···" menu for extra actions -->
                 <Button Grid.Column="6" Content="···" x:Name="MoreBtn"
-                        Padding="8,4" Margin="4,0,0,0" FontWeight="Bold"
+                        Background="Transparent" Foreground="#888" BorderThickness="0"
+                        Padding="8,5" FontSize="18" FontWeight="Bold"
+                        ToolTip="更多" Cursor="Hand"
                         Click="OnMoreMenu">
                     <Button.ContextMenu>
-                        <ContextMenu>
+                        <ContextMenu Background="White" Foreground="#333">
                             <MenuItem Header="导入" Command="{Binding ImportCommand}"/>
                             <MenuItem Header="导出全部" Command="{Binding ExportCommand}"/>
                             <MenuItem Header="导出分组" Command="{Binding ExportGroupCommand}"/>
                             <Separator/>
-                            <MenuItem Header="设置" Command="{Binding OpenSettingsCommand}"/>
                             <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
                             <Separator/>
                             <MenuItem Header="截图迁移" Command="{Binding MigrateScreenshotsCommand}"/>
@@ -96,36 +120,52 @@
             </Grid>
         </Border>
 
-        <!-- Main Content: Quote List + Detail -->
+        <!-- ===== Main Content ===== -->
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="300"/>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="280"/>
+                <ColumnDefinition Width="8"/>
                 <ColumnDefinition Width="*"/>
             </Grid.ColumnDefinitions>
 
             <!-- Left: Quote List -->
-            <Border Grid.Column="0" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="4">
+            <Border Grid.Column="0" Background="White"  BorderThickness="0"
+                    Padding="4">
                 <Grid>
-                    <ListBox ItemsSource="{Binding Quotes}"
-                             SelectedItem="{Binding SelectedQuote}"
+                    <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
+                             BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             BorderThickness="0"
                              VirtualizingPanel.ScrollUnit="Pixel">
+                        <ListBox.Resources>
+                            <Style TargetType="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,0,4"/>
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsSelected" Value="True">
+                                        <Setter Property="Background" Value="#EEF0FF"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </ListBox.Resources>
                         <ListBox.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="6,4" Margin="2" BorderBrush="#F0F0F0" BorderThickness="0 0 0 1">
+                                <Border Background="#FAFAFA" Padding="8,6"
+                                        BorderBrush="#F0F0F0" BorderThickness="1">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="48"/>
+                                            <ColumnDefinition Width="40"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
 
                                         <!-- Thumbnail -->
-                                        <Border Grid.Column="0" Width="42" Height="32" CornerRadius="3"
-                                                Background="#EEE" Margin="0,0,6,0" ClipToBounds="True">
-                                            <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}" Stretch="UniformToFill"
-                                                   MaxWidth="42" MaxHeight="32"/>
+                                        <Border Grid.Column="0" Width="36" Height="28"
+                                                 Background="#EEE"
+                                                Margin="0,0,6,0" ClipToBounds="True">
+                                            <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}"
+                                                   Stretch="UniformToFill" MaxWidth="36" MaxHeight="28"/>
                                         </Border>
 
                                         <!-- Text -->
@@ -133,14 +173,11 @@
                                             <Grid.RowDefinitions>
                                                 <RowDefinition Height="Auto"/>
                                                 <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
                                             </Grid.RowDefinitions>
-
                                             <TextBlock Grid.Row="0" Text="{Binding GameName}"
-                                                       FontWeight="SemiBold" Foreground="#1976D2" FontSize="12"/>
-
-                                            <ContentControl Grid.Row="1" Margin="0,1,0,0" FontSize="12"
-                                                            MaxHeight="36">
+                                                       FontWeight="SemiBold" Foreground="#5B6ABF" FontSize="12"/>
+                                            <ContentControl Grid.Row="1" FontSize="11" Foreground="#666"
+                                                            MaxHeight="30" Margin="0,1,0,0">
                                                 <ContentControl.Content>
                                                     <MultiBinding Converter="{StaticResource HighlightConv}">
                                                         <Binding Path="PreviewText"/>
@@ -148,9 +185,6 @@
                                                     </MultiBinding>
                                                 </ContentControl.Content>
                                             </ContentControl>
-
-                                            <TextBlock Grid.Row="2" Text="{Binding CapturedAtDisplay}"
-                                                       FontSize="10" Foreground="#999" Margin="0,1,0,0"/>
                                         </Grid>
                                     </Grid>
                                 </Border>
@@ -161,29 +195,17 @@
                     <TextBlock Text="还没有语录，按 Ctrl+Win+Z 采集"
                                Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
                                HorizontalAlignment="Center" VerticalAlignment="Center"
-                               Foreground="#AAA" FontSize="14"
-                               TextWrapping="Wrap" TextAlignment="Center"/>
+                               Foreground="#AAA" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"/>
                 </Grid>
             </Border>
 
             <!-- Splitter -->
-            <GridSplitter Grid.Column="1" Width="4" Margin="0" Background="Transparent"
-                          HorizontalAlignment="Center" VerticalAlignment="Stretch">
-                <GridSplitter.Style>
-                    <Style TargetType="GridSplitter">
-                        <Setter Property="Background" Value="Transparent"/>
-                        <Style.Triggers>
-                            <Trigger Property="IsMouseOver" Value="True">
-                                <Setter Property="Background" Value="#1976D2"/>
-                            </Trigger>
-                        </Style.Triggers>
-                    </Style>
-                </GridSplitter.Style>
-            </GridSplitter>
+            <GridSplitter Grid.Column="1" Width="4" Background="Transparent"
+                          HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
 
             <!-- Right: Detail Panel -->
-            <Border Grid.Column="2" BorderBrush="#E0E0E0" BorderThickness="1" CornerRadius="4"
-                    Padding="12" Margin="4,0,0,0">
+            <Border Grid.Column="2" Background="White"  BorderThickness="0"
+                    Padding="16,12">
                 <Grid>
                     <TextBlock Text="选择一条语录查看详情"
                                Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
@@ -193,67 +215,60 @@
                     <ScrollViewer Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}}"
                                   VerticalScrollBarVisibility="Auto">
                         <StackPanel>
-                            <TextBlock Text="游戏名" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
+                            <!-- Game name + Window title -->
+                            <TextBlock Text="游戏" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
                             <TextBox Text="{Binding EditGameName, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="6,4" Margin="0 0 0 6"/>
+                                     FontSize="15" FontWeight="SemiBold" Foreground="#333"
+                                     Background="#FAFAFA" BorderBrush="#E0E0E0" 
+                                     Padding="8,6" Margin="0,0,0,4"/>
 
-                            <TextBlock Text="窗口标题" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
-                            <TextBox Text="{Binding EditWindowTitle, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="6,4" Margin="0 0 0 12" IsReadOnly="True"
-                                     Foreground="#555" Background="#F5F5F5"
-                                     ToolTip="采集时的原始窗口标题，只读"/>
+                            <TextBlock Text="窗口标题" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                            <TextBox Text="{Binding EditWindowTitle}" IsReadOnly="True"
+                                     FontSize="12" Foreground="#888" Background="#F5F5F5"
+                                     BorderBrush="#E0E0E0" 
+                                     Padding="8,6" Margin="0,0,0,12"/>
 
-                            <TextBlock Text="采集时间" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
-                            <Grid Margin="0 0 0 12">
+                            <!-- Time -->
+                            <TextBlock Text="采集时间" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                            <Grid Margin="0,0,0,12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
                                 <DatePicker Grid.Column="0" SelectedDate="{Binding EditCapturedAt}"
-                                            Padding="4,2"/>
+                                            Padding="4,2" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
                                 <TextBox Grid.Column="1" Text="{Binding EditCapturedAt, StringFormat={}{0:HH:mm:ss}}"
-                                         Width="80" Padding="4,2" Margin="4,0,0,0"
-                                         VerticalAlignment="Center"/>
+                                         Width="70" Padding="4,2" Margin="4,0,0,0"
+                                         Background="#FAFAFA" BorderBrush="#E0E0E0"/>
                             </Grid>
 
-                            <TextBlock Text="语录内容" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
+                            <!-- Quote text -->
+                            <TextBlock Text="语录内容" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
                             <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
-                                     AcceptsReturn="True"
-                                     TextWrapping="Wrap"
-                                     MinHeight="80"
-                                     FontSize="14"
-                                     Padding="6,4"
-                                     Margin="0 0 0 12"/>
+                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70"
+                                     FontSize="14" Background="#FAFAFA" BorderBrush="#E0E0E0" 
+                                     Padding="8,6" Margin="0,0,0,12"/>
 
-                            <TextBlock Text="截图" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
-                            <Border Background="#F0F0F0" CornerRadius="4" Padding="4" Margin="0 0 0 8"
+                            <!-- Screenshot -->
+                            <TextBlock Text="截图" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                            <Border Background="#F5F5F5" Padding="4" Margin="0,0,0,10"
                                     Cursor="Hand">
-                                <Border.ToolTip>
-                                    <TextBlock Text="点击打开原图"/>
-                                </Border.ToolTip>
                                 <Border.InputBindings>
                                     <MouseBinding Gesture="LeftClick" Command="{Binding OpenScreenshotCommand}"/>
                                 </Border.InputBindings>
                                 <Image Source="{Binding SelectedQuote.ScreenshotPath}"
-                                       MaxHeight="240"
-                                       Stretch="Uniform"/>
+                                       MaxHeight="200" Stretch="Uniform"/>
                             </Border>
 
-                            <TextBlock Text="标签" FontSize="12" Foreground="#888" Margin="0 0 0 4"/>
-                            <WrapPanel Margin="0 0 0 8">
+                            <!-- Tags -->
+                            <TextBlock Text="标签" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                            <WrapPanel Margin="0,0,0,4">
                                 <ItemsControl ItemsSource="{Binding CurrentTags}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Button Content="{Binding Name}"
-                                                    Margin="2" Padding="8,2"
-                                                    FontSize="12"
-                                                    Background="#E3F2FD" Foreground="#1976D2"
-                                                    BorderThickness="1" BorderBrush="#90CAF9"
+                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                    Background="#EEF0FF" Foreground="#5B6ABF" BorderThickness="0" 
                                                     Cursor="Hand"
                                                     Command="{Binding DataContext.RemoveTagFromQuoteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
                                                     CommandParameter="{Binding}"/>
@@ -261,71 +276,28 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </WrapPanel>
-
-                            <Grid Margin="0 0 0 12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4" VerticalContentAlignment="Center"/>
-                                <Button Grid.Column="1" Content="+ 添加标签" Command="{Binding AddTagCommand}"
-                                        Padding="8,4" Margin="4,0,0,0"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0" />
+                                <Button Grid.Column="1" Content="+ 添加" Command="{Binding AddTagCommand}"
+                                        Padding="8,4" Margin="4,0,0,0"
+                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="12"/>
                             </Grid>
 
-                            <TextBlock Text="所属分组" FontSize="12" Foreground="#888" Margin="0 0 0 4"/>
-                            <WrapPanel Margin="0 0 0 8">
+                            <!-- Groups -->
+                            <TextBlock Text="分组" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                            <WrapPanel Margin="0,0,0,4">
                                 <ItemsControl ItemsSource="{Binding CurrentGroups}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
-                                            <Button Content="{Binding Name}"
-                                                    Margin="2" Padding="8,2"
-                                                    FontSize="12"
-                                                    Background="#1B5E20" Foreground="#FFF"
-                                                    BorderThickness="1" BorderBrush="#388E3C"
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}">
+                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                    Background="#5B6ABF" Foreground="White" BorderThickness="0" 
+                                                    Cursor="Hand">
                                                 <Button.ContextMenu>
                                                     <ContextMenu>
-                                                        <MenuItem Header="删除分组"
-                                                                  Command="{Binding DataContext.DeleteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                  CommandParameter="{Binding}"/>
-                                                    </ContextMenu>
-                                                </Button.ContextMenu>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-
-                                <!-- Quick toggle all groups -->
-                                <ItemsControl ItemsSource="{Binding AvailableGroups}">
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <WrapPanel/>
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Name}"
-                                                    Margin="2" Padding="8,2"
-                                                    FontSize="12"
-                                                    Background="#F5F5F5" Foreground="#888"
-                                                    BorderThickness="1" BorderBrush="#CCC"
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}">
-                                                <Button.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="删除分组"
-                                                                  Command="{Binding DataContext.DeleteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                                  CommandParameter="{Binding}"/>
+                                                        <MenuItem Header="删除分组" Command="{Binding DataContext.DeleteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
                                                     </ContextMenu>
                                                 </Button.ContextMenu>
                                             </Button>
@@ -333,27 +305,24 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </WrapPanel>
-
-                            <Grid Margin="0 0 0 8">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4" VerticalContentAlignment="Center"/>
-                                <Button Grid.Column="1" Content="创建分组" Command="{Binding AddGroupCommand}"
-                                        Padding="8,4" Margin="4,0,0,0"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0" />
+                                <Button Grid.Column="1" Content="创建" Command="{Binding AddGroupCommand}"
+                                        Padding="8,4" Margin="4,0,0,0"
+                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="12"/>
                             </Grid>
 
-                            <TextBlock Text="备注" FontSize="12" Foreground="#888" Margin="0 0 0 2"/>
+                            <!-- Notes -->
+                            <TextBlock Text="备注" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
                             <TextBox Text="{Binding EditNotes, UpdateSourceTrigger=PropertyChanged}"
-                                     AcceptsReturn="True"
-                                     TextWrapping="Wrap"
-                                     MinHeight="60"
-                                     Padding="6,4" Margin="0 0 0 12"/>
+                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50"
+                                     Background="#FAFAFA" BorderBrush="#E0E0E0" 
+                                     Padding="8,6" Margin="0,0,0,10"/>
 
-                            <Grid>
+                            <!-- Actions -->
+                            <Grid Margin="0,4,0,0">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
@@ -361,20 +330,14 @@
                                     <ColumnDefinition Width="Auto"/>
                                     <ColumnDefinition Width="Auto"/>
                                 </Grid.ColumnDefinitions>
-
-                                <Button Grid.Column="0" Content="打开截图" Command="{Binding OpenScreenshotCommand}"
-                                        Padding="8,4"/>
-
-                                <Button Grid.Column="1" Content="导出" Command="{Binding ExportSelectedCommand}"
-                                        Padding="12,4" Margin="4,0,0,0"/>
-
-                                <Button Grid.Column="3" Content="保存修改" Command="{Binding SaveEditCommand}"
-                                        Padding="12,4" Margin="4,0"
-                                        Background="#1976D2" Foreground="White" BorderThickness="0"/>
-
+                                <Button Grid.Column="0" Content="导出" Command="{Binding ExportSelectedCommand}"
+                                        Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" Margin="0,0,4,0"/>
+                                <Button Grid.Column="1" Content="打开截图" Command="{Binding OpenScreenshotCommand}"
+                                        Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" />
+                                <Button Grid.Column="3" Content="保存" Command="{Binding SaveEditCommand}"
+                                        Padding="14,5" FontSize="12" Background="#5B6ABF" Foreground="White" BorderThickness="0" Margin="0,0,4,0"/>
                                 <Button Grid.Column="4" Content="删除" Command="{Binding DeleteQuoteCommand}"
-                                        Padding="12,4"
-                                        Background="#E53935" Foreground="White" BorderThickness="0"/>
+                                        Padding="14,5" FontSize="12" Background="#E53935" Foreground="White" BorderThickness="0" />
                             </Grid>
                         </StackPanel>
                     </ScrollViewer>
@@ -382,9 +345,9 @@
             </Border>
         </Grid>
 
-        <!-- Status Bar -->
-        <Border Grid.Row="2" BorderBrush="#E0E0E0" BorderThickness="0 1 0 0" Padding="0 6 0 0" Margin="0 8 0 0">
-            <TextBlock Text="{Binding StatusText}" Foreground="#666" FontSize="12"/>
+        <!-- ===== Status Bar ===== -->
+        <Border Grid.Row="2" Margin="0,8,0,0" Background="Transparent">
+            <TextBlock Text="{Binding StatusText}" Foreground="#888" FontSize="12"/>
         </Border>
     </Grid>
 </Window>

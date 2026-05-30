@@ -13,6 +13,7 @@ public class HotkeyConfig
     public bool AutoStart { get; set; }
     public int CaptureDelayMs { get; set; } = 200;
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
+    public string FontFamily { get; set; } = "Segoe UI";
     public List<GameNameRule> GameNameRules { get; set; } = new();
 
     /// <summary>
@@ -62,6 +63,7 @@ public class HotkeyConfig
             AutoStart = AutoStart,
             CaptureDelayMs = CaptureDelayMs,
             SlideshowMode = SlideshowMode,
+            FontFamily = FontFamily,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

@@ -23,6 +23,16 @@ public partial class SettingsWindow : Window
         UpdateDelayLabel(currentConfig.CaptureDelayMs);
         SlideshowModeCombo.SelectedIndex = currentConfig.SlideshowMode;
 
+        // Fonts
+        var fonts = System.Windows.Media.Fonts.SystemFontFamilies
+            .OrderBy(f => f.Source).ToList();
+        FontCombo.ItemsSource = fonts;
+        for (int i = 0; i < fonts.Count; i++)
+        {
+            if (fonts[i].Source == currentConfig.FontFamily)
+            { FontCombo.SelectedIndex = i; break; }
+        }
+
         RulesList.ItemsSource = currentConfig.GameNameRules;
 
         SaveButton.IsEnabled = _newConfig.IsValid();
@@ -111,6 +121,7 @@ public partial class SettingsWindow : Window
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
+        _newConfig.FontFamily = FontCombo.SelectedItem is System.Windows.Media.FontFamily f ? f.Source : "Segoe UI";
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();
