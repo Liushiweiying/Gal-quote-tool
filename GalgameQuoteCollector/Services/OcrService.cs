@@ -18,7 +18,7 @@ public class OcrService
     private static readonly Dictionary<string, (string text, DateTime time)> _cache = new();
     private static readonly TimeSpan CacheDuration = TimeSpan.FromSeconds(3);
 
-    private const double ScaleFactor = 4.0;
+    private const double ScaleFactor = 2.0;
 
     // Minimum text region height (after upscale)
     private const int MinTextRegionHeight = 60;
@@ -55,7 +55,6 @@ public class OcrService
         EnsureInitialized();
         if (_ocrEngine == null) return string.Empty;
 
-        // Check cache
         lock (_cache)
         {
             if (_cache.TryGetValue(imagePath, out var cached)
@@ -66,33 +65,23 @@ public class OcrService
         try
         {
             string bestText = "";
-            double bestScore = 0;
 
-            foreach (var highContrast in new[] { false, true })
+            // Primary: full image (no crop), then try cropped as fallback
+            foreach (var tryFull in new[] { true, false })
             {
-                var processedPath = PreprocessForOcr(imagePath, highContrast);
+                var processedPath = tryFull
+                    ? PreprocessFallback(imagePath)
+                    : PreprocessForOcr(imagePath);
                 if (processedPath == null) continue;
 
-                var softwareBitmap = await LoadSoftwareBitmapAsync(processedPath);
+                var sb = await LoadSoftwareBitmapAsync(processedPath);
                 try { File.Delete(processedPath); } catch { }
+                if (sb == null) continue;
 
-                if (softwareBitmap == null) continue;
-
-                var result = await _ocrEngine.RecognizeAsync(softwareBitmap);
-
-                var lines = result.Lines
-                    .Select(l => l.Text.Trim())
-                    .Where(t => t.Length >= 2)
-                    .ToList();
-
+                var r = await _ocrEngine.RecognizeAsync(sb);
+                var lines = r.Lines.Select(l => l.Text.Trim()).Where(t => t.Length >= 2).ToList();
                 var text = string.Join(Environment.NewLine, lines);
-                if (string.IsNullOrEmpty(text)) continue;
-
-                int valid = 0, total = 0;
-                foreach (char c in text) { total++; if (IsValidOcrChar(c)) valid++; }
-                double score = (double)valid / total * text.Length;
-
-                if (score > bestScore) { bestScore = score; bestText = text; }
+                if (text.Length > bestText.Length) bestText = text;
             }
 
             lock (_cache) _cache[imagePath] = (bestText, DateTime.Now);
@@ -120,7 +109,35 @@ public class OcrService
         return false;
     }
 
-    private static string? PreprocessForOcr(string imagePath, bool highContrast = false)
+    /// <summary>Downscale full uncropped image to ~1200px wide.</summary>
+    private static string? PreprocessFallback(string imagePath)
+    {
+        try
+        {
+            using var original = new Bitmap(imagePath);
+            int w = original.Width, h = original.Height;
+            double scale = Math.Min(1.0, 1200.0 / w);
+            int nw = (int)(w * scale), nh = (int)(h * scale);
+            using var resized = new Bitmap(nw, nh);
+            using (var g = Graphics.FromImage(resized))
+            {
+                g.InterpolationMode = System.Drawing.Drawing2D.InterpolationMode.HighQualityBicubic;
+                g.DrawImage(original, 0, 0, nw, nh);
+            }
+            using var gray = ConvertToGrayscale(resized);
+            EnhanceContrast(gray);
+            var path = Path.Combine(Path.GetTempPath(), $"galocr_fb_{Guid.NewGuid():N}.png");
+            gray.Save(path, ImageFormat.Png);
+            return path;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// Simple bottom-30% crop + 2x upscale + grayscale + contrast.
+    /// No adaptive crop, no sharpen, no binarize — most compatible.
+    /// </summary>
+    private static string? PreprocessForOcr(string imagePath)
     {
         try
         {
@@ -128,21 +145,12 @@ public class OcrService
             int width = original.Width;
             int height = original.Height;
 
-            // Detect text region by scanning rows for high variance
-            int textTop = 0, textBottom = 0;
-            DetectTextRowRange(original, out textTop, out textBottom);
+            // Fixed bottom 30% crop (original reliable approach)
+            int cropY = (int)(height * 0.65);
+            int cropHeight = height - cropY;
 
-            // Clamp to valid range
-            int cropY = Math.Max(0, textTop);
-            int cropHeight = Math.Min(height - cropY, textBottom - textTop + 20);
-            if (cropHeight < 30) // fallback to bottom 35%
-            {
-                cropHeight = (int)(height * 0.35);
-                cropY = height - cropHeight;
-            }
-
-            int newWidth = (int)(width * ScaleFactor);
-            int newHeight = (int)(cropHeight * ScaleFactor);
+            int newWidth = (int)(width * 2.0);
+            int newHeight = (int)(cropHeight * 2.0);
 
             using var cropped = original.Clone(new Rectangle(0, cropY, width, cropHeight), PixelFormat.Format24bppRgb);
             using var scaled = new Bitmap(newWidth, newHeight);
@@ -154,102 +162,12 @@ public class OcrService
 
             using var gray = ConvertToGrayscale(scaled);
             EnhanceContrast(gray);
-            Sharpen(gray);
-            if (highContrast) ApplyHighContrast(gray);
 
             var tempPath = Path.Combine(Path.GetTempPath(), $"galocr_{Guid.NewGuid():N}.png");
             gray.Save(tempPath, ImageFormat.Png);
             return tempPath;
         }
-        catch
-        {
-            return null;
-        }
-    }
-
-    /// <summary>
-    /// Scans the image for rows with high pixel variance (likely text).
-    /// Outputs the top and bottom y-coordinates of the best text region.
-    /// </summary>
-    private static unsafe void DetectTextRowRange(Bitmap bmp, out int top, out int bottom)
-    {
-        int w = bmp.Width;
-        int h = bmp.Height;
-        var rect = new Rectangle(0, 0, w, h);
-        var data = bmp.LockBits(rect, ImageLockMode.ReadOnly, PixelFormat.Format24bppRgb);
-        int stride = data.Stride;
-        byte* ptr = (byte*)data.Scan0;
-
-        // Compute per-row variance (grayscale approximation)
-        var rowScores = new float[h];
-        for (int y = 0; y < h; y++)
-        {
-            byte* row = ptr + y * stride;
-            int sum = 0, sumSq = 0;
-            for (int x = 0; x < w * 3; x += 3)
-            {
-                byte gray = (byte)((row[x] * 29 + row[x + 1] * 150 + row[x + 2] * 77) >> 8);
-                sum += gray;
-                sumSq += gray * gray;
-            }
-            int n = w;
-            float mean = (float)sum / n;
-            rowScores[y] = (float)sumSq / n - mean * mean;
-        }
-        bmp.UnlockBits(data);
-
-        // Smooth scores with a 3-row window
-        var smoothed = new float[h];
-        for (int y = 0; y < h; y++)
-        {
-            float s = 0; int c = 0;
-            for (int dy = -1; dy <= 1; dy++)
-            {
-                int ny = y + dy;
-                if (ny >= 0 && ny < h) { s += rowScores[ny]; c++; }
-            }
-            smoothed[y] = s / c;
-        }
-
-        // Find threshold: 3x the median (robust to outliers)
-        var sorted = (float[])smoothed.Clone();
-        Array.Sort(sorted);
-        float threshold = sorted[h / 2] * 3;
-
-        // Find bottom-most contiguous region above threshold (at least 5 rows)
-        int bestStart = 0, bestEnd = 0, bestLen = 0;
-        int curStart = -1;
-        for (int y = 0; y < h; y++)
-        {
-            if (smoothed[y] > threshold)
-            {
-                if (curStart < 0) curStart = y;
-                if (y - curStart > bestLen)
-                {
-                    bestLen = y - curStart;
-                    bestStart = curStart;
-                    bestEnd = y;
-                }
-            }
-            else
-            {
-                curStart = -1;
-            }
-        }
-
-        // If no text found, use bottom 35%
-        if (bestLen < 5)
-        {
-            top = h - (int)(h * 0.35);
-            bottom = h;
-            return;
-        }
-
-        // Prefer bottom-most region if multiple
-        // (already bottom-most since we scan from top and update on each longer region)
-
-        top = bestStart;
-        bottom = bestEnd;
+        catch { return null; }
     }
 
     /// <summary>
@@ -373,6 +291,22 @@ public class OcrService
             }
         }
 
+        bmp.UnlockBits(data);
+    }
+
+    /// <summary>Hard threshold: below 128 → black, else white.</summary>
+    private static unsafe void ApplyBinarize(Bitmap bmp)
+    {
+        var rect = new Rectangle(0, 0, bmp.Width, bmp.Height);
+        var data = bmp.LockBits(rect, ImageLockMode.ReadWrite, PixelFormat.Format8bppIndexed);
+        int stride = data.Stride, h = bmp.Height, w = bmp.Width;
+        byte* ptr = (byte*)data.Scan0;
+        for (int y = 0; y < h; y++)
+        {
+            byte* row = ptr + y * stride;
+            for (int x = 0; x < w; x++)
+                row[x] = row[x] < 128 ? (byte)0 : (byte)255;
+        }
         bmp.UnlockBits(data);
     }
 

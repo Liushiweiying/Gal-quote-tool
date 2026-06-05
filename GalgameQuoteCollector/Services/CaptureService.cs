@@ -16,12 +16,11 @@ public class CaptureService
     }
 
     /// <summary>
-    /// Capture the foreground window and return the screenshot file path.
-    /// Uses PrintWindow for DirectX-aware capture, falls back to CopyFromScreen.
+    /// Capture the specified window and return the screenshot file path.
+    /// Pass a saved handle to capture the game even after our window minimizes.
     /// </summary>
-    public string CaptureForegroundWindow()
+    public string CaptureWindow(IntPtr hwnd)
     {
-        var hwnd = GetForegroundWindow();
         GetWindowRect(hwnd, out var rect);
 
         var width = rect.right - rect.left;
@@ -35,40 +34,32 @@ public class CaptureService
 
         using var bitmap = new Bitmap(width, height);
 
-        // Try PrintWindow first (handles DirectX-rendered content)
+        // Primary: CopyFromScreen (reliable for most games, including DirectX)
         using (var g = Graphics.FromImage(bitmap))
         {
-            var hdc = g.GetHdc();
-            bool printed = PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT);
-            g.ReleaseHdc(hdc);
-
-            if (!printed)
-            {
-                // Fallback: classic GDI screen capture
-                using var g2 = Graphics.FromImage(bitmap);
-                g2.CopyFromScreen(rect.left, rect.top, 0, 0, new Size(width, height));
-            }
+            g.CopyFromScreen(rect.left, rect.top, 0, 0, new Size(width, height));
         }
 
         bitmap.Save(filePath, ImageFormat.Png);
         return filePath;
     }
 
-    /// <summary>
-    /// Get the foreground window's title text.
-    /// </summary>
-    public static string GetForegroundWindowTitle()
+    /// <summary>Get the foreground window handle. Save this before minimizing.</summary>
+    public static IntPtr GetForegroundWindowHandle() => GetForegroundWindow();
+
+    /// <summary>Get title of a specific window by handle.</summary>
+    public static string GetWindowTitle(IntPtr hwnd)
     {
-        var hwnd = GetForegroundWindow();
+        if (hwnd == IntPtr.Zero) return string.Empty;
         var length = GetWindowTextLength(hwnd);
         if (length == 0) return string.Empty;
-
         var sb = new System.Text.StringBuilder(length + 1);
         GetWindowText(hwnd, sb, sb.Capacity);
         return sb.ToString();
     }
 
-    private const int PW_RENDERFULLCONTENT = 0x00000002;
+    /// <summary>Get the foreground window's title text.</summary>
+    public static string GetForegroundWindowTitle() => GetWindowTitle(GetForegroundWindow());
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
@@ -81,9 +72,6 @@ public class CaptureService
 
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
-
-    [DllImport("user32.dll")]
-    private static extern bool PrintWindow(IntPtr hWnd, IntPtr hdcBlt, int nFlags);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT

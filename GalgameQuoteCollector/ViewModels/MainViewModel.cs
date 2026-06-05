@@ -23,6 +23,7 @@ public partial class MainViewModel : ObservableObject
     private readonly string _dataDir;
     private readonly string _screenshotDir;
     private bool _isCapturing;
+    private UsageTracker? _usageTracker;
     private int _captureDelayMs = 200;
 
     public MainViewModel(Window window)
@@ -71,8 +72,16 @@ public partial class MainViewModel : ObservableObject
             try { _window.FontFamily = new System.Windows.Media.FontFamily(hotkeyConfig.FontFamily); }
             catch { }
         }
+
         _hotkeyService = new HotkeyService(hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey);
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
+
+        // Usage tracker
+        if (hotkeyConfig.EnableUsageTracking)
+        {
+            _usageTracker = new UsageTracker(_dataDir, _gameDetectService);
+            _usageTracker.Start();
+        }
 
         StatusText = $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   正在加载...";
         _ = LoadQuotesAsync();
@@ -179,10 +188,13 @@ public partial class MainViewModel : ObservableObject
         try
         {
             StatusText = "采集...";
+            // Save game window handle BEFORE minimizing
+            var gameHwnd = CaptureService.GetForegroundWindowHandle();
+            var windowTitle = CaptureService.GetWindowTitle(gameHwnd);
+
             _window.WindowState = WindowState.Minimized;
             await Task.Delay(_captureDelayMs);
 
-            var windowTitle = CaptureService.GetForegroundWindowTitle();
             if (string.IsNullOrWhiteSpace(windowTitle))
             {
                 StatusText = "未检测到活动窗口";
@@ -190,7 +202,8 @@ public partial class MainViewModel : ObservableObject
             }
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
-            var screenshotPath = _captureService.CaptureForegroundWindow();
+            var screenshotPath = _captureService.CaptureWindow(gameHwnd);
+
             var text = await _ocrService.RecognizeTextAsync(screenshotPath);
 
             if (string.IsNullOrWhiteSpace(text))
@@ -807,6 +820,16 @@ public partial class MainViewModel : ObservableObject
     private void ToggleTopmost()
     {
         IsTopmost = !IsTopmost;
+    }
+
+    [RelayCommand]
+    private void OpenUsageStats()
+    {
+        var data = _usageTracker?.GetData() ?? new UsageData();
+        var win = new Views.UsageStatsWindow(_window, data);
+        win.ShowDialog();
+        // Save any changes (blacklist edits)
+        _usageTracker?.Save();
     }
 
     [RelayCommand]

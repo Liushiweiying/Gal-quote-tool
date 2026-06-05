@@ -59,6 +59,9 @@
                       DisplayMemberPath="Source"/>
             <TextBlock Text="需重启后生效" Foreground="#BBB" FontSize="11" Margin="0,-4,0,6"/>
 
+            <CheckBox x:Name="EnableTrackingCheckBox" Content="启用使用时长记录"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,6"/>
+
             <Separator Margin="0,12,0,16"/>
 
             <!-- ═══ Game Name Rules ═══ -->
