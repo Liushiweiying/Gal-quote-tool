@@ -13,6 +13,7 @@ public class UsageTracker : IDisposable
     private Timer? _timer;
     private bool _running;
     private readonly object _lock = new();
+    private const string ToolKey = "__tool__";
 
     public event Action<UsageData>? OnDataSaved;
 
@@ -27,6 +28,12 @@ public class UsageTracker : IDisposable
     {
         if (_running) return;
         _running = true;
+
+        // Record tool runtime immediately on start (so it's never 0 across sessions)
+        var today = DateTime.Now.ToString("yyyy-MM-dd");
+        lock (_lock) { _data.AddSeconds(today, ToolKey, "工具运行", 0); }
+        Save();
+
         _timer = new Timer(Tick, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
 
@@ -39,6 +46,19 @@ public class UsageTracker : IDisposable
     }
 
     public UsageData GetData() { lock (_lock) { return _data; } }
+
+    /// <summary>Today's tool runtime (summed across all sessions).</summary>
+    public int GetTodayRuntimeSeconds()
+    {
+        lock (_lock)
+        {
+            var today = DateTime.Now.ToString("yyyy-MM-dd");
+            var day = _data.GetDay(today);
+            if (day != null && day.TryGetValue(ToolKey, out var rec))
+                return rec.Seconds;
+            return 0;
+        }
+    }
 
     private void Tick(object? state)
     {
@@ -79,7 +99,9 @@ public class UsageTracker : IDisposable
             lock (_lock)
             {
                 _data.AddSeconds(date, processName!, displayName!, 60);
+                _data.AddSeconds(date, ToolKey, "工具运行", 60);
             }
+            Save();
         }
         catch { }
     }

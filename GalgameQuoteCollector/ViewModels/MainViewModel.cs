@@ -146,6 +146,18 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedGroupFilter = 0; // 0 = all
 
+    [ObservableProperty]
+    private ObservableCollection<Tag> _availableTagsForFilter = new();
+
+    [ObservableProperty]
+    private int _selectedTagFilter = 0; // 0 = all
+
+    [ObservableProperty]
+    private ObservableCollection<FilterItem> _availableGamesForFilter = new();
+
+    [ObservableProperty]
+    private int _selectedGameFilter = 0; // 0 = all
+
     private List<Quote> _allQuotes = new();
 
     partial void OnSelectedQuoteChanged(Quote? value)
@@ -163,6 +175,16 @@ public partial class MainViewModel : ObservableObject
     }
 
     partial void OnSelectedGroupFilterChanged(int value)
+    {
+        RefreshQuotes();
+    }
+
+    partial void OnSelectedTagFilterChanged(int value)
+    {
+        RefreshQuotes();
+    }
+
+    partial void OnSelectedGameFilterChanged(int value)
     {
         RefreshQuotes();
     }
@@ -301,10 +323,31 @@ public partial class MainViewModel : ObservableObject
     private void RefreshAvailableGroups()
     {
         var groups = _storageService.GetAllGroups();
-        // Insert "全部" placeholder at index 0
         var list = new List<QuoteGroup> { new() { Id = 0, Name = "全部" } };
         list.AddRange(groups);
         AvailableGroups = new ObservableCollection<QuoteGroup>(list);
+    }
+
+    private void RefreshAvailableTagsForFilter()
+    {
+        var tags = _storageService.GetAllTags();
+        var list = new List<Tag> { new() { Id = 0, Name = "全部" } };
+        list.AddRange(tags);
+        AvailableTagsForFilter = new ObservableCollection<Tag>(list);
+    }
+
+    private void RefreshAvailableGamesForFilter()
+    {
+        var games = _allQuotes.Select(q => q.GameName)
+            .Where(n => !string.IsNullOrWhiteSpace(n))
+            .Distinct()
+            .OrderBy(n => n)
+            .ToList();
+        var list = new List<FilterItem> { new() { Id = 0, Name = "全部" } };
+        int id = 1;
+        foreach (var g in games)
+            list.Add(new FilterItem { Id = id++, Name = g });
+        AvailableGamesForFilter = new ObservableCollection<FilterItem>(list);
     }
 
     [RelayCommand]
@@ -802,6 +845,8 @@ public partial class MainViewModel : ObservableObject
                 OcrAvailable = _ocrService.IsAvailable;
                 RefreshAvailableTags();
                 RefreshAvailableGroups();
+                RefreshAvailableTagsForFilter();
+                RefreshAvailableGamesForFilter();
 
                 StatusText = updated > 0
                     ? $"已应用规则，更新了 {updated} 条语录的游戏名"
@@ -828,7 +873,6 @@ public partial class MainViewModel : ObservableObject
         var data = _usageTracker?.GetData() ?? new UsageData();
         var win = new Views.UsageStatsWindow(_window, data);
         win.ShowDialog();
-        // Save any changes (blacklist edits)
         _usageTracker?.Save();
     }
 
@@ -850,6 +894,22 @@ public partial class MainViewModel : ObservableObject
         {
             var groupIds = _storageService.GetQuoteIdsInGroup(SelectedGroupFilter).ToHashSet();
             source = source.Where(q => groupIds.Contains(q.Id));
+        }
+
+        // Filter by tag
+        if (SelectedTagFilter > 0)
+        {
+            source = source.Where(q =>
+                _storageService.GetTagsForQuote(q.Id).Any(t => t.Id == SelectedTagFilter));
+        }
+
+        // Filter by game
+        if (SelectedGameFilter > 0)
+        {
+            var gameName = AvailableGamesForFilter
+                .FirstOrDefault(f => f.Id == SelectedGameFilter)?.Name;
+            if (gameName != null)
+                source = source.Where(q => q.GameName == gameName);
         }
 
         // Filter by text

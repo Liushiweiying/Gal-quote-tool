@@ -34,9 +34,6 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Search bar (takes remaining space) -->
@@ -87,31 +84,27 @@
                         Background="Transparent" Foreground="#888" BorderThickness="0"
                         Padding="8,5" FontSize="16" ToolTip="设置" Cursor="Hand"/>
 
-                <!-- Sort + Group combos -->
-                <ComboBox Grid.Column="4" SelectedIndex="{Binding SortMode}" Width="65"
-                          FontSize="12" Background="White" BorderBrush="#DDD"
-                          Height="28" VerticalAlignment="Center" Margin="0,0,2,0">
-                    <ComboBoxItem Content="时间"/>
-                    <ComboBoxItem Content="游戏"/>
-                </ComboBox>
-
-                <ComboBox Grid.Column="5" ItemsSource="{Binding AvailableGroups}"
-                          DisplayMemberPath="Name" SelectedValue="{Binding SelectedGroupFilter}"
-                          SelectedValuePath="Id" Width="85" FontSize="12"
-                          Background="White" BorderBrush="#DDD"
-                          Height="28" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <!-- Filter button (replaces sort/group/tag combos) -->
+                <Button Grid.Column="4" Content="筛选" x:Name="FilterBtn"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"
+                        Padding="14,5" FontSize="13" FontWeight="SemiBold"
+                        Cursor="Hand" Click="OnFilterMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu Background="White" Foreground="#333" x:Name="FilterMenu"/>
+                    </Button.ContextMenu>
+                </Button>
 
                 <!-- Utility buttons -->
-                <Button Grid.Column="6" Content="记录" Command="{Binding OpenUsageStatsCommand}"
+                <Button Grid.Column="5" Content="记录" Command="{Binding OpenUsageStatsCommand}"
                         Background="Transparent" Foreground="#888" BorderThickness="0"
                         Padding="8,5" FontSize="13" ToolTip="使用记录" Cursor="Hand"/>
 
-                <Button Grid.Column="7" Content="统计" Command="{Binding ShowStatsCommand}"
+                <Button Grid.Column="6" Content="统计" Command="{Binding ShowStatsCommand}"
                         Background="Transparent" Foreground="#888" BorderThickness="0"
                         Padding="8,5" FontSize="13" ToolTip="统计" Cursor="Hand"/>
 
                 <!-- "···" menu for extra actions -->
-                <Button Grid.Column="8" Content="···" x:Name="MoreBtn"
+                <Button Grid.Column="7" Content="···" x:Name="MoreBtn"
                         Background="Transparent" Foreground="#888" BorderThickness="0"
                         Padding="8,5" FontSize="18" FontWeight="Bold"
                         ToolTip="更多" Cursor="Hand"

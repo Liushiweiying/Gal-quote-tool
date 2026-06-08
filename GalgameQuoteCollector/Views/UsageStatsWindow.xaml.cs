@@ -20,6 +20,8 @@ public partial class UsageStatsWindow : Window
         RefreshView();
     }
 
+    private const string ToolKey = "__tool__";
+
     private void RefreshView()
     {
         var dateStr = _currentDate.ToString("yyyy-MM-dd");
@@ -27,55 +29,87 @@ public partial class UsageStatsWindow : Window
 
         StatsPanel.Children.Clear();
         var day = _data.GetDay(dateStr);
+        var apps = day?.Where(kv => kv.Key != ToolKey).ToList();
+        int appsMax = apps != null && apps.Count > 0 ? apps.Max(kv => kv.Value.Seconds) : 1;
 
-        if (day == null || day.Count == 0)
+        // Tool runtime from this date's data only — never from today's fallback
+        int toolSec = day != null && day.TryGetValue(ToolKey, out var toolRec)
+            ? toolRec.Seconds : 0;
+
+        // ── Tool runtime bar (red, always 100%) ──
+        StatsPanel.Children.Add(new TextBlock
+        {
+            Text = $"工具运行  {FormatTime(toolSec)}",
+            FontSize = 14, FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)),
+            Margin = new Thickness(0, 0, 0, 2)
+        });
+        StatsPanel.Children.Add(new Border
+        {
+            Height = 20, Width = 300,
+            Background = new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)),
+            CornerRadius = new CornerRadius(3),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            Margin = new Thickness(0, 2, 0, 4)
+        });
+
+        // Separator
+        StatsPanel.Children.Add(new Border
+        {
+            Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
+            Margin = new Thickness(0, 4, 0, 8)
+        });
+
+        // ── App records (exclude tool key) ──
+        if (apps == null || apps.Count == 0)
         {
             StatsPanel.Children.Add(new TextBlock
             {
-                Text = "当天无记录",
+                Text = "当天无应用记录",
                 Foreground = Brushes.Gray,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 20, 0, 0)
+                Margin = new Thickness(0, 8, 0, 0)
             });
             return;
         }
 
-        int totalMinutes = (int)Math.Ceiling(day.Values.Sum(r => r.Seconds) / 60.0);
-        int maxSeconds = day.Values.Max(r => r.Seconds);
+        int barMaxWidth = 300;
 
-        // Header
-        StatsPanel.Children.Add(new TextBlock
+        foreach (var (key, record) in apps.OrderByDescending(x => x.Value.Seconds))
         {
-            Text = $"合计: {FormatTime(totalMinutes * 60)}",
-            FontSize = 14, FontWeight = FontWeights.SemiBold,
-            Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 8)
-        });
-
-        foreach (var (processKey, record) in day.OrderByDescending(x => x.Value.Seconds))
-        {
-            var pct = maxSeconds > 0 ? (double)record.Seconds / maxSeconds : 0;
+            var pct = toolSec > 0 ? (double)record.Seconds / toolSec : 0;
             var bar = new Border
             {
-                Height = 20,
-                Width = Math.Max(4, 300 * pct),
+                Height = 20, Width = Math.Max(4, barMaxWidth * pct),
                 Background = new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)),
                 CornerRadius = new CornerRadius(3),
                 HorizontalAlignment = HorizontalAlignment.Left,
                 Margin = new Thickness(0, 2, 0, 2)
             };
 
-            var textBlock = new TextBlock
-            {
-                Text = $"{record.Name}   {FormatTime(record.Seconds)}",
-                FontSize = 13,
-                Margin = new Thickness(0, 4, 0, 0)
-            };
-
             var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
-            panel.Children.Add(textBlock);
+            panel.Children.Add(new TextBlock
+            {
+                Text = $"{record.Name}   {FormatTime(record.Seconds)}   ({(int)(pct * 100)}%)",
+                FontSize = 13, Margin = new Thickness(0, 4, 0, 0)
+            });
             panel.Children.Add(bar);
             StatsPanel.Children.Add(panel);
         }
+
+        // ── Total at bottom ──
+        int totalSec = apps.Sum(kv => kv.Value.Seconds);
+        StatsPanel.Children.Add(new Border
+        {
+            Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
+            Margin = new Thickness(0, 8, 0, 8)
+        });
+        StatsPanel.Children.Add(new TextBlock
+        {
+            Text = $"应用合计  {FormatTime(totalSec)}",
+            FontSize = 14, FontWeight = FontWeights.SemiBold,
+            Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 8)
+        });
     }
 
     private static string FormatTime(int seconds)
