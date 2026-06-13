@@ -627,6 +627,27 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private void ReapplyRulesToAllQuotes()
+    {
+        int updated = 0;
+        foreach (var q in _allQuotes)
+        {
+            var src = string.IsNullOrWhiteSpace(q.WindowTitle) ? q.GameName : q.WindowTitle;
+            var det = _gameDetectService.DetectGameName(src);
+            if (!string.IsNullOrWhiteSpace(det) && det != q.GameName)
+            { q.GameName = det; _storageService.UpdateQuote(q); updated++; }
+        }
+        if (updated > 0) { RefreshQuotes(); StatusText = $"已应用规则，更新了 {updated} 条"; }
+    }
+
+    private void ToggleUsageTracking(bool enable)
+    {
+        if (enable && _usageTracker == null)
+        { _usageTracker = new UsageTracker(_dataDir, _gameDetectService); _usageTracker.Start(); }
+        else if (!enable && _usageTracker != null)
+        { _usageTracker.Stop(); _usageTracker.Dispose(); _usageTracker = null; }
+    }
+
     private static (bool ok, string detail) TrySetAutoStart(bool enable)
     {
         var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
@@ -870,10 +891,16 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void OpenUsageStats()
     {
-        var data = _usageTracker?.GetData() ?? new UsageData();
+        if (_usageTracker == null)
+        {
+            MessageBox.Show("使用时长记录已关闭\n请在 设置 → 常规 中开启", "提示",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        var data = _usageTracker.GetData();
         var win = new Views.UsageStatsWindow(_window, data);
         win.ShowDialog();
-        _usageTracker?.Save();
+        _usageTracker.Save();
     }
 
     [RelayCommand]
