@@ -601,6 +601,8 @@ public partial class MainViewModel : ObservableObject
             {
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
+                ReapplyRulesToAllQuotes();
+                ToggleUsageTracking(newConfig.EnableUsageTracking);
                 if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
                 {
                     try { _window.FontFamily = new System.Windows.Media.FontFamily(newConfig.FontFamily); }
@@ -614,6 +616,8 @@ public partial class MainViewModel : ObservableObject
             {
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
+                ReapplyRulesToAllQuotes();
+                ToggleUsageTracking(newConfig.EnableUsageTracking);
                 if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
                 {
                     try { _window.FontFamily = new System.Windows.Media.FontFamily(newConfig.FontFamily); }
