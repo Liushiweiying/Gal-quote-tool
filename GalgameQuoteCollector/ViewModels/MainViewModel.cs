@@ -864,12 +864,23 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
+            // Close DB connection so SQLite file is not locked
+            _usageTracker?.Stop();
+            _storageService.Dispose();
+
             System.IO.Compression.ZipFile.CreateFromDirectory(_dataDir, dialog.FileName,
                 System.IO.Compression.CompressionLevel.Optimal, true);
+
+            // Reopen
+            _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
+            ToggleUsageTracking(_settingsService.LoadHotkeyConfig().EnableUsageTracking);
+
             StatusText = $"已备份到: {dialog.FileName}";
         }
         catch (Exception ex)
         {
+            // Try to reopen even on failure
+            try { _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db")); } catch { }
             MessageBox.Show($"备份失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
