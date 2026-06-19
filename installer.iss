@@ -28,7 +28,6 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 
 [Files]
 Source: "publish-v105\GalgameQuoteCollector.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "publish-v105\GalgameQuoteCollector_selfcontained.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.zh.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.ja.md"; DestDir: "{app}"; Flags: ignoreversion
