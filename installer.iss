@@ -27,9 +27,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Files]
-Source: "publish-tmp\*.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "publish-tmp\*.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "publish-tmp\*.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp3\*.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp3\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp3\*.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.zh.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.ja.md"; DestDir: "{app}"; Flags: ignoreversion

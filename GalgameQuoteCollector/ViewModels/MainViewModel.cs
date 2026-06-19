@@ -39,7 +39,8 @@ public partial class MainViewModel : ObservableObject
         var localAppData = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GalgameQuoteCollector");
-        var appDirData = Path.Combine(AppContext.BaseDirectory, "data");
+        var appDirData = Path.Combine(
+            Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, "data");
 
         if (Directory.Exists(localAppData) &&
             (File.Exists(Path.Combine(localAppData, "quotes.db")) ||
@@ -943,6 +944,48 @@ public partial class MainViewModel : ObservableObject
         {
             MessageBox.Show($"恢复失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+    }
+
+    [RelayCommand]
+    private void MigrateScreenshots()
+    {
+        var oldDir = Path.Combine(_dataDir, "screenshots");
+        if (!Directory.Exists(oldDir))
+        {
+            StatusText = "没有旧截图需要迁移";
+            return;
+        }
+        try
+        {
+            Directory.CreateDirectory(_screenshotDir);
+            int count = 0;
+            foreach (var f in Directory.GetFiles(oldDir, "*.png"))
+            {
+                var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
+                if (!File.Exists(dest)) { File.Copy(f, dest, false); count++; }
+            }
+            StatusText = $"已迁移 {count} 张截图到 {_screenshotDir}";
+        }
+        catch (Exception ex) { StatusText = $"迁移失败: {ex.Message}"; }
+    }
+
+    [RelayCommand]
+    private void CleanupScreenshots()
+    {
+        var screenshotDir = _screenshotDir;
+        if (!Directory.Exists(screenshotDir)) { StatusText = "没有截图目录需要清理"; return; }
+        var allQuotes = _storageService.GetAllQuotes();
+        var referenced = allQuotes.Select(q => q.ScreenshotPath).Where(p => !string.IsNullOrEmpty(p))
+            .Select(p => Path.GetFullPath(p)).ToHashSet();
+        var orphaned = Directory.GetFiles(screenshotDir, "*.png")
+            .Where(f => !referenced.Contains(Path.GetFullPath(f))).ToList();
+        if (orphaned.Count == 0) { StatusText = "没有未引用的截图"; return; }
+        var result = MessageBox.Show($"发现 {orphaned.Count} 张无引用的截图，确定删除？\n（首张: {Path.GetFileName(orphaned[0])}）",
+            "清理截图", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes) return;
+        int deleted = 0;
+        foreach (var f in orphaned) try { File.Delete(f); deleted++; } catch { }
+        StatusText = $"已清理 {deleted} 张无引用截图";
     }
 
     private async void OnHotkeyPressed(object? sender, EventArgs e)
