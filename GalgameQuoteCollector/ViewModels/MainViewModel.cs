@@ -31,32 +31,27 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(Window window)
     {
         _window = window;
-        _dataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GalgameQuoteCollector");
         _screenshotDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
             "GalgameQuoteCollector");
-        Directory.CreateDirectory(_dataDir);
 
-        // Migrate screenshots from old location to Pictures on first run
-        var oldScreenshotDir = Path.Combine(_dataDir, "screenshots");
-        int migratedCount = 0;
-        if (Directory.Exists(oldScreenshotDir) && !Directory.Exists(_screenshotDir))
+        // Data dir: appdir\data 优先, 但 %LOCALAPPDATA% 存在时使用它
+        var localAppData = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GalgameQuoteCollector");
+        var appDirData = Path.Combine(AppContext.BaseDirectory, "data");
+
+        if (Directory.Exists(localAppData) &&
+            (File.Exists(Path.Combine(localAppData, "quotes.db")) ||
+             File.Exists(Path.Combine(localAppData, "settings.json"))))
         {
-            try
-            {
-                Directory.CreateDirectory(_screenshotDir);
-                foreach (var f in Directory.GetFiles(oldScreenshotDir, "*.png"))
-                {
-                    File.Copy(f, Path.Combine(_screenshotDir, Path.GetFileName(f)), false);
-                    migratedCount++;
-                }
-            }
-            catch { }
+            _dataDir = localAppData;  // 已有旧数据
         }
-        if (migratedCount > 0)
-            StatusText = $"已迁移 {migratedCount} 张截图到 {_screenshotDir}";
+        else
+        {
+            _dataDir = appDirData;    // 使用 exe 旁目录
+        }
+        Directory.CreateDirectory(_dataDir);
 
         _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
         _captureService = new CaptureService(_screenshotDir);
@@ -936,77 +931,6 @@ public partial class MainViewModel : ObservableObject
         catch (Exception ex)
         {
             MessageBox.Show($"恢复失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    private void CleanupScreenshots()
-    {
-        var screenshotDir = _screenshotDir;
-        if (!Directory.Exists(screenshotDir))
-        {
-            StatusText = "没有截图目录需要清理";
-            return;
-        }
-
-        var allQuotes = _storageService.GetAllQuotes();
-        var referencedPaths = allQuotes
-            .Select(q => q.ScreenshotPath)
-            .Where(p => !string.IsNullOrEmpty(p))
-            .Select(p => Path.GetFullPath(p))
-            .ToHashSet();
-
-        var files = Directory.GetFiles(screenshotDir, "*.png");
-        var orphaned = files.Where(f => !referencedPaths.Contains(Path.GetFullPath(f))).ToList();
-
-        if (orphaned.Count == 0)
-        {
-            StatusText = "没有未引用的截图";
-            return;
-        }
-
-        var result = MessageBox.Show($"发现 {orphaned.Count} 张无引用的截图，确定删除？\n\n（首张: {Path.GetFileName(orphaned[0])}）",
-            "清理截图", MessageBoxButton.YesNo, MessageBoxImage.Question);
-
-        if (result != MessageBoxResult.Yes) return;
-
-        int deleted = 0;
-        foreach (var f in orphaned)
-        {
-            try { File.Delete(f); deleted++; }
-            catch { }
-        }
-
-        StatusText = $"已清理 {deleted} 张无引用截图";
-    }
-
-    [RelayCommand]
-    private void MigrateScreenshots()
-    {
-        var oldDir = Path.Combine(_dataDir, "screenshots");
-        if (!Directory.Exists(oldDir))
-        {
-            StatusText = "没有旧截图需要迁移";
-            return;
-        }
-
-        try
-        {
-            Directory.CreateDirectory(_screenshotDir);
-            int count = 0;
-            foreach (var f in Directory.GetFiles(oldDir, "*.png"))
-            {
-                var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
-                if (!File.Exists(dest))
-                {
-                    File.Copy(f, dest, false);
-                    count++;
-                }
-            }
-            StatusText = $"已迁移 {count} 张截图到 {_screenshotDir}";
-        }
-        catch (Exception ex)
-        {
-            StatusText = $"迁移失败: {ex.Message}";
         }
     }
 
