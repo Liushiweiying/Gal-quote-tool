@@ -16,6 +16,7 @@ public class HotkeyConfig
     public string FontFamily { get; set; } = "Segoe UI";
     public bool EnableUsageTracking { get; set; }
     public bool HideUnrecognized { get; set; }
+    public string ScreenshotDirectory { get; set; } = "";
     public List<GameNameRule> GameNameRules { get; set; } = new();
 
     /// <summary>
@@ -68,6 +69,7 @@ public class HotkeyConfig
             FontFamily = FontFamily,
             EnableUsageTracking = EnableUsageTracking,
             HideUnrecognized = HideUnrecognized,
+            ScreenshotDirectory = ScreenshotDirectory,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

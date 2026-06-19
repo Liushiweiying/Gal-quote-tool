@@ -36,6 +36,9 @@ public partial class SettingsWindow : Window
         RulesList.ItemsSource = currentConfig.GameNameRules;
         EnableTrackingCheckBox.IsChecked = currentConfig.EnableUsageTracking;
         HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
+        ScreenshotDirBox.Text = string.IsNullOrWhiteSpace(currentConfig.ScreenshotDirectory)
+            ? "(默认) %USERPROFILE%\\Pictures\\GalgameQuoteCollector"
+            : currentConfig.ScreenshotDirectory;
 
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
@@ -118,6 +121,30 @@ public partial class SettingsWindow : Window
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
 
+    private void OnBrowseScreenshotDir(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var psScript = "$f=New-Object -ComObject Shell.Application; " +
+                           "$b=$f.BrowseForFolder(0,'选择截图保存目录',0,0); " +
+                           "if($b){$b.Self.Path}else{Write-Host 'CANCEL'}";
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -NoLogo -Command \"{psScript}\"",
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) return;
+            var output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit(5000);
+            if (output != "CANCEL" && !string.IsNullOrWhiteSpace(output))
+                ScreenshotDirBox.Text = output;
+        }
+        catch { }
+    }
+
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
@@ -126,6 +153,7 @@ public partial class SettingsWindow : Window
         _newConfig.FontFamily = FontCombo.SelectedItem is System.Windows.Media.FontFamily f ? f.Source : "Segoe UI";
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
+        _newConfig.ScreenshotDirectory = ScreenshotDirBox.Text;
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();

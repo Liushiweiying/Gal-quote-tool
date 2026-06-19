@@ -65,6 +65,14 @@
             <CheckBox x:Name="HideUnrecognizedCheckBox" Content="搜索结果排除「[未识别到文字]」"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"/>
 
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="ScreenshotDirBox" FontSize="12" Foreground="#555"
+                         Padding="6,4" Background="#F5F5F5" BorderBrush="#E0E0E0"/>
+                <Button Grid.Column="1" Content="截图目录" Click="OnBrowseScreenshotDir"
+                        Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
+            </Grid>
+
             <Separator Margin="0,12,0,16"/>
 
             <!-- ═══ Game Name Rules ═══ -->

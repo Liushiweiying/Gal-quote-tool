@@ -13,7 +13,7 @@ namespace GalgameQuoteCollector.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     private readonly HotkeyService _hotkeyService;
-    private readonly CaptureService _captureService;
+    private CaptureService _captureService;
     private readonly OcrService _ocrService;
     private readonly GameDetectService _gameDetectService;
     private readonly StorageService _storageService;
@@ -22,7 +22,7 @@ public partial class MainViewModel : ObservableObject
     private readonly Window _window;
 
     private readonly string _dataDir;
-    private readonly string _screenshotDir;
+    private string _screenshotDir;
     private bool _isCapturing;
     private UsageTracker? _usageTracker;
     private int _captureDelayMs = 200;
@@ -68,6 +68,14 @@ public partial class MainViewModel : ObservableObject
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
         _hideUnrecognized = hotkeyConfig.HideUnrecognized;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
+
+        // Custom screenshot directory
+        if (!string.IsNullOrWhiteSpace(hotkeyConfig.ScreenshotDirectory))
+        {
+            _screenshotDir = hotkeyConfig.ScreenshotDirectory;
+            Directory.CreateDirectory(_screenshotDir);
+            _captureService = new CaptureService(_screenshotDir);
+        }
 
         // Apply custom font
         if (!string.IsNullOrWhiteSpace(hotkeyConfig.FontFamily))
@@ -655,6 +663,15 @@ public partial class MainViewModel : ObservableObject
         {
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
+
+            // Update screenshot directory if changed
+            var newScreenshotDir = newConfig.ScreenshotDirectory;
+            if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
+            {
+                _screenshotDir = newScreenshotDir;
+                Directory.CreateDirectory(_screenshotDir);
+                _captureService = new CaptureService(_screenshotDir);
+            }
 
             if (_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey))
             {
