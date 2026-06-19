@@ -113,6 +113,9 @@
                             <MenuItem Header="使用记录" Command="{Binding OpenUsageStatsCommand}"/>
                             <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
                             <Separator/>
+                            <MenuItem Header="备份数据" Command="{Binding BackupDataCommand}"/>
+                            <MenuItem Header="恢复数据" Command="{Binding RestoreDataCommand}"/>
+                            <Separator/>
                             <MenuItem Header="截图迁移" Command="{Binding MigrateScreenshotsCommand}"/>
                             <MenuItem Header="截图清理" Command="{Binding CleanupScreenshotsCommand}"/>
                             <Separator/>

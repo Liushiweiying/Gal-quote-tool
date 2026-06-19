@@ -16,7 +16,7 @@ public partial class MainViewModel : ObservableObject
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
     private readonly GameDetectService _gameDetectService;
-    private readonly StorageService _storageService;
+    private StorageService _storageService;
     private readonly SettingsService _settingsService;
     private readonly ExportService _exportService = new();
     private readonly Window _window;
@@ -857,6 +857,88 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void BackupData()
+    {
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "备份文件 (*.zip)|*.zip",
+            DefaultExt = ".zip",
+            FileName = $"galgame-backup_{DateTime.Now:yyyy-MM-dd}"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            System.IO.Compression.ZipFile.CreateFromDirectory(_dataDir, dialog.FileName,
+                System.IO.Compression.CompressionLevel.Optimal, true);
+            StatusText = $"已备份到: {dialog.FileName}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"备份失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private void RestoreData()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "备份文件 (*.zip)|*.zip",
+            Title = "选择备份文件恢复"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        var result = MessageBox.Show("恢复将覆盖当前所有数据（语录、截图、设置），确定继续？",
+            "确认恢复", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (result != MessageBoxResult.Yes) return;
+
+        try
+        {
+            // Extract to a temp directory first
+            var tempDir = Path.Combine(Path.GetTempPath(), $"galrestore_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            System.IO.Compression.ZipFile.ExtractToDirectory(dialog.FileName, tempDir);
+
+            // Stop usage tracker to release file locks
+            _usageTracker?.Stop();
+
+            // Dispose old services
+            _storageService.Dispose();
+
+            // Copy files over
+            foreach (var f in Directory.GetFiles(tempDir))
+            {
+                var dest = Path.Combine(_dataDir, Path.GetFileName(f));
+                File.Copy(f, dest, true);
+            }
+
+            // Restore screenshots subdirectory
+            var tempScreenshots = Path.Combine(tempDir, "screenshots");
+            if (Directory.Exists(tempScreenshots))
+            {
+                foreach (var f in Directory.GetFiles(tempScreenshots))
+                    File.Copy(f, Path.Combine(_screenshotDir, Path.GetFileName(f)), true);
+            }
+
+            // Clean up temp
+            try { Directory.Delete(tempDir, true); } catch { }
+
+            // Reinitialize
+            _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
+            _allQuotes = _storageService.GetAllQuotes();
+            RefreshQuotes();
+            RefreshAvailableTags();
+            RefreshAvailableGroups();
+
+            StatusText = "已从备份恢复";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"恢复失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
     private void CleanupScreenshots()
     {
         var screenshotDir = _screenshotDir;
