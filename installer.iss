@@ -27,13 +27,14 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
+[Dirs]
+Name: "{app}"; Flags: uninsalwaysuninstall
+
 [Files]
-Source: "publish-tmp3\*.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp3\GalgameQuoteCollector.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "publish-tmp3\*.dll"; DestDir: "{app}"; Flags: ignoreversion
 Source: "publish-tmp3\*.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "README.zh.md"; DestDir: "{app}"; Flags: ignoreversion
-Source: "README.ja.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
