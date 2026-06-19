@@ -12,6 +12,7 @@ AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
+DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir=publish-v107
 OutputBaseFilename=GalgameQuoteCollector_Setup
