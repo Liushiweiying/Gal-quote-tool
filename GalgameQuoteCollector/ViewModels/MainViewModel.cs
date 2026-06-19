@@ -775,32 +775,51 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    /// <summary>Delete without confirmation. Keeps screenshots.</summary>
     public void DeleteQuoteDirect(Quote quote)
     {
         if (quote == null) return;
         _storageService.DeleteQuote(quote.Id);
-        var pathsToTry = new[] { quote.ScreenshotPath };
-        if (!string.IsNullOrEmpty(quote.ScreenshotPath))
-        {
-            var fileName = Path.GetFileName(quote.ScreenshotPath);
-            var newPath = Path.Combine(_screenshotDir, fileName);
-            if (newPath != quote.ScreenshotPath)
-                pathsToTry = [quote.ScreenshotPath, newPath];
-        }
-        foreach (var p in pathsToTry)
-            if (File.Exists(p)) try { File.Delete(p); } catch { }
         _allQuotes.Remove(quote);
         if (SelectedQuote == quote) SelectedQuote = null;
         RefreshQuotes();
         StatusText = "已删除";
     }
 
+    private void DeleteScreenshots(Quote quote)
+    {
+        if (string.IsNullOrEmpty(quote.ScreenshotPath)) return;
+        var fileName = Path.GetFileName(quote.ScreenshotPath);
+        var paths = new[] { quote.ScreenshotPath, Path.Combine(_screenshotDir, fileName) };
+        foreach (var p in paths)
+            if (File.Exists(p)) try { File.Delete(p); } catch { }
+    }
+
+    [RelayCommand]
     private void DeleteQuote()
     {
         if (SelectedQuote == null) return;
         var result = MessageBox.Show("确定要删除这条语录吗？", "确认删除",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes) return;
+
+        // Ask about screenshots
+        var hasScreenshots = !string.IsNullOrEmpty(SelectedQuote.ScreenshotPath);
+        if (hasScreenshots)
+        {
+            var fileName = Path.GetFileName(SelectedQuote.ScreenshotPath);
+            var paths = new[] { SelectedQuote.ScreenshotPath, Path.Combine(_screenshotDir, fileName) };
+            hasScreenshots = paths.Any(p => File.Exists(p));
+        }
+
+        if (hasScreenshots)
+        {
+            var sr = MessageBox.Show("是否保留截图文件？\n\n「是」= 仅删除语录，保留截图\n「否」= 同时删除截图", "保留截图？",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (sr == MessageBoxResult.No)
+                DeleteScreenshots(SelectedQuote);
+        }
+
         DeleteQuoteDirect(SelectedQuote);
     }
 

@@ -1,5 +1,5 @@
 ; Galgame Quote Collector — Inno Setup Script
-#define MyAppName "Galgame 语录收藏"
+#define MyAppName "Galgame Quote Collector"
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Liushiweiying"
 #define MyAppURL "https://github.com/Liushiweiying/Galgame-quote-tool"
@@ -21,15 +21,14 @@ WizardStyle=modern
 UninstallDisplayIcon={app}\{#MyAppExeName}
 
 [Languages]
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "japanese"; MessagesFile: "compiler:Languages\Japanese.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Files]
 Source: "publish-v105\GalgameQuoteCollector.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-v105\GalgameQuoteCollector_selfcontained.exe"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.zh.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.ja.md"; DestDir: "{app}"; Flags: ignoreversion
