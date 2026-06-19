@@ -3,7 +3,7 @@
 #define MyAppVersion "1.0.0"
 #define MyAppPublisher "Liushiweiying"
 #define MyAppURL "https://github.com/Liushiweiying/Galgame-quote-tool"
-#define MyAppExeName "GalgameQuoteCollector_selfcontained.exe"
+#define MyAppExeName "GalgameQuoteCollector.exe"
 
 [Setup]
 AppId={{B4F8C1A2-3D5E-4F67-9A0B-1C2D3E4F5G6H}
@@ -27,7 +27,9 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription: "Additional shortcuts:"
 
 [Files]
-Source: "publish-v105\GalgameQuoteCollector_selfcontained.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp\*.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-tmp\*.json"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.zh.md"; DestDir: "{app}"; Flags: ignoreversion
 Source: "README.ja.md"; DestDir: "{app}"; Flags: ignoreversion
@@ -59,7 +61,6 @@ begin
     begin
       Result := Copy(Lines[I], P + 22, Length(Lines[I]));
       Result := Trim(Result);
-      // Remove trailing comma and quotes
       if Copy(Result, 1, 1) = '"' then Result := Copy(Result, 2, Length(Result));
       P := Pos('"', Result);
       if P > 0 then Result := Copy(Result, 1, P - 1);
@@ -87,18 +88,15 @@ begin
   begin
     DataDir := ExpandConstant('{localappdata}') + '\GalgameQuoteCollector';
 
-    // Delete custom screenshot directory if configured
     SettingsPath := DataDir + '\settings.json';
     ScreenDir := ExtractScreenshotDir(SettingsPath);
     if (ScreenDir <> '') and (DirExists(ScreenDir)) then
       DelTree(ScreenDir, True, True, True);
 
-    // Delete default screenshot location (Pictures)
     ScreenDir := ExpandConstant('{userpictures}') + '\GalgameQuoteCollector';
     if DirExists(ScreenDir) then
       DelTree(ScreenDir, True, True, True);
 
-    // Delete app data
     if DirExists(DataDir) then
       DelTree(DataDir, True, True, True);
   end;
