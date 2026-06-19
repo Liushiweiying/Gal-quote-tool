@@ -868,8 +868,16 @@ public partial class MainViewModel : ObservableObject
             // Copy files to temp dir to avoid SQLite file lock
             var tempDir = Path.Combine(Path.GetTempPath(), $"galbackup_{Guid.NewGuid():N}");
             Directory.CreateDirectory(tempDir);
+            Directory.CreateDirectory(Path.Combine(tempDir, "screenshots"));
+
             foreach (var f in Directory.GetFiles(_dataDir))
                 File.Copy(f, Path.Combine(tempDir, Path.GetFileName(f)), true);
+
+            if (Directory.Exists(_screenshotDir))
+            {
+                foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
+                    File.Copy(f, Path.Combine(tempDir, "screenshots", Path.GetFileName(f)), true);
+            }
 
             System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, dialog.FileName,
                 System.IO.Compression.CompressionLevel.Optimal, true);
