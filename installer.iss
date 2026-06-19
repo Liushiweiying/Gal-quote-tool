@@ -38,3 +38,28 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
+
+[Code]
+var
+  DeleteData: Boolean;
+
+procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
+var
+  DataDir: string;
+begin
+  if CurUninstallStep = usUninstall then
+  begin
+    DeleteData := MsgBox('是否保留语录数据？' + #13#10 +
+      '' + #13#10 +
+      '「是」= 保留数据库、截图、设置文件' + #13#10 +
+      '「否」= 同时删除所有数据',
+      mbConfirmation, MB_YESNO) = IDNO;
+  end;
+
+  if (CurUninstallStep = usPostUninstall) and DeleteData then
+  begin
+    DataDir := ExpandConstant('{localappdata}') + '\GalgameQuoteCollector';
+    if DirExists(DataDir) then
+      DelTree(DataDir, True, True, True);
+  end;
+end;
