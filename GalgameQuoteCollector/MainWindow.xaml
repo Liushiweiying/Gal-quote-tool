@@ -294,9 +294,14 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </WrapPanel>
-                            <TextBox Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="6,4" Margin="0,0,0,10"
-                                     Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                                <Button Grid.Column="1" Content="+ 创建标签" Command="{Binding AddTagCommand}"
+                                        Padding="8,4" Margin="4,0,0,0"
+                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
+                            </Grid>
 
                             <TextBlock Text="分组" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
                             <WrapPanel Margin="0,0,0,4">
@@ -325,9 +330,14 @@
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </WrapPanel>
-                            <TextBox Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
-                                     Padding="6,4" Margin="0,0,0,10"
-                                     Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                            <Grid Margin="0,0,0,10">
+                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBox Grid.Column="0" Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
+                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                                <Button Grid.Column="1" Content="+ 创建分组" Command="{Binding AddGroupCommand}"
+                                        Padding="8,4" Margin="4,0,0,0"
+                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
+                            </Grid>
 
                             <!-- Notes -->
                             <TextBlock Text="备注" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
