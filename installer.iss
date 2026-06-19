@@ -13,7 +13,7 @@ AppPublisher={#MyAppPublisher}
 AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=publish-v105
+OutputDir=publish-v107
 OutputBaseFilename=GalgameQuoteCollector_Setup
 Compression=lzma
 SolidCompression=yes
@@ -77,11 +77,17 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    DeleteData := MsgBox('是否保留语录数据？' + #13#10 +
+    DeleteData := MsgBox('是否保留数据？' + #13#10 +
       '' + #13#10 +
-      '「是」= 保留数据库、截图、设置文件' + #13#10 +
-      '「否」= 同时删除所有数据（包括截图）',
+      '「是」= 保留数据库、截图、设置' + #13#10 +
+      '「否」= 删除所有数据',
       mbConfirmation, MB_YESNO) = IDNO;
+
+    if DeleteData then
+      DeleteData := MsgBox('确定要删除所有数据？' + #13#10 +
+        '' + #13#10 +
+        '此操作不可撤销！所有语录、截图、设置将永久删除。',
+        mbConfirmation, MB_YESNO) = IDYES;
   end;
 
   if (CurUninstallStep = usPostUninstall) and DeleteData then
