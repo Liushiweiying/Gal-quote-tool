@@ -865,23 +865,21 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            // Close DB connection so SQLite file is not locked
-            _usageTracker?.Stop();
-            _storageService.Dispose();
+            // Copy files to temp dir to avoid SQLite file lock
+            var tempDir = Path.Combine(Path.GetTempPath(), $"galbackup_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            foreach (var f in Directory.GetFiles(_dataDir))
+                File.Copy(f, Path.Combine(tempDir, Path.GetFileName(f)), true);
 
-            System.IO.Compression.ZipFile.CreateFromDirectory(_dataDir, dialog.FileName,
+            System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, dialog.FileName,
                 System.IO.Compression.CompressionLevel.Optimal, true);
 
-            // Reopen
-            _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
-            ToggleUsageTracking(_settingsService.LoadHotkeyConfig().EnableUsageTracking);
+            try { Directory.Delete(tempDir, true); } catch { }
 
             StatusText = $"已备份到: {dialog.FileName}";
         }
         catch (Exception ex)
         {
-            // Try to reopen even on failure
-            try { _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db")); } catch { }
             MessageBox.Show($"备份失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
         }
     }
