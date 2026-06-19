@@ -1,7 +1,9 @@
 using System.ComponentModel;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using GalgameQuoteCollector.Models;
 using GalgameQuoteCollector.ViewModels;
 
@@ -100,6 +102,41 @@ public partial class MainWindow : Window
             e.Cancel = true;
             Hide();
         }
+    }
+
+    private void OnBatchDelete(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        var listBox = FindVisualChild<ListBox>(this);
+        if (listBox == null) return;
+
+        var selected = listBox.SelectedItems.Cast<Quote>().ToList();
+        if (selected.Count < 2)
+        {
+            MessageBox.Show("按住 Ctrl 或 Shift 多选后再删除", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var result = MessageBox.Show($"确定删除选中的 {selected.Count} 条语录？", "批量删除",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes) return;
+
+        foreach (var q in selected.ToList())
+        {
+            vm.DeleteQuoteDirect(q);
+        }
+    }
+
+    private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+    {
+        for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+        {
+            var child = VisualTreeHelper.GetChild(parent, i);
+            if (child is T found) return found;
+            var foundChild = FindVisualChild<T>(child);
+            if (foundChild != null) return foundChild;
+        }
+        return null;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

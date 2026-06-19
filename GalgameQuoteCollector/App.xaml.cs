@@ -58,6 +58,9 @@ public partial class App : Application
             return;
         }
 
+        // Save usage data on system shutdown / logoff
+        SessionEnding += (_, _) => SaveUsageData();
+
         try
         {
             _startMinimized = e.Args.Contains("--minimized");
@@ -129,6 +132,12 @@ public partial class App : Application
         {
             Log($"Tray icon failed (non-critical): {ex.Message}");
         }
+    }
+
+    private void SaveUsageData()
+    {
+        if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
+            vm.SaveUsageDataNow();
     }
 
     private void ShowMainWindow()

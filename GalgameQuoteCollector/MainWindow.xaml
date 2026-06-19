@@ -58,11 +58,6 @@
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Visibility" Value="Collapsed"/>
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding SearchText}" Value="">
-                                            <Setter Property="Visibility" Value="Visible"/>
-                                        </DataTrigger>
-                                    </Style.Triggers>
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
@@ -120,6 +115,8 @@
                             <Separator/>
                             <MenuItem Header="截图迁移" Command="{Binding MigrateScreenshotsCommand}"/>
                             <MenuItem Header="截图清理" Command="{Binding CleanupScreenshotsCommand}"/>
+                            <Separator/>
+                            <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
@@ -139,6 +136,7 @@
                     Padding="4">
                 <Grid>
                     <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
+                             SelectionMode="Extended"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                              VirtualizingPanel.ScrollUnit="Pixel">
@@ -149,11 +147,6 @@
                                 <Setter Property="Background" Value="Transparent"/>
                                 <Setter Property="BorderThickness" Value="0"/>
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter Property="Background" Value="#EEF0FF"/>
-                                    </Trigger>
-                                </Style.Triggers>
                             </Style>
                         </ListBox.Resources>
                         <ListBox.ItemTemplate>
@@ -266,59 +259,57 @@
                                        MaxHeight="200" Stretch="Uniform"/>
                             </Border>
 
-                            <!-- Tags -->
+                            <!-- Tags — show all, toggle on/off -->
                             <TextBlock Text="标签" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
-                            <WrapPanel Margin="0,0,0,4">
-                                <ItemsControl ItemsSource="{Binding CurrentTags}">
+                            <WrapPanel Margin="0,0,0,8">
+                                <ItemsControl ItemsSource="{Binding AvailableTags}">
                                     <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
                                     <ItemsControl.ItemTemplate>
                                         <DataTemplate>
                                             <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
-                                                    Background="#EEF0FF" Foreground="#5B6ABF" BorderThickness="0" 
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.RemoveTagFromQuoteCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </WrapPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0" />
-                                <Button Grid.Column="1" Content="+ 添加" Command="{Binding AddTagCommand}"
-                                        Padding="8,4" Margin="4,0,0,0"
-                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="12"/>
-                            </Grid>
-
-                            <!-- Groups -->
-                            <TextBlock Text="分组" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
-                            <WrapPanel Margin="0,0,0,4">
-                                <ItemsControl ItemsSource="{Binding CurrentGroups}">
-                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
-                                                    Background="#5B6ABF" Foreground="White" BorderThickness="0" 
-                                                    Cursor="Hand">
-                                                <Button.ContextMenu>
-                                                    <ContextMenu>
-                                                        <MenuItem Header="删除分组" Command="{Binding DataContext.DeleteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
-                                                    </ContextMenu>
-                                                </Button.ContextMenu>
+                                                    BorderThickness="0" Cursor="Hand"
+                                                    Command="{Binding DataContext.ToggleTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Background" Value="#E0E0E0"/>
+                                                        <Setter Property="Foreground" Value="#666"/>
+                                                    </Style>
+                                                </Button.Style>
                                             </Button>
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
                             </WrapPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0" />
-                                <Button Grid.Column="1" Content="创建" Command="{Binding AddGroupCommand}"
-                                        Padding="8,4" Margin="4,0,0,0"
-                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="12"/>
-                            </Grid>
+                            <TextBox Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="6,4" Margin="0,0,0,10"
+                                     Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+
+                            <!-- Groups — show all, toggle on/off -->
+                            <TextBlock Text="分组" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                            <WrapPanel Margin="0,0,0,8">
+                                <ItemsControl ItemsSource="{Binding AvailableGroups}">
+                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                    BorderThickness="0" Cursor="Hand"
+                                                    Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                    CommandParameter="{Binding}">
+                                                <Button.Style>
+                                                    <Style TargetType="Button">
+                                                        <Setter Property="Background" Value="#E0E0E0"/>
+                                                        <Setter Property="Foreground" Value="#666"/>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </WrapPanel>
+                            <TextBox Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
+                                     Padding="6,4" Margin="0,0,0,10"
+                                     Background="#FAFAFA" BorderBrush="#E0E0E0"/>
 
                             <!-- Notes -->
                             <TextBlock Text="备注" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>

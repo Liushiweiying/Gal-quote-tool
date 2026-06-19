@@ -294,6 +294,18 @@ public partial class MainViewModel : ObservableObject
         RefreshCurrentTags();
     }
 
+    [RelayCommand]
+    private void ToggleTag(Tag tag)
+    {
+        if (SelectedQuote == null) return;
+        var current = _storageService.GetTagsForQuote(SelectedQuote.Id);
+        if (current.Any(t => t.Id == tag.Id))
+            _storageService.RemoveTagFromQuote(SelectedQuote.Id, tag.Id);
+        else
+            _storageService.AddTagToQuote(SelectedQuote.Id, tag.Id);
+        RefreshCurrentTags();
+    }
+
     private void RefreshCurrentTags()
     {
         if (SelectedQuote == null)
@@ -714,41 +726,33 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    public void DeleteQuoteDirect(Quote quote)
+    {
+        if (quote == null) return;
+        _storageService.DeleteQuote(quote.Id);
+        var pathsToTry = new[] { quote.ScreenshotPath };
+        if (!string.IsNullOrEmpty(quote.ScreenshotPath))
+        {
+            var fileName = Path.GetFileName(quote.ScreenshotPath);
+            var newPath = Path.Combine(_screenshotDir, fileName);
+            if (newPath != quote.ScreenshotPath)
+                pathsToTry = [quote.ScreenshotPath, newPath];
+        }
+        foreach (var p in pathsToTry)
+            if (File.Exists(p)) try { File.Delete(p); } catch { }
+        _allQuotes.Remove(quote);
+        if (SelectedQuote == quote) SelectedQuote = null;
+        RefreshQuotes();
+        StatusText = "已删除";
+    }
+
     private void DeleteQuote()
     {
         if (SelectedQuote == null) return;
-
         var result = MessageBox.Show("确定要删除这条语录吗？", "确认删除",
             MessageBoxButton.YesNo, MessageBoxImage.Question);
-
         if (result != MessageBoxResult.Yes) return;
-
-        var quoteToDelete = SelectedQuote;
-        _storageService.DeleteQuote(quoteToDelete.Id);
-
-        // Delete screenshot — check both old (db path) and new (Pictures) locations
-        var pathsToTry = new[] { quoteToDelete.ScreenshotPath };
-        if (!string.IsNullOrEmpty(quoteToDelete.ScreenshotPath))
-        {
-            var fileName = Path.GetFileName(quoteToDelete.ScreenshotPath);
-            var newPath = Path.Combine(_screenshotDir, fileName);
-            if (newPath != quoteToDelete.ScreenshotPath)
-                pathsToTry = [quoteToDelete.ScreenshotPath, newPath];
-        }
-        foreach (var p in pathsToTry)
-        {
-            if (File.Exists(p))
-            {
-                try { File.Delete(p); }
-                catch { }
-            }
-        }
-
-        _allQuotes.Remove(quoteToDelete);
-        SelectedQuote = null;
-        RefreshQuotes();
-
-        StatusText = "已删除";
+        DeleteQuoteDirect(SelectedQuote);
     }
 
     [RelayCommand]
@@ -905,6 +909,11 @@ public partial class MainViewModel : ObservableObject
         var win = new Views.UsageStatsWindow(_window, data);
         win.ShowDialog();
         _usageTracker.Save();
+    }
+
+    public void SaveUsageDataNow()
+    {
+        _usageTracker?.Save();
     }
 
     [RelayCommand]
