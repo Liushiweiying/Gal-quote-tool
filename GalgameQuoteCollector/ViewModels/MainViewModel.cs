@@ -26,6 +26,7 @@ public partial class MainViewModel : ObservableObject
     private bool _isCapturing;
     private UsageTracker? _usageTracker;
     private int _captureDelayMs = 200;
+    private bool _hideUnrecognized;
 
     public MainViewModel(Window window)
     {
@@ -65,6 +66,7 @@ public partial class MainViewModel : ObservableObject
 
         var hotkeyConfig = _settingsService.LoadHotkeyConfig();
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
+        _hideUnrecognized = hotkeyConfig.HideUnrecognized;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
 
         // Apply custom font
@@ -658,6 +660,7 @@ public partial class MainViewModel : ObservableObject
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
                 ReapplyRulesToAllQuotes();
+                _hideUnrecognized = newConfig.HideUnrecognized;
                 ToggleUsageTracking(newConfig.EnableUsageTracking);
                 if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
                 {
@@ -673,6 +676,7 @@ public partial class MainViewModel : ObservableObject
                 _settingsService.SaveHotkeyConfig(newConfig);
                 _gameDetectService.SetRules(newConfig.GameNameRules);
                 ReapplyRulesToAllQuotes();
+                _hideUnrecognized = newConfig.HideUnrecognized;
                 ToggleUsageTracking(newConfig.EnableUsageTracking);
                 if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
                 {
@@ -1002,6 +1006,12 @@ public partial class MainViewModel : ObservableObject
             source = source.Where(q =>
                 q.Text.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
                 || q.GameName.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Exclude unrecognized if setting enabled
+        if (_hideUnrecognized)
+        {
+            source = source.Where(q => !q.Text.Contains("[未识别到文字]"));
         }
 
         // Sort

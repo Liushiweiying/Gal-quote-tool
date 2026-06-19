@@ -35,6 +35,7 @@ public partial class SettingsWindow : Window
 
         RulesList.ItemsSource = currentConfig.GameNameRules;
         EnableTrackingCheckBox.IsChecked = currentConfig.EnableUsageTracking;
+        HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
 
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
@@ -124,6 +125,7 @@ public partial class SettingsWindow : Window
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         _newConfig.FontFamily = FontCombo.SelectedItem is System.Windows.Media.FontFamily f ? f.Source : "Segoe UI";
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
+        _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();
