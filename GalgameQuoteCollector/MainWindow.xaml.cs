@@ -148,6 +148,15 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
+        if (e.Key == Key.Delete && DataContext is MainViewModel vm && vm.SelectedQuote != null)
+        {
+            var result = MessageBox.Show("确定要删除这条语录吗？", "确认删除",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (result == MessageBoxResult.Yes)
+                vm.DeleteQuoteDirect(vm.SelectedQuote);
+            e.Handled = true;
+            return;
+        }
         base.OnKeyDown(e);
     }
 }

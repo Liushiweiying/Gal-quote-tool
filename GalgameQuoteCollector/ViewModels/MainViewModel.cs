@@ -400,6 +400,7 @@ public partial class MainViewModel : ObservableObject
         _storageService.AddGroup(NewGroupText.Trim());
         NewGroupText = string.Empty;
         RefreshAvailableGroups();
+        if (SelectedQuote != null) RefreshCurrentGroups();
         StatusText = $"已创建分组";
     }
 
