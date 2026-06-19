@@ -43,22 +43,62 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: po
 var
   DeleteData: Boolean;
 
+function ExtractScreenshotDir(const JsonPath: string): string;
+var
+  Lines: TArrayOfString;
+  I: Integer;
+  P: Integer;
+begin
+  Result := '';
+  if not FileExists(JsonPath) then Exit;
+  if not LoadStringsFromFile(JsonPath, Lines) then Exit;
+  for I := 0 to GetArrayLength(Lines) - 1 do
+  begin
+    P := Pos('"ScreenshotDirectory"', Lines[I]);
+    if P > 0 then
+    begin
+      Result := Copy(Lines[I], P + 22, Length(Lines[I]));
+      Result := Trim(Result);
+      // Remove trailing comma and quotes
+      if Copy(Result, 1, 1) = '"' then Result := Copy(Result, 2, Length(Result));
+      P := Pos('"', Result);
+      if P > 0 then Result := Copy(Result, 1, P - 1);
+      Exit;
+    end;
+  end;
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: string;
+  SettingsPath: string;
+  ScreenDir: string;
 begin
   if CurUninstallStep = usUninstall then
   begin
     DeleteData := MsgBox('是否保留语录数据？' + #13#10 +
       '' + #13#10 +
       '「是」= 保留数据库、截图、设置文件' + #13#10 +
-      '「否」= 同时删除所有数据',
+      '「否」= 同时删除所有数据（包括截图）',
       mbConfirmation, MB_YESNO) = IDNO;
   end;
 
   if (CurUninstallStep = usPostUninstall) and DeleteData then
   begin
     DataDir := ExpandConstant('{localappdata}') + '\GalgameQuoteCollector';
+
+    // Delete custom screenshot directory if configured
+    SettingsPath := DataDir + '\settings.json';
+    ScreenDir := ExtractScreenshotDir(SettingsPath);
+    if (ScreenDir <> '') and (DirExists(ScreenDir)) then
+      DelTree(ScreenDir, True, True, True);
+
+    // Delete default screenshot location (Pictures)
+    ScreenDir := ExpandConstant('{userpictures}') + '\GalgameQuoteCollector';
+    if DirExists(ScreenDir) then
+      DelTree(ScreenDir, True, True, True);
+
+    // Delete app data
     if DirExists(DataDir) then
       DelTree(DataDir, True, True, True);
   end;
