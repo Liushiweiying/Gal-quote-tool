@@ -1019,10 +1019,42 @@ public partial class MainViewModel : ObservableObject
         {
             1 => source.OrderBy(q => string.IsNullOrEmpty(q.GameName) ? "~" : q.GameName)
                        .ThenByDescending(q => q.CapturedAt),
+            2 => SortByRelevance(source, SearchText),
             _ => source.OrderByDescending(q => q.CapturedAt)
         };
 
         Quotes = new ObservableCollection<Quote>(source.ToList());
+    }
+
+    private static IOrderedEnumerable<Quote> SortByRelevance(IEnumerable<Quote> source, string searchText)
+    {
+        return source
+            .OrderByDescending(q =>
+            {
+                if (string.IsNullOrWhiteSpace(searchText)) return 0;
+                var kw = searchText.Trim().ToLower();
+                if (string.IsNullOrEmpty(kw)) return 0;
+                int score = 0;
+                if (q.Text.Contains(kw, StringComparison.OrdinalIgnoreCase))
+                    score += 10;
+                if (q.GameName.Contains(kw, StringComparison.OrdinalIgnoreCase))
+                    score += 5;
+                score += CountOccurrences(q.Text, kw);
+                return score;
+            })
+            .ThenByDescending(q => q.CapturedAt);
+    }
+
+    private static int CountOccurrences(string text, string keyword)
+    {
+        if (string.IsNullOrEmpty(text) || string.IsNullOrEmpty(keyword)) return 0;
+        int count = 0, idx = 0;
+        while ((idx = text.IndexOf(keyword, idx, StringComparison.OrdinalIgnoreCase)) != -1)
+        {
+            count++;
+            idx += keyword.Length;
+        }
+        return count;
     }
 }
 

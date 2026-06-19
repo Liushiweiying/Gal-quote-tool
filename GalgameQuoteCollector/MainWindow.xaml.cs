@@ -36,6 +36,7 @@ public partial class MainWindow : Window
         var sortMenu = new MenuItem { Header = "排序方式" };
         sortMenu.Items.Add(MakeRadioItem("按时间", vm.SortMode == 0, () => vm.SortMode = 0));
         sortMenu.Items.Add(MakeRadioItem("按游戏名", vm.SortMode == 1, () => vm.SortMode = 1));
+        sortMenu.Items.Add(MakeRadioItem("按相关度", vm.SortMode == 2, () => vm.SortMode = 2));
         menu.Items.Add(sortMenu);
 
         // ── Game ──
