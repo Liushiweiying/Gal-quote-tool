@@ -205,6 +205,14 @@ public class StorageService : IDisposable
         return new Tag { Id = Convert.ToInt32(result), Name = name.Trim() };
     }
 
+    public void DeleteTag(int tagId)
+    {
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "DELETE FROM Tags WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", tagId);
+        cmd.ExecuteNonQuery();
+    }
+
     public void AddTagToQuote(int quoteId, int tagId)
     {
         using var cmd = _connection!.CreateCommand();

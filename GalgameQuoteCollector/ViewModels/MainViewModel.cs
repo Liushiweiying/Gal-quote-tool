@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Windows;
+using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalgameQuoteCollector.Models;
@@ -131,6 +132,9 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<Tag> _availableTags = new();
 
     [ObservableProperty]
+    private ObservableCollection<Tag> _unassignedTags = new();
+
+    [ObservableProperty]
     private string _newTagText = string.Empty;
 
     // ── Groups ──
@@ -139,6 +143,9 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private ObservableCollection<QuoteGroup> _availableGroups = new();
+
+    [ObservableProperty]
+    private ObservableCollection<QuoteGroup> _unassignedGroups = new();
 
     [ObservableProperty]
     private string _newGroupText = string.Empty;
@@ -297,6 +304,20 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleTag(Tag tag)
     {
+        if (tag == null) return;
+
+        // Ctrl+click → delete tag itself
+        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+        {
+            var res = MessageBox.Show($"确定删除标签「{tag.Name}」？（不影响语录）", "删除标签",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (res != MessageBoxResult.Yes) return;
+            _storageService.DeleteTag(tag.Id);
+            RefreshAvailableTags();
+            if (SelectedQuote != null) RefreshCurrentTags();
+            return;
+        }
+
         if (SelectedQuote == null) return;
         var current = _storageService.GetTagsForQuote(SelectedQuote.Id);
         if (current.Any(t => t.Id == tag.Id))
@@ -310,11 +331,15 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedQuote == null)
         {
-            CurrentTags.Clear();
+            CurrentTags.Clear(); UnassignedTags.Clear();
             return;
         }
         var tags = _storageService.GetTagsForQuote(SelectedQuote.Id);
         CurrentTags = new ObservableCollection<Tag>(tags);
+
+        var all = _storageService.GetAllTags();
+        var assignedIds = tags.Select(t => t.Id).ToHashSet();
+        UnassignedTags = new ObservableCollection<Tag>(all.Where(t => !assignedIds.Contains(t.Id)));
     }
 
     private void RefreshAvailableTags()
@@ -327,9 +352,13 @@ public partial class MainViewModel : ObservableObject
 
     private void RefreshCurrentGroups()
     {
-        if (SelectedQuote == null) { CurrentGroups.Clear(); return; }
+        if (SelectedQuote == null) { CurrentGroups.Clear(); UnassignedGroups.Clear(); return; }
         var groups = _storageService.GetGroupsForQuote(SelectedQuote.Id);
         CurrentGroups = new ObservableCollection<QuoteGroup>(groups);
+
+        var all = _storageService.GetAllGroups();
+        var assignedIds = groups.Select(g => g.Id).ToHashSet();
+        UnassignedGroups = new ObservableCollection<QuoteGroup>(all.Where(g => !assignedIds.Contains(g.Id)));
     }
 
     private void RefreshAvailableGroups()
@@ -390,8 +419,23 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ToggleQuoteGroup(QuoteGroup group)
     {
-        if (SelectedQuote == null || group.Id == 0) return;
+        if (group == null || group.Id == 0) return;
 
+        // Ctrl+click → delete group itself
+        if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
+        {
+            var res = MessageBox.Show($"确定删除分组「{group.Name}」？（不影响语录）", "删除分组",
+                MessageBoxButton.YesNo, MessageBoxImage.Question);
+            if (res != MessageBoxResult.Yes) return;
+            _storageService.DeleteGroup(group.Id);
+            if (SelectedGroupFilter == group.Id) SelectedGroupFilter = 0;
+            RefreshAvailableGroups();
+            if (SelectedQuote != null) RefreshCurrentGroups();
+            RefreshQuotes();
+            return;
+        }
+
+        if (SelectedQuote == null) return;
         var currentGroups = _storageService.GetGroupsForQuote(SelectedQuote.Id);
         var isInGroup = currentGroups.Any(g => g.Id == group.Id);
 
