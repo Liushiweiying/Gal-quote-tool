@@ -35,23 +35,10 @@ public partial class MainViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
             "GalgameQuoteCollector");
 
-        // Data dir: appdir\data 优先, 但 %LOCALAPPDATA% 存在时使用它
-        var localAppData = Path.Combine(
+        // Always use %LOCALAPPDATA% for data — consistent across versions
+        _dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GalgameQuoteCollector");
-        var appDirData = Path.Combine(
-            Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory, "data");
-
-        if (Directory.Exists(localAppData) &&
-            (File.Exists(Path.Combine(localAppData, "quotes.db")) ||
-             File.Exists(Path.Combine(localAppData, "settings.json"))))
-        {
-            _dataDir = localAppData;  // 已有旧数据
-        }
-        else
-        {
-            _dataDir = appDirData;    // 使用 exe 旁目录
-        }
         Directory.CreateDirectory(_dataDir);
 
         _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
