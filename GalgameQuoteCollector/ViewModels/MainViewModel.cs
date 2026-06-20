@@ -31,11 +31,9 @@ public partial class MainViewModel : ObservableObject
     public MainViewModel(Window window)
     {
         _window = window;
-        // Avoid OneDrive redirected Pictures — use local Pictures directly
-        var picsDir = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
-        if (picsDir.Contains("OneDrive", StringComparison.OrdinalIgnoreCase))
-            picsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Pictures");
-        _screenshotDir = Path.Combine(picsDir, "GalgameQuoteCollector");
+        _screenshotDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            "GalgameQuoteCollector");
 
         // Always use %LOCALAPPDATA% for data — consistent across versions
         _dataDir = Path.Combine(
