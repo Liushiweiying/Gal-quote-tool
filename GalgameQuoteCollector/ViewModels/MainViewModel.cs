@@ -768,6 +768,23 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    private static string CheckAutoStart()
+    {
+        try
+        {
+            var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
+            var vbsPath = Path.Combine(startupFolder, "GalgameQuoteCollector.vbs");
+            if (File.Exists(vbsPath)) return "✓ 已开启";
+            var lnkPath = Path.Combine(startupFolder, "GalgameQuoteCollector.lnk");
+            if (File.Exists(lnkPath)) return "✓ 已开启";
+            return "已关闭";
+        }
+        catch
+        {
+            return "未知";
+        }
+    }
+
     // ── Edit ──
 
     [RelayCommand]
@@ -985,9 +1002,10 @@ public partial class MainViewModel : ObservableObject
                 RefreshAvailableTagsForFilter();
                 RefreshAvailableGamesForFilter();
 
+                var autoStart = CheckAutoStart();
                 StatusText = updated > 0
-                    ? $"已应用规则，更新了 {updated} 条语录的游戏名"
-                    : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录";
+                    ? $"已应用规则，更新了 {updated} 条语录的游戏名 | 自启: {autoStart}"
+                    : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录 | 自启: {autoStart}";
             });
         });
     }
