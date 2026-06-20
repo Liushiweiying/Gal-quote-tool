@@ -18,10 +18,17 @@ public class ThumbnailConverter : IValueConverter
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
-            // Use file:/// URI to handle Unicode paths correctly
             bitmap.UriSource = new Uri(new Uri("file:///"), path);
-            bitmap.DecodePixelWidth = 84;
-            bitmap.DecodePixelHeight = 64;
+            if (parameter is string s && s == "full")
+            {
+                // Full resolution (detail panel)
+            }
+            else
+            {
+                // Thumbnail (list view)
+                bitmap.DecodePixelWidth = 84;
+                bitmap.DecodePixelHeight = 64;
+            }
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.EndInit();
             bitmap.Freeze();

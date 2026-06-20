@@ -826,9 +826,9 @@ public partial class MainViewModel : ObservableObject
 
         if (hasScreenshots)
         {
-            var sr = MessageBox.Show("是否保留截图文件？\n\n「是」= 仅删除语录，保留截图\n「否」= 同时删除截图", "保留截图？",
+            var sr = MessageBox.Show("截图文件怎么处理？\n\n「是」= 删除截图文件\n「否」= 保留截图文件", "删除截图？",
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (sr == MessageBoxResult.No)
+            if (sr == MessageBoxResult.Yes)
                 DeleteScreenshots(SelectedQuote);
         }
 
