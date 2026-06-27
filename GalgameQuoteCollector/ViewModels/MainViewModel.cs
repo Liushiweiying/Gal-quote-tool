@@ -647,28 +647,17 @@ public partial class MainViewModel : ObservableObject
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
 
-            // Update screenshot directory if changed — auto-migrate existing screenshots
+            // Update screenshot directory if changed
             var newScreenshotDir = newConfig.ScreenshotDirectory;
             if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
             {
-                var oldDir = _screenshotDir;
                 _screenshotDir = newScreenshotDir;
                 Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
-                // Migrate old screenshots — MOVE (not copy), then delete old dir
-                if (Directory.Exists(oldDir))
-                {
-                    int count = 0;
-                    foreach (var f in Directory.GetFiles(oldDir, "*.png"))
-                    {
-                        var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
-                        if (!File.Exists(dest)) { File.Move(f, dest); count++; }
-                    }
-                    try { Directory.Delete(oldDir, true); } catch { }
-                    if (count > 0) StatusText = $"已迁移 {count} 张截图";
-                }
+                // 不迁移旧截图，只将新截图存到新目录
+                StatusText = $"截图目录已改为: {_screenshotDir}";
 
-                // Match ALL screenshots to quotes by timestamp (overwrites old paths)
+                // 仅匹配 ScreenshotPath 无效的语录（File.Exists 为 false）
                 int matched = 0;
                 var filesByTime = new Dictionary<string, string>();
                 foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
@@ -679,26 +668,22 @@ public partial class MainViewModel : ObservableObject
                 }
                 if (filesByTime.Count > 0 && _allQuotes.Count > 0)
                 {
-                    int unmatched = 0;
                     foreach (var q in _allQuotes)
                     {
+                        if (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
+                            continue; // 已有有效路径
                         var key = q.CapturedAt.ToString("yyyy-MM-dd_HHmmss");
-                        if (filesByTime.TryGetValue(key, out var filePath) && filePath != q.ScreenshotPath)
+                        if (filesByTime.TryGetValue(key, out var filePath))
                         {
                             q.ScreenshotPath = filePath;
                             _storageService.UpdateQuote(q);
                             matched++;
                         }
-                        else if (!File.Exists(q.ScreenshotPath))
-                        {
-                            unmatched++;
-                        }
                     }
                     if (matched > 0)
                     {
                         RefreshQuotes();
-                        StatusText = $"已关联 {matched} 条语录与截图";
-                        if (unmatched > 0) StatusText += $"，仍有 {unmatched} 条未匹配";
+                        StatusText += $"，已关联 {matched} 条语录";
                     }
                 }
             }
