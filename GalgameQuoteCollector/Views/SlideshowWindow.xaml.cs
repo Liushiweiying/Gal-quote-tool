@@ -140,11 +140,13 @@ public partial class SlideshowWindow : Window
     {
         if (_pos > 0) { _pos--; ShowCurrent(); }
         else if (_loop && _filtered.Count > 0) { _pos = _filtered.Count - 1; ShowCurrent(); }
+        else { Close(); }
     }
     private void GoNext()
     {
         if (_pos < _filtered.Count - 1) { _pos++; ShowCurrent(); }
         else if (_loop && _filtered.Count > 0) { _pos = 0; ShowCurrent(); }
+        else { Close(); }
     }
     private void GoRandom() { _pos = _random.Next(_filtered.Count); ShowCurrent(); }
 
@@ -174,13 +176,11 @@ public partial class SlideshowWindow : Window
         {
             WindowState = WindowState.Maximized; ResizeMode = ResizeMode.NoResize; Topmost = true;
             NormalLayout.Visibility = Visibility.Collapsed; FullscreenLayout.Visibility = Visibility.Visible;
-            FullscreenBtn.Content = "窗口";
         }
         else
         {
             WindowState = WindowState.Normal; ResizeMode = ResizeMode.CanResize; Topmost = _isTopmost;
             NormalLayout.Visibility = Visibility.Visible; FullscreenLayout.Visibility = Visibility.Collapsed;
-            FullscreenBtn.Content = "全屏";
             if (Owner != null) { Left = Owner.Left + (Owner.Width - Width) / 2; Top = Owner.Top + (Owner.Height - Height) / 2; }
         }
     }
