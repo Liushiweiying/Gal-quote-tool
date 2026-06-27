@@ -647,49 +647,14 @@ public partial class MainViewModel : ObservableObject
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
 
-            // Update screenshot directory — copy files + update DB paths
+            // Just save new screenshot directory — don't migrate anything
             var newScreenshotDir = newConfig.ScreenshotDirectory;
             if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
             {
-                var oldDir = _screenshotDir;
                 _screenshotDir = newScreenshotDir;
                 Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
-
-                // Copy screenshots to new dir (MOVE is too dangerous — risk of data loss)
-                int copied = 0;
-                if (Directory.Exists(oldDir) && oldDir.EndsWith("GalgameQuoteCollector", StringComparison.OrdinalIgnoreCase))
-                {
-                    foreach (var f in Directory.GetFiles(oldDir, "*.png"))
-                    {
-                        var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
-                        if (!File.Exists(dest)) { File.Copy(f, dest); copied++; }
-                    }
-                }
-
-                // Update DB paths
-                int updated = 0;
-                var prefix = oldDir.TrimEnd('\\');
-                foreach (var q in _allQuotes)
-                {
-                    if (!string.IsNullOrEmpty(q.ScreenshotPath) &&
-                        q.ScreenshotPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-                    {
-                        q.ScreenshotPath = Path.Combine(_screenshotDir, Path.GetFileName(q.ScreenshotPath));
-                        _storageService.UpdateQuote(q);
-                        updated++;
-                    }
-                }
-
-                if (copied > 0 || updated > 0)
-                {
-                    RefreshQuotes();
-                    StatusText = $"已复制 {copied} 张截图，更新 {updated} 条语录路径";
-                }
-                else
-                {
-                    StatusText = $"截图目录已改为: {_screenshotDir}";
-                }
+                StatusText = $"截图目录已改为: {_screenshotDir}";
             }
 
             if (_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey))
