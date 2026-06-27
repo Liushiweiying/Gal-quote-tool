@@ -647,7 +647,7 @@ public partial class MainViewModel : ObservableObject
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
 
-            // Update screenshot directory if changed
+            // Update screenshot directory — move files + update DB paths
             var newScreenshotDir = newConfig.ScreenshotDirectory;
             if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
             {
@@ -656,50 +656,39 @@ public partial class MainViewModel : ObservableObject
                 Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
 
-                // 复制旧截图到新目录（不移动，保证旧路径仍有效）
+                int moved = 0, updated = 0;
+                // 先移动文件
                 if (Directory.Exists(oldDir))
                 {
-                    int copied = 0;
                     foreach (var f in Directory.GetFiles(oldDir, "*.png"))
                     {
                         var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
-                        if (!File.Exists(dest)) { File.Copy(f, dest); copied++; }
+                        if (!File.Exists(dest)) { File.Move(f, dest); moved++; }
                     }
-                    StatusText = copied > 0 ? $"已复制 {copied} 张截图到新目录" : $"截图目录已改为: {_screenshotDir}";
+                    try { Directory.Delete(oldDir, true); } catch { }
+                }
+
+                // 替换语录中所有旧路径前缀为新路径
+                var prefix = oldDir.TrimEnd('\\');
+                foreach (var q in _allQuotes)
+                {
+                    if (!string.IsNullOrEmpty(q.ScreenshotPath) &&
+                        q.ScreenshotPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        q.ScreenshotPath = Path.Combine(_screenshotDir, Path.GetFileName(q.ScreenshotPath));
+                        _storageService.UpdateQuote(q);
+                        updated++;
+                    }
+                }
+
+                if (moved > 0 || updated > 0)
+                {
+                    RefreshQuotes();
+                    StatusText = $"已迁移 {moved} 张截图，更新 {updated} 条语录路径";
                 }
                 else
                 {
                     StatusText = $"截图目录已改为: {_screenshotDir}";
-                }
-
-                // 仅匹配 ScreenshotPath 无效的语录（File.Exists 为 false）
-                int matched = 0;
-                var filesByTime = new Dictionary<string, string>();
-                foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
-                {
-                    var name = Path.GetFileNameWithoutExtension(f);
-                    if (name.Length >= 19)
-                        filesByTime[name[..19]] = f;
-                }
-                if (filesByTime.Count > 0 && _allQuotes.Count > 0)
-                {
-                    foreach (var q in _allQuotes)
-                    {
-                        if (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
-                            continue; // 已有有效路径
-                        var key = q.CapturedAt.ToString("yyyy-MM-dd_HHmmss");
-                        if (filesByTime.TryGetValue(key, out var filePath))
-                        {
-                            q.ScreenshotPath = filePath;
-                            _storageService.UpdateQuote(q);
-                            matched++;
-                        }
-                    }
-                    if (matched > 0)
-                    {
-                        RefreshQuotes();
-                        StatusText += $"，已关联 {matched} 条语录";
-                    }
                 }
             }
 
