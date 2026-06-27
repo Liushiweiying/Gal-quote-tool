@@ -1139,8 +1139,8 @@ public partial class MainViewModel : ObservableObject
                 || q.GameName.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
         }
 
-        // Exclude unrecognized if setting enabled
-        if (_hideUnrecognized)
+        // Exclude unrecognized from search results only
+        if (_hideUnrecognized && !string.IsNullOrWhiteSpace(SearchText))
         {
             source = source.Where(q => !q.Text.Contains("[未识别到文字]"));
         }
