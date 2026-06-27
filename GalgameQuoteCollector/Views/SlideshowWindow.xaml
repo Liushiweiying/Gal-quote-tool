@@ -30,7 +30,7 @@
             </Grid.RowDefinitions>
 
             <!-- Top Bar -->
-            <Border Grid.Row="0" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0 0 0 1" Padding="8,0">
+            <Border Grid.Row="0" Background="#F5F5F5" BorderBrush="#E0E0E0" BorderThickness="0 0 0 1" Padding="4,0">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto"/>
@@ -39,30 +39,38 @@
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
-                    <Button Grid.Column="0" Content="← 关闭" x:Name="PrevOrCloseBtn"
-                            Click="OnPrevOrClose" Padding="10,4" FontSize="13"
-                            Background="#E0E0E0" Foreground="#333" BorderThickness="1" BorderBrush="#CCC" Cursor="Hand"/>
+                    <Button Grid.Column="0" Content="← 上一条" x:Name="PrevOrCloseBtn"
+                            Click="OnPrevOrClose" Padding="8,4" FontSize="13"
+                            Background="Transparent" Foreground="#555" BorderThickness="0" Cursor="Hand"/>
 
-                    <Button Grid.Column="1" Content="全屏" x:Name="FullscreenBtn"
-                            Click="OnToggleFullscreen" Padding="8,4" FontSize="12" Margin="4,0,0,0"
-                            Background="#E0E0E0" Foreground="#333" BorderThickness="1" BorderBrush="#CCC" Cursor="Hand"/>
+                    <Button Grid.Column="1" Content="下一条 →" x:Name="NextOrCloseBtn"
+                            Click="OnNextOrClose" Padding="8,4" FontSize="13"
+                            Background="Transparent" Foreground="#1976D2" BorderThickness="0" Cursor="Hand"/>
 
-                    <Button Grid.Column="2" Content="置顶" x:Name="TopmostBtn"
-                            Click="OnToggleTopmost" Padding="8,4" FontSize="12" Margin="4,0,0,0"
-                            Background="#E0E0E0" Foreground="#333" BorderThickness="1" BorderBrush="#CCC" Cursor="Hand"/>
-
-                    <TextBlock Grid.Column="3" x:Name="GameNameText" FontSize="18" FontWeight="Bold"
+                    <TextBlock Grid.Column="2" x:Name="GameNameText" FontSize="18" FontWeight="Bold"
                                Foreground="#1976D2" HorizontalAlignment="Center" VerticalAlignment="Center"/>
 
-                    <Button Grid.Column="4" Content="下一条 →" x:Name="NextOrCloseBtn"
-                            Click="OnNextOrClose" Padding="10,4" FontSize="13" Margin="0,0,4,0"
-                            Background="#1976D2" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+                    <StackPanel Grid.Column="3" Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,8,0">
+                        <TextBlock x:Name="LoopText" FontSize="12" Foreground="#E53935"
+                                   VerticalAlignment="Center" FontWeight="Bold"/>
+                        <TextBlock x:Name="ProgressText" FontSize="13" Foreground="#999"
+                                   VerticalAlignment="Center" Margin="4,0,0,0"/>
+                    </StackPanel>
 
-                    <Button Grid.Column="5" Content="×" x:Name="CloseBtn"
+                    <Button Grid.Column="4" Content="━" x:Name="MinimizeBtn"
+                            Click="OnMinimize" Width="28" Height="28" FontSize="14"
+                            Background="Transparent" Foreground="#555" BorderThickness="0" Cursor="Hand"/>
+
+                    <Button Grid.Column="5" Content="⛶" x:Name="FullscreenBtn"
+                            Click="OnToggleFullscreen" Width="28" Height="28" FontSize="14"
+                            Background="Transparent" Foreground="#555" BorderThickness="0" Cursor="Hand"/>
+
+                    <Button Grid.Column="6" Content="×" x:Name="CloseBtn"
                             Click="OnCloseClick" Width="28" Height="28" FontSize="14" FontWeight="Bold"
-                            Background="#E53935" Foreground="#FFF" BorderThickness="0" Cursor="Hand"/>
+                            Background="Transparent" Foreground="#888" BorderThickness="0" Cursor="Hand"/>
                 </Grid>
             </Border>
 
@@ -104,8 +112,6 @@
                     </ComboBox>
 
                     <TextBlock x:Name="TagsText" FontSize="12" Foreground="#888" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="LoopText" FontSize="12" Foreground="#E53935" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold"/>
-                    <TextBlock x:Name="ProgressText" FontSize="12" Foreground="#888" VerticalAlignment="Center" Margin="0,0,4,0"/>
                 </StackPanel>
             </Border>
         </Grid>

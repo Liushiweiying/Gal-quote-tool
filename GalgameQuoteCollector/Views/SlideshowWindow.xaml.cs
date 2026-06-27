@@ -151,20 +151,18 @@ public partial class SlideshowWindow : Window
     private void OnPrevOrClose(object sender, RoutedEventArgs e) => GoPrev();
     private void OnNextOrClose(object sender, RoutedEventArgs e) => GoNext();
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
+    private void OnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void OnFilterChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
         if (!_ready) return;
         ApplyFilter();
-        if (_filtered.Count > 0) ShowCurrent(); else Close();
+        ShowCurrent();
     }
 
     private void ToggleSlideshowTopmost()
     {
         _isTopmost = !_isTopmost;
         Topmost = _isTopmost;
-        TopmostBtn.Background = _isTopmost
-            ? System.Windows.Media.Brushes.LightGreen
-            : System.Windows.Media.Brushes.LightGray;
     }
     private void OnToggleTopmost(object sender, RoutedEventArgs e) => ToggleSlideshowTopmost();
     private void OnToggleFullscreen(object sender, RoutedEventArgs e) => ToggleFullscreen();
