@@ -651,11 +651,26 @@ public partial class MainViewModel : ObservableObject
             var newScreenshotDir = newConfig.ScreenshotDirectory;
             if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
             {
+                var oldDir = _screenshotDir;
                 _screenshotDir = newScreenshotDir;
                 Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
-                // 不迁移旧截图，只将新截图存到新目录
-                StatusText = $"截图目录已改为: {_screenshotDir}";
+
+                // 复制旧截图到新目录（不移动，保证旧路径仍有效）
+                if (Directory.Exists(oldDir))
+                {
+                    int copied = 0;
+                    foreach (var f in Directory.GetFiles(oldDir, "*.png"))
+                    {
+                        var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
+                        if (!File.Exists(dest)) { File.Copy(f, dest); copied++; }
+                    }
+                    StatusText = copied > 0 ? $"已复制 {copied} 张截图到新目录" : $"截图目录已改为: {_screenshotDir}";
+                }
+                else
+                {
+                    StatusText = $"截图目录已改为: {_screenshotDir}";
+                }
 
                 // 仅匹配 ScreenshotPath 无效的语录（File.Exists 为 false）
                 int matched = 0;
@@ -1142,7 +1157,14 @@ public partial class MainViewModel : ObservableObject
             _ => source.OrderByDescending(q => q.CapturedAt)
         };
 
-        Quotes = new ObservableCollection<Quote>(source.ToList());
+        var result = source.ToList();
+        Quotes = new ObservableCollection<Quote>(result);
+
+        // Update status to show filtered vs total
+        int filtered = result.Count;
+        int total = _allQuotes.Count;
+        if (filtered != total)
+            StatusText = $"显示 {filtered} / 共 {total} 条语录";
     }
 
     private static IOrderedEnumerable<Quote> SortByRelevance(IEnumerable<Quote> source, string searchText)
