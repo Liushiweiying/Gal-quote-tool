@@ -667,6 +667,38 @@ public partial class MainViewModel : ObservableObject
                     try { Directory.Delete(oldDir, true); } catch { }
                     if (count > 0) StatusText = $"已迁移 {count} 张截图";
                 }
+
+                // Match orphaned screenshots to quotes by timestamp
+                int matched = 0;
+                var filesByTime = new Dictionary<string, string>();
+                foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
+                {
+                    var name = Path.GetFileNameWithoutExtension(f); // e.g. "2026-06-19_183002_205"
+                    if (name.Length >= 19) // yyyy-MM-dd_HHmmss = 19 chars
+                        filesByTime[name[..19]] = f; // key by seconds
+                }
+                if (filesByTime.Count > 0)
+                {
+                    foreach (var q in _allQuotes)
+                    {
+                        if (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
+                            continue; // already valid
+                        var key = q.CapturedAt.ToString("yyyy-MM-dd_HHmmss");
+                        if (filesByTime.TryGetValue(key, out var filePath))
+                        {
+                            q.ScreenshotPath = filePath;
+                            _storageService.UpdateQuote(q);
+                            matched++;
+                        }
+                    }
+                    if (matched > 0)
+                    {
+                        RefreshQuotes();
+                        StatusText = StatusText.Length > 0
+                            ? $"{StatusText}，并关联 {matched} 条语录"
+                            : $"已关联 {matched} 条语录与截图";
+                    }
+                }
             }
 
             if (_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey))
