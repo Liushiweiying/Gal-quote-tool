@@ -108,9 +108,12 @@
 
         <!-- Fullscreen Layout -->
         <Grid x:Name="FullscreenLayout" Visibility="Collapsed" Background="Black">
-            <Image x:Name="FsScreenshotImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"/>
-            <Border x:Name="FsOverlay" VerticalAlignment="Bottom" Background="#80000000" Padding="24,16">
-                <Grid>
+            <Image x:Name="FsScreenshotImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}"
+                   MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"/>
+            <Border x:Name="FsOverlay" VerticalAlignment="Bottom" Background="#80000000" Padding="24,16"
+                    MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}">
+                <Grid MaxWidth="800">
                     <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                     <TextBlock Grid.Row="0" x:Name="FsGameNameText" FontSize="14" Foreground="#AAA" TextAlignment="Center"/>
                     <TextBlock Grid.Row="1" x:Name="FsQuoteText" FontSize="20" LineHeight="30"

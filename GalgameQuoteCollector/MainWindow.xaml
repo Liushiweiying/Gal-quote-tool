@@ -34,6 +34,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
 
                 <!-- Search bar (takes remaining space) -->
@@ -98,8 +99,13 @@
                         Background="Transparent" Foreground="#888" BorderThickness="0"
                         Padding="8,5" FontSize="13" ToolTip="统计" Cursor="Hand"/>
 
+                <!-- Always on top toggle -->
+                <ToggleButton Grid.Column="7" Content="置顶" IsChecked="{Binding IsTopmost}"
+                              Background="Transparent" Foreground="#888" BorderThickness="0"
+                              Padding="8,5" FontSize="13" ToolTip="窗口置顶" Cursor="Hand"/>
+
                 <!-- "···" menu for extra actions -->
-                <Button Grid.Column="7" Content="···" x:Name="MoreBtn"
+                <Button Grid.Column="8" Content="···" x:Name="MoreBtn"
                         Background="Transparent" Foreground="#888" BorderThickness="0"
                         Padding="8,5" FontSize="18" FontWeight="Bold"
                         ToolTip="更多" Cursor="Hand"
