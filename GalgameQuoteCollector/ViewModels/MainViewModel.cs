@@ -655,16 +655,17 @@ public partial class MainViewModel : ObservableObject
                 _screenshotDir = newScreenshotDir;
                 Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
-                // Auto-migrate old screenshots
+                // Migrate old screenshots — MOVE (not copy), then delete old dir
                 if (Directory.Exists(oldDir))
                 {
                     int count = 0;
                     foreach (var f in Directory.GetFiles(oldDir, "*.png"))
                     {
                         var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
-                        if (!File.Exists(dest)) { File.Copy(f, dest, false); count++; }
+                        if (!File.Exists(dest)) { File.Move(f, dest); count++; }
                     }
-                    if (count > 0) StatusText = $"已自动迁移 {count} 张截图";
+                    try { Directory.Delete(oldDir, true); } catch { }
+                    if (count > 0) StatusText = $"已迁移 {count} 张截图";
                 }
             }
 
@@ -994,7 +995,18 @@ public partial class MainViewModel : ObservableObject
             // Switch back to UI thread to update bindings
             System.Windows.Application.Current.Dispatcher.Invoke(() =>
             {
-                _allQuotes = quotes;
+                // Merge: don't overwrite quotes captured while loading
+                if (_allQuotes.Count > 0)
+                {
+                    var existingIds = _allQuotes.Select(q => q.Id).ToHashSet();
+                    foreach (var q in quotes)
+                        if (!existingIds.Contains(q.Id))
+                            _allQuotes.Add(q);
+                }
+                else
+                {
+                    _allQuotes = quotes;
+                }
                 RefreshQuotes();
                 OcrAvailable = _ocrService.IsAvailable;
                 RefreshAvailableTags();

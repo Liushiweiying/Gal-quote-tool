@@ -36,9 +36,7 @@ public partial class SettingsWindow : Window
         RulesList.ItemsSource = currentConfig.GameNameRules;
         EnableTrackingCheckBox.IsChecked = currentConfig.EnableUsageTracking;
         HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
-        ScreenshotDirBox.Text = string.IsNullOrWhiteSpace(currentConfig.ScreenshotDirectory)
-            ? "(默认) %USERPROFILE%\\Pictures\\GalgameQuoteCollector"
-            : currentConfig.ScreenshotDirectory;
+        ScreenshotDirBox.Text = currentConfig.ScreenshotDirectory ?? "";
 
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
@@ -153,7 +151,8 @@ public partial class SettingsWindow : Window
         _newConfig.FontFamily = FontCombo.SelectedItem is System.Windows.Media.FontFamily f ? f.Source : "Segoe UI";
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
-        _newConfig.ScreenshotDirectory = ScreenshotDirBox.Text;
+        var dir = ScreenshotDirBox.Text.Trim();
+        _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();
