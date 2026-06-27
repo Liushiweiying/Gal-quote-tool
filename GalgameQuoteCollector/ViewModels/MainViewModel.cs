@@ -668,35 +668,37 @@ public partial class MainViewModel : ObservableObject
                     if (count > 0) StatusText = $"已迁移 {count} 张截图";
                 }
 
-                // Match orphaned screenshots to quotes by timestamp
+                // Match ALL screenshots to quotes by timestamp (overwrites old paths)
                 int matched = 0;
                 var filesByTime = new Dictionary<string, string>();
                 foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
                 {
-                    var name = Path.GetFileNameWithoutExtension(f); // e.g. "2026-06-19_183002_205"
-                    if (name.Length >= 19) // yyyy-MM-dd_HHmmss = 19 chars
-                        filesByTime[name[..19]] = f; // key by seconds
+                    var name = Path.GetFileNameWithoutExtension(f);
+                    if (name.Length >= 19)
+                        filesByTime[name[..19]] = f;
                 }
-                if (filesByTime.Count > 0)
+                if (filesByTime.Count > 0 && _allQuotes.Count > 0)
                 {
+                    int unmatched = 0;
                     foreach (var q in _allQuotes)
                     {
-                        if (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
-                            continue; // already valid
                         var key = q.CapturedAt.ToString("yyyy-MM-dd_HHmmss");
-                        if (filesByTime.TryGetValue(key, out var filePath))
+                        if (filesByTime.TryGetValue(key, out var filePath) && filePath != q.ScreenshotPath)
                         {
                             q.ScreenshotPath = filePath;
                             _storageService.UpdateQuote(q);
                             matched++;
                         }
+                        else if (!File.Exists(q.ScreenshotPath))
+                        {
+                            unmatched++;
+                        }
                     }
                     if (matched > 0)
                     {
                         RefreshQuotes();
-                        StatusText = StatusText.Length > 0
-                            ? $"{StatusText}，并关联 {matched} 条语录"
-                            : $"已关联 {matched} 条语录与截图";
+                        StatusText = $"已关联 {matched} 条语录与截图";
+                        if (unmatched > 0) StatusText += $"，仍有 {unmatched} 条未匹配";
                     }
                 }
             }
@@ -1091,8 +1093,18 @@ public partial class MainViewModel : ObservableObject
     {
         var tags = _storageService.GetAllTags();
         var groups = _storageService.GetAllGroups();
-        var win = new Views.StatsWindow(_window, _storageService, _allQuotes, tags, groups);
+        // Reload quotes from DB for accurate stats
+        var allDbQuotes = _storageService.GetAllQuotes();
+        var win = new Views.StatsWindow(_window, _storageService, allDbQuotes, tags, groups);
         win.ShowDialog();
+
+        // If DB has more quotes than memory, resync
+        if (allDbQuotes.Count != _allQuotes.Count)
+        {
+            _allQuotes = allDbQuotes;
+            RefreshQuotes();
+            StatusText = $"已刷新数据，共 {_allQuotes.Count} 条语录";
+        }
     }
 
     private void RefreshQuotes()
