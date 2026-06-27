@@ -98,9 +98,11 @@ public partial class SlideshowWindow : Window
         NextOrCloseBtn.Content = _pos == _filtered.Count - 1 ? "关闭 →" : "下一条 →";
 
         FsGameNameText.Text = GameNameText.Text;
+        FsQuoteText.Text = quote.Text;
         bool hasNotes = !string.IsNullOrWhiteSpace(quote.Notes);
         FsNotesText.Text = quote.Notes;
-        FsOverlay.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
+        FsNotesText.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
+        FsOverlay.Visibility = Visibility.Visible;
 
         BitmapImage? bitmap = null;
         if (!string.IsNullOrEmpty(quote.ScreenshotPath) && File.Exists(quote.ScreenshotPath))
