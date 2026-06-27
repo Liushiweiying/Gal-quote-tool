@@ -17,6 +17,7 @@ public class HotkeyConfig
     public bool EnableUsageTracking { get; set; }
     public bool HideUnrecognized { get; set; }
     public string ScreenshotDirectory { get; set; } = "";
+    public string ScreenshotFormat { get; set; } = "png";
     public List<GameNameRule> GameNameRules { get; set; } = new();
 
     /// <summary>
@@ -70,6 +71,7 @@ public class HotkeyConfig
             EnableUsageTracking = EnableUsageTracking,
             HideUnrecognized = HideUnrecognized,
             ScreenshotDirectory = ScreenshotDirectory,
+            ScreenshotFormat = ScreenshotFormat,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

@@ -27,6 +27,7 @@ public partial class MainViewModel : ObservableObject
     private UsageTracker? _usageTracker;
     private int _captureDelayMs = 200;
     private bool _hideUnrecognized;
+    private string _screenshotFormat = "png";
 
     public MainViewModel(Window window)
     {
@@ -50,6 +51,7 @@ public partial class MainViewModel : ObservableObject
         var hotkeyConfig = _settingsService.LoadHotkeyConfig();
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
         _hideUnrecognized = hotkeyConfig.HideUnrecognized;
+        _screenshotFormat = hotkeyConfig.ScreenshotFormat;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
 
         // Custom screenshot directory
@@ -224,7 +226,7 @@ public partial class MainViewModel : ObservableObject
             }
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
-            var screenshotPath = _captureService.CaptureWindow(gameHwnd);
+            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat);
 
             var text = await _ocrService.RecognizeTextAsync(screenshotPath);
 
@@ -663,6 +665,7 @@ public partial class MainViewModel : ObservableObject
                 _gameDetectService.SetRules(newConfig.GameNameRules);
                 ReapplyRulesToAllQuotes();
                 _hideUnrecognized = newConfig.HideUnrecognized;
+                _screenshotFormat = newConfig.ScreenshotFormat;
                 ToggleUsageTracking(newConfig.EnableUsageTracking);
                 if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
                 {
@@ -679,6 +682,7 @@ public partial class MainViewModel : ObservableObject
                 _gameDetectService.SetRules(newConfig.GameNameRules);
                 ReapplyRulesToAllQuotes();
                 _hideUnrecognized = newConfig.HideUnrecognized;
+                _screenshotFormat = newConfig.ScreenshotFormat;
                 ToggleUsageTracking(newConfig.EnableUsageTracking);
                 if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
                 {
@@ -775,6 +779,22 @@ public partial class MainViewModel : ObservableObject
     }
 
     // ── Edit ──
+
+    [RelayCommand]
+    private void ToggleSlideshowFlag(string flag)
+    {
+        if (SelectedQuote == null) return;
+        switch (flag)
+        {
+            case "game": SelectedQuote.SlideshowShowGameName = !SelectedQuote.SlideshowShowGameName; break;
+            case "text": SelectedQuote.SlideshowShowText = !SelectedQuote.SlideshowShowText; break;
+            case "notes": SelectedQuote.SlideshowShowNotes = !SelectedQuote.SlideshowShowNotes; break;
+            default: return;
+        }
+        _storageService.UpdateQuote(SelectedQuote);
+        RefreshQuotes();
+        StatusText = "已更新回想显示设置";
+    }
 
     [RelayCommand]
     private void SaveEdit()

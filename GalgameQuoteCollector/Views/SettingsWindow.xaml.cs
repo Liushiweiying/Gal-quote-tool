@@ -37,6 +37,7 @@ public partial class SettingsWindow : Window
         EnableTrackingCheckBox.IsChecked = currentConfig.EnableUsageTracking;
         HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
         ScreenshotDirBox.Text = currentConfig.ScreenshotDirectory ?? "";
+        FormatCombo.SelectedIndex = currentConfig.ScreenshotFormat == "jpg" ? 1 : 0;
 
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
@@ -153,6 +154,7 @@ public partial class SettingsWindow : Window
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
         var dir = ScreenshotDirBox.Text.Trim();
         _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
+        _newConfig.ScreenshotFormat = FormatCombo.SelectedIndex == 1 ? "jpg" : "png";
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();

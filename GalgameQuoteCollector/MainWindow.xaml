@@ -341,6 +341,59 @@
                                         Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
                             </Grid>
 
+                            <!-- Slideshow display options -->
+                            <TextBlock Text="回想显示" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                            <WrapPanel Margin="0,0,0,10">
+                                <Button Content="游戏名" Margin="2" Padding="8,2" FontSize="11"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="game">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#E0E0E0"/>
+                                            <Setter Property="Foreground" Value="#666"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowGameName}" Value="True">
+                                                    <Setter Property="Background" Value="#5B6ABF"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="语录内容" Margin="2" Padding="8,2" FontSize="11"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="text">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#E0E0E0"/>
+                                            <Setter Property="Foreground" Value="#666"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowText}" Value="True">
+                                                    <Setter Property="Background" Value="#5B6ABF"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                                <Button Content="备注" Margin="2" Padding="8,2" FontSize="11"
+                                        BorderThickness="0" Cursor="Hand"
+                                        Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="notes">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="#E0E0E0"/>
+                                            <Setter Property="Foreground" Value="#666"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowNotes}" Value="True">
+                                                    <Setter Property="Background" Value="#5B6ABF"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </WrapPanel>
+
                             <!-- Notes -->
                             <TextBlock Text="备注" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
                             <TextBox Text="{Binding EditNotes, UpdateSourceTrigger=PropertyChanged}"

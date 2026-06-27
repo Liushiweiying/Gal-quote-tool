@@ -101,8 +101,12 @@ public partial class SlideshowWindow : Window
         FsQuoteText.Text = quote.Text;
         bool hasNotes = !string.IsNullOrWhiteSpace(quote.Notes);
         FsNotesText.Text = quote.Notes;
-        FsNotesText.Visibility = hasNotes ? Visibility.Visible : Visibility.Collapsed;
-        FsOverlay.Visibility = Visibility.Visible;
+
+        FsGameNameText.Visibility = quote.SlideshowShowGameName ? Visibility.Visible : Visibility.Collapsed;
+        FsQuoteText.Visibility = quote.SlideshowShowText ? Visibility.Visible : Visibility.Collapsed;
+        FsNotesText.Visibility = (hasNotes && quote.SlideshowShowNotes) ? Visibility.Visible : Visibility.Collapsed;
+        FsOverlay.Visibility = (quote.SlideshowShowGameName || quote.SlideshowShowText ||
+            (hasNotes && quote.SlideshowShowNotes)) ? Visibility.Visible : Visibility.Collapsed;
 
         BitmapImage? bitmap = null;
         if (!string.IsNullOrEmpty(quote.ScreenshotPath) && File.Exists(quote.ScreenshotPath))

@@ -19,7 +19,7 @@ public class CaptureService
     /// Capture the specified window and return the screenshot file path.
     /// Pass a saved handle to capture the game even after our window minimizes.
     /// </summary>
-    public string CaptureWindow(IntPtr hwnd)
+    public string CaptureWindow(IntPtr hwnd, string format = "png")
     {
         GetWindowRect(hwnd, out var rect);
 
@@ -30,17 +30,28 @@ public class CaptureService
             throw new InvalidOperationException("Invalid window dimensions");
 
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
-        var filePath = Path.Combine(ScreenshotDir, $"{timestamp}.png");
+        var isJpg = format.Equals("jpg", StringComparison.OrdinalIgnoreCase);
+        var ext = isJpg ? ".jpg" : ".png";
+        var filePath = Path.Combine(ScreenshotDir, $"{timestamp}{ext}");
 
         using var bitmap = new Bitmap(width, height);
 
-        // Primary: CopyFromScreen (reliable for most games, including DirectX)
         using (var g = Graphics.FromImage(bitmap))
         {
             g.CopyFromScreen(rect.left, rect.top, 0, 0, new Size(width, height));
         }
 
-        bitmap.Save(filePath, ImageFormat.Png);
+        if (isJpg)
+        {
+            var encoder = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
+            using var ep = new EncoderParameters(1);
+            ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 90L);
+            bitmap.Save(filePath, encoder, ep);
+        }
+        else
+        {
+            bitmap.Save(filePath, ImageFormat.Png);
+        }
         return filePath;
     }
 

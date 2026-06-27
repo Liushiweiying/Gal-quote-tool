@@ -25,6 +25,15 @@ public partial class Quote : ObservableObject
     [ObservableProperty]
     private string _windowTitle = string.Empty;
 
+    [ObservableProperty]
+    private bool _slideshowShowGameName = true;
+
+    [ObservableProperty]
+    private bool _slideshowShowText = true;
+
+    [ObservableProperty]
+    private bool _slideshowShowNotes = true;
+
     public string CapturedAtDisplay => CapturedAt.ToString("yyyy-MM-dd HH:mm:ss");
 
     public string PreviewText => Text.Length > 50 ? Text[..50] + "..." : Text;

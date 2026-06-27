@@ -73,6 +73,16 @@
                         Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
             </Grid>
 
+            <Grid Margin="0,6,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="截图格式" FontSize="13" Foreground="#555" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox Grid.Column="1" x:Name="FormatCombo" FontSize="13" Width="80"
+                          Background="White" BorderBrush="#DDD">
+                    <ComboBoxItem Content="PNG" IsSelected="True"/>
+                    <ComboBoxItem Content="JPG"/>
+                </ComboBox>
+            </Grid>
+
             <Separator Margin="0,12,0,16"/>
 
             <!-- ═══ Game Name Rules ═══ -->
