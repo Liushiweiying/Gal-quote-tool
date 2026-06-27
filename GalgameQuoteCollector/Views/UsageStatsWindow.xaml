@@ -35,7 +35,7 @@
         </Border>
 
         <!-- Stats content -->
-        <ScrollViewer Grid.Row="1" MaxHeight="300" Margin="0,0,0,10">
+        <ScrollViewer Grid.Row="1" Margin="0,0,0,10" VerticalScrollBarVisibility="Auto">
             <StackPanel x:Name="StatsPanel"/>
         </ScrollViewer>
 

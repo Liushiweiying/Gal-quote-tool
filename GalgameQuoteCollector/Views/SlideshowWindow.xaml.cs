@@ -84,9 +84,15 @@ public partial class SlideshowWindow : Window
     {
         if (_filtered.Count == 0 || _pos >= _order.Length)
         {
-            Close();
+            NormalLayout.Visibility = Visibility.Collapsed;
+            FullscreenLayout.Visibility = Visibility.Collapsed;
+            EmptyText.Visibility = Visibility.Visible;
             return;
         }
+
+        EmptyText.Visibility = Visibility.Collapsed;
+        NormalLayout.Visibility = Visibility.Visible;
+        if (!_isFullscreen) FullscreenLayout.Visibility = Visibility.Collapsed;
 
         var quote = Current;
         GameNameText.Text = string.IsNullOrWhiteSpace(quote.GameName) ? "未分类" : quote.GameName;

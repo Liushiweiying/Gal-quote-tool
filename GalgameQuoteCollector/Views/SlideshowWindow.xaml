@@ -66,6 +66,10 @@
                 </Grid>
             </Border>
 
+            <!-- Empty state (when filter returns nothing) -->
+            <TextBlock x:Name="EmptyText" Text="当前筛选条件下没有语录" FontSize="18" Foreground="#999"
+                       HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed"/>
+
             <!-- Main content -->
             <Border Grid.Row="1" Padding="40,16">
                 <Grid>

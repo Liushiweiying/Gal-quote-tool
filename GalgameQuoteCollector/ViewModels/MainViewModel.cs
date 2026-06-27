@@ -1216,5 +1216,7 @@ public partial class MainViewModel : ObservableObject
         }
         return count;
     }
+
+    public string HotkeyHintText => $"按 {_hotkeyService.CurrentHotkeyDisplay} 采集";
 }
 
