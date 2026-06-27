@@ -647,7 +647,7 @@ public partial class MainViewModel : ObservableObject
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
 
-            // Update screenshot directory — move files + update DB paths
+            // Update screenshot directory — copy files + update DB paths
             var newScreenshotDir = newConfig.ScreenshotDirectory;
             if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
             {
@@ -656,19 +656,19 @@ public partial class MainViewModel : ObservableObject
                 Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
 
-                int moved = 0, updated = 0;
-                // 先移动文件
-                if (Directory.Exists(oldDir))
+                // Copy screenshots to new dir (MOVE is too dangerous — risk of data loss)
+                int copied = 0;
+                if (Directory.Exists(oldDir) && oldDir.EndsWith("GalgameQuoteCollector", StringComparison.OrdinalIgnoreCase))
                 {
                     foreach (var f in Directory.GetFiles(oldDir, "*.png"))
                     {
                         var dest = Path.Combine(_screenshotDir, Path.GetFileName(f));
-                        if (!File.Exists(dest)) { File.Move(f, dest); moved++; }
+                        if (!File.Exists(dest)) { File.Copy(f, dest); copied++; }
                     }
-                    try { Directory.Delete(oldDir, true); } catch { }
                 }
 
-                // 替换语录中所有旧路径前缀为新路径
+                // Update DB paths
+                int updated = 0;
                 var prefix = oldDir.TrimEnd('\\');
                 foreach (var q in _allQuotes)
                 {
@@ -681,10 +681,10 @@ public partial class MainViewModel : ObservableObject
                     }
                 }
 
-                if (moved > 0 || updated > 0)
+                if (copied > 0 || updated > 0)
                 {
                     RefreshQuotes();
-                    StatusText = $"已迁移 {moved} 张截图，更新 {updated} 条语录路径";
+                    StatusText = $"已复制 {copied} 张截图，更新 {updated} 条语录路径";
                 }
                 else
                 {
