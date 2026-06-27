@@ -38,6 +38,7 @@ public partial class SettingsWindow : Window
         HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
         ScreenshotDirBox.Text = currentConfig.ScreenshotDirectory ?? "";
         FormatCombo.SelectedIndex = currentConfig.ScreenshotFormat == "jpg" ? 1 : 0;
+        SlideshowLoopCheckBox.IsChecked = currentConfig.SlideshowLoop;
 
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
@@ -149,6 +150,7 @@ public partial class SettingsWindow : Window
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
+        _newConfig.SlideshowLoop = SlideshowLoopCheckBox.IsChecked == true;
         _newConfig.FontFamily = FontCombo.SelectedItem is System.Windows.Media.FontFamily f ? f.Source : "Segoe UI";
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;

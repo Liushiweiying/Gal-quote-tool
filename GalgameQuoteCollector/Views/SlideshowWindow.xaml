@@ -100,7 +100,8 @@
                     </ComboBox>
 
                     <TextBlock x:Name="TagsText" FontSize="12" Foreground="#888" VerticalAlignment="Center"/>
-                    <TextBlock x:Name="ProgressText" FontSize="12" Foreground="#888" VerticalAlignment="Center" Margin="12,0,4,0"/>
+                    <TextBlock x:Name="LoopText" FontSize="12" Foreground="#E53935" VerticalAlignment="Center" Margin="0,0,8,0" FontWeight="Bold"/>
+                    <TextBlock x:Name="ProgressText" FontSize="12" Foreground="#888" VerticalAlignment="Center" Margin="0,0,4,0"/>
                 </StackPanel>
             </Border>
         </Grid>

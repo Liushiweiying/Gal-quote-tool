@@ -485,12 +485,14 @@ public partial class MainViewModel : ObservableObject
             groupsByQuote[q.Id] = _storageService.GetGroupsForQuote(q.Id);
         }
 
-        var slideshowMode = _settingsService.LoadHotkeyConfig().SlideshowMode;
+        var cfg = _settingsService.LoadHotkeyConfig();
+        var slideshowMode = cfg.SlideshowMode;
+        var slideshowLoop = cfg.SlideshowLoop;
         var allGroups = _storageService.GetAllGroups();
         var allTags = _storageService.GetAllTags();
 
         var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote,
-            groupsByQuote, allGroups, allTags, slideshowMode);
+            groupsByQuote, allGroups, allTags, slideshowMode, slideshowLoop);
         win.ShowDialog();
     }
 

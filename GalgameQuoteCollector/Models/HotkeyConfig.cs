@@ -13,6 +13,7 @@ public class HotkeyConfig
     public bool AutoStart { get; set; }
     public int CaptureDelayMs { get; set; } = 200;
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
+    public bool SlideshowLoop { get; set; }
     public string FontFamily { get; set; } = "Segoe UI";
     public bool EnableUsageTracking { get; set; }
     public bool HideUnrecognized { get; set; }
@@ -67,6 +68,7 @@ public class HotkeyConfig
             AutoStart = AutoStart,
             CaptureDelayMs = CaptureDelayMs,
             SlideshowMode = SlideshowMode,
+            SlideshowLoop = SlideshowLoop,
             FontFamily = FontFamily,
             EnableUsageTracking = EnableUsageTracking,
             HideUnrecognized = HideUnrecognized,

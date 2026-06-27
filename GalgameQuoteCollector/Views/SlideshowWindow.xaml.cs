@@ -16,6 +16,7 @@ public partial class SlideshowWindow : Window
     private readonly List<Tag> _availableTags;
     private readonly Random _random = new();
     private readonly int _mode;  // 0=时间, 1=随机
+    private bool _loop;
 
     private List<Quote> _filtered;  // current filtered list
     private int[] _order;
@@ -29,7 +30,7 @@ public partial class SlideshowWindow : Window
         Dictionary<int, List<QuoteGroup>> groupsByQuote,
         List<QuoteGroup> availableGroups,
         List<Tag> availableTags,
-        int slideshowMode)
+        int slideshowMode, bool slideshowLoop)
     {
         InitializeComponent();
         Owner = owner;
@@ -39,6 +40,7 @@ public partial class SlideshowWindow : Window
         _availableGroups = availableGroups;
         _availableTags = availableTags;
         _mode = slideshowMode;
+        _loop = slideshowLoop;
 
         // Populate group filter
         foreach (var g in availableGroups)
@@ -94,8 +96,9 @@ public partial class SlideshowWindow : Window
             ? string.Join("  ", tags.Select(t => $"#{t.Name}")) : "";
 
         ProgressText.Text = $"{_pos + 1} / {_filtered.Count}";
-        PrevOrCloseBtn.Content = _pos == 0 ? "← 关闭" : "← 上一条";
-        NextOrCloseBtn.Content = _pos == _filtered.Count - 1 ? "关闭 →" : "下一条 →";
+        LoopText.Text = _loop ? "🔁 循环" : "";
+        PrevOrCloseBtn.Content = _pos == 0 && !_loop ? "← 关闭" : "← 上一条";
+        NextOrCloseBtn.Content = _pos == _filtered.Count - 1 && !_loop ? "关闭 →" : "下一条 →";
 
         FsGameNameText.Text = GameNameText.Text;
         FsQuoteText.Text = quote.Text;
@@ -127,8 +130,16 @@ public partial class SlideshowWindow : Window
         FsScreenshotImage.Source = bitmap;
     }
 
-    private void GoPrev() { if (_pos > 0) { _pos--; ShowCurrent(); } else Close(); }
-    private void GoNext() { if (_pos < _filtered.Count - 1) { _pos++; ShowCurrent(); } else Close(); }
+    private void GoPrev()
+    {
+        if (_pos > 0) { _pos--; ShowCurrent(); }
+        else if (_loop && _filtered.Count > 0) { _pos = _filtered.Count - 1; ShowCurrent(); }
+    }
+    private void GoNext()
+    {
+        if (_pos < _filtered.Count - 1) { _pos++; ShowCurrent(); }
+        else if (_loop && _filtered.Count > 0) { _pos = 0; ShowCurrent(); }
+    }
     private void GoRandom() { _pos = _random.Next(_filtered.Count); ShowCurrent(); }
 
     private void OnPrevOrClose(object sender, RoutedEventArgs e) => GoPrev();
@@ -187,6 +198,7 @@ public partial class SlideshowWindow : Window
                 break;
             case Key.Home:          _pos = 0; ShowCurrent(); break;
             case Key.End:           _pos = _filtered.Count - 1; ShowCurrent(); break;
+            case Key.R:             _loop = !_loop; break;
         }
         e.Handled = true;
     }
