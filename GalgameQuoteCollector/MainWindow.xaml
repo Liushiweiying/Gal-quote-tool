@@ -116,6 +116,8 @@
                             <MenuItem Header="备份数据" Command="{Binding BackupDataCommand}"/>
                             <MenuItem Header="恢复数据" Command="{Binding RestoreDataCommand}"/>
                             <Separator/>
+                            <MenuItem Header="重新关联截图" Command="{Binding RematchScreenshotsCommand}"/>
+                            <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                         </ContextMenu>
                     </Button.ContextMenu>

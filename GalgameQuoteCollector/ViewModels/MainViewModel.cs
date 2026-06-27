@@ -992,6 +992,49 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    [RelayCommand]
+    private void RematchScreenshots()
+    {
+        if (!Directory.Exists(_screenshotDir))
+        {
+            StatusText = "截图目录不存在";
+            return;
+        }
+
+        var filesByTime = new Dictionary<string, string>();
+        foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
+        {
+            var name = Path.GetFileNameWithoutExtension(f);
+            if (name.Length >= 19)
+                filesByTime[name[..19]] = f;
+        }
+
+        if (filesByTime.Count == 0)
+        {
+            StatusText = "截图目录中没有找到 PNG 文件";
+            return;
+        }
+
+        int matched = 0;
+        foreach (var q in _allQuotes)
+        {
+            if (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
+                continue;
+            var key = q.CapturedAt.ToString("yyyy-MM-dd_HHmmss");
+            if (filesByTime.TryGetValue(key, out var filePath))
+            {
+                q.ScreenshotPath = filePath;
+                _storageService.UpdateQuote(q);
+                matched++;
+            }
+        }
+
+        RefreshQuotes();
+        StatusText = matched > 0
+            ? $"已关联 {matched} 条语录与截图"
+            : "没有需要关联的语录";
+    }
+
     private async void OnHotkeyPressed(object? sender, EventArgs e)
     {
         await Capture();
