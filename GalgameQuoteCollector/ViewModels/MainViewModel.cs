@@ -239,7 +239,11 @@ public partial class MainViewModel : ObservableObject
                 GameName = gameName,
                 WindowTitle = windowTitle,
                 ScreenshotPath = screenshotPath,
-                CapturedAt = DateTime.Now
+                CapturedAt = DateTime.Now,
+                // Smart defaults for slideshow display
+                SlideshowShowText = text != "[未识别到文字]",
+                SlideshowShowNotes = false,  // new quotes have no notes yet
+                SlideshowShowGameName = text != "[未识别到文字]"
             };
 
             _storageService.InsertQuote(quote);
