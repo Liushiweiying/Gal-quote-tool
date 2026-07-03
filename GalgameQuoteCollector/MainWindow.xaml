@@ -125,6 +125,8 @@
                             <MenuItem Header="重新关联截图" Command="{Binding RematchScreenshotsCommand}"/>
                             <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
+                            <Separator/>
+                            <MenuItem Header="关于" Command="{Binding ShowAboutCommand}"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>

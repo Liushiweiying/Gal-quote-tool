@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -12,6 +13,7 @@ namespace GalgameQuoteCollector.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
+    public const string AppVersion = "v1.1.5";
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -1072,9 +1074,10 @@ public partial class MainViewModel : ObservableObject
                 RefreshAvailableGamesForFilter();
 
                 var autoStart = CheckAutoStart();
-                StatusText = updated > 0
+                StatusText = $"{AppVersion} | " + (updated > 0
                     ? $"已应用规则，更新了 {updated} 条语录的游戏名 | 自启: {autoStart}"
-                    : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录 | 自启: {autoStart}";
+                    : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录 | 自启: {autoStart}");
+                CheckForUpdate();
             });
         });
     }
@@ -1127,6 +1130,41 @@ public partial class MainViewModel : ObservableObject
             _allQuotes = allDbQuotes;
             RefreshQuotes();
             StatusText = $"已刷新数据，共 {_allQuotes.Count} 条语录";
+        }
+    }
+
+    [RelayCommand]
+    private void ShowAbout()
+    {
+        var updateUrl = "https://github.com/Liushiweiying/Galgame-quote-tool/releases";
+        MessageBox.Show(
+            $"Galgame 语录收藏工具 {AppVersion}\n\n" +
+            $"作者: 未时\n" +
+            $"Bilibili: @重构时间\n" +
+            $"QQ: 3302164450\n\n" +
+            $"项目地址:\n{updateUrl}",
+            "关于", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private async void CheckForUpdate()
+    {
+        try
+        {
+            using var http = new HttpClient();
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("GalgameQuoteCollector/1.0");
+            http.Timeout = TimeSpan.FromSeconds(5);
+            var response = await http.GetStringAsync(
+                "https://api.github.com/repos/Liushiweiying/Galgame-quote-tool/releases/latest");
+            var json = System.Text.Json.JsonDocument.Parse(response);
+            var latest = json.RootElement.GetProperty("tag_name").GetString();
+            if (!string.IsNullOrEmpty(latest) && latest != AppVersion)
+            {
+                StatusText = $"发现新版本 {latest} → {StatusText}";
+            }
+        }
+        catch
+        {
+            // Silently fail - no network or rate limited
         }
     }
 
