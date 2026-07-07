@@ -49,22 +49,58 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(gameMenu);
 
-        // ── Group ──
+        // ── Group (multi-select, click to toggle, right-click to exclude) ──
         var groupMenu = new MenuItem { Header = "分组" };
-        foreach (var g in vm.AvailableGroups)
+        var groupExcludeItem = new MenuItem
         {
-            var isSelected = g.Id == vm.SelectedGroupFilter;
-            var item = MakeRadioItem(g.Name, isSelected, () => vm.SelectedGroupFilter = g.Id);
+            Header = vm.GroupFilterExclude ? "✓ 排除模式" : "  排除模式",
+            IsCheckable = true, IsChecked = vm.GroupFilterExclude,
+            StaysOpenOnClick = true
+        };
+        groupExcludeItem.Click += (_, _) => { vm.GroupFilterExclude = !vm.GroupFilterExclude; };
+        groupMenu.Items.Add(groupExcludeItem);
+        groupMenu.Items.Add(new Separator());
+        foreach (var g in vm.AvailableGroups.Where(x => x.Id > 0))
+        {
+            var id = g.Id;
+            var isSelected = vm.SelectedGroupFilters.Contains(id);
+            var item = new MenuItem { Header = g.Name, IsCheckable = true, IsChecked = isSelected, StaysOpenOnClick = true };
+            item.Click += (_, _) =>
+            {
+                if (vm.SelectedGroupFilters.Contains(id))
+                    vm.SelectedGroupFilters.Remove(id);
+                else
+                    vm.SelectedGroupFilters.Add(id);
+                vm.RefreshQuotes();
+            };
             groupMenu.Items.Add(item);
         }
         menu.Items.Add(groupMenu);
 
-        // ── Tag ──
+        // ── Tag (multi-select, click to toggle, right-click to exclude) ──
         var tagMenu = new MenuItem { Header = "标签" };
+        var tagExcludeItem = new MenuItem
+        {
+            Header = vm.TagFilterExclude ? "✓ 排除模式" : "  排除模式",
+            IsCheckable = true, IsChecked = vm.TagFilterExclude,
+            StaysOpenOnClick = true
+        };
+        tagExcludeItem.Click += (_, _) => { vm.TagFilterExclude = !vm.TagFilterExclude; };
+        tagMenu.Items.Add(tagExcludeItem);
+        tagMenu.Items.Add(new Separator());
         foreach (var t in vm.AvailableTagsForFilter)
         {
-            var isSelected = t.Id == vm.SelectedTagFilter;
-            var item = MakeRadioItem(t.Name, isSelected, () => vm.SelectedTagFilter = t.Id);
+            var id = t.Id;
+            var isSelected = vm.SelectedTagFilters.Contains(id);
+            var item = new MenuItem { Header = t.Name, IsCheckable = true, IsChecked = isSelected, StaysOpenOnClick = true };
+            item.Click += (_, _) =>
+            {
+                if (vm.SelectedTagFilters.Contains(id))
+                    vm.SelectedTagFilters.Remove(id);
+                else
+                    vm.SelectedTagFilters.Add(id);
+                vm.RefreshQuotes();
+            };
             tagMenu.Items.Add(item);
         }
         menu.Items.Add(tagMenu);

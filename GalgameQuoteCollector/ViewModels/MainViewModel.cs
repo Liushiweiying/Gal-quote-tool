@@ -148,13 +148,19 @@ public partial class MainViewModel : ObservableObject
     private string _newGroupText = string.Empty;
 
     [ObservableProperty]
-    private int _selectedGroupFilter = 0; // 0 = all
+    private ObservableCollection<int> _selectedGroupFilters = new();
+
+    [ObservableProperty]
+    private bool _groupFilterExclude;
 
     [ObservableProperty]
     private ObservableCollection<Tag> _availableTagsForFilter = new();
 
     [ObservableProperty]
-    private int _selectedTagFilter = 0; // 0 = all
+    private ObservableCollection<int> _selectedTagFilters = new();
+
+    [ObservableProperty]
+    private bool _tagFilterExclude;
 
     [ObservableProperty]
     private ObservableCollection<FilterItem> _availableGamesForFilter = new();
@@ -178,15 +184,8 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedGroupFilterChanged(int value)
-    {
-        RefreshQuotes();
-    }
-
-    partial void OnSelectedTagFilterChanged(int value)
-    {
-        RefreshQuotes();
-    }
+    partial void OnGroupFilterExcludeChanged(bool value) { RefreshQuotes(); }
+    partial void OnTagFilterExcludeChanged(bool value) { RefreshQuotes(); }
 
     partial void OnSelectedGameFilterChanged(int value)
     {
@@ -412,7 +411,7 @@ public partial class MainViewModel : ObservableObject
         if (result != MessageBoxResult.Yes) return;
 
         _storageService.DeleteGroup(group.Id);
-        if (SelectedGroupFilter == group.Id) SelectedGroupFilter = 0;
+        SelectedGroupFilters.Remove(group.Id);
         RefreshAvailableGroups();
         RefreshCurrentGroups();
         RefreshQuotes();
@@ -430,7 +429,7 @@ public partial class MainViewModel : ObservableObject
                 MessageBoxButton.YesNo, MessageBoxImage.Question);
             if (res != MessageBoxResult.Yes) return;
             _storageService.DeleteGroup(group.Id);
-            if (SelectedGroupFilter == group.Id) SelectedGroupFilter = 0;
+            SelectedGroupFilters.Remove(group.Id);
             RefreshAvailableGroups();
             if (SelectedQuote != null) RefreshCurrentGroups();
             RefreshQuotes();
@@ -452,14 +451,20 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ExportGroup()
     {
-        if (SelectedGroupFilter <= 0)
+        if (SelectedGroupFilters.Count == 0)
         {
-            MessageBox.Show("请先在工具栏选择一个分组", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("请先在···菜单的分组筛选中选择至少一个分组", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
 
-        var groupQuoteIds = _storageService.GetQuoteIdsInGroup(SelectedGroupFilter).ToHashSet();
-        var filtered = _allQuotes.Where(q => groupQuoteIds.Contains(q.Id)).ToList();
+        var groupQuoteIds = new HashSet<int>();
+        foreach (var gid in SelectedGroupFilters)
+            foreach (var qid in _storageService.GetQuoteIdsInGroup(gid))
+                groupQuoteIds.Add(qid);
+
+        var filtered = GroupFilterExclude
+            ? _allQuotes.Where(q => !groupQuoteIds.Contains(q.Id)).ToList()
+            : _allQuotes.Where(q => groupQuoteIds.Contains(q.Id)).ToList();
 
         if (filtered.Count == 0)
         {
@@ -467,8 +472,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var groupName = _storageService.GetAllGroups().First(g => g.Id == SelectedGroupFilter).Name;
-        DoExport(filtered, $"{groupName}-语录");
+        DoExport(filtered, "分组语录");
     }
 
     // ── Slideshow ──
@@ -1168,22 +1172,29 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    private void RefreshQuotes()
+    public void RefreshQuotes()
     {
         IEnumerable<Quote> source = _allQuotes;
 
-        // Filter by group
-        if (SelectedGroupFilter > 0)
+        // Filter by group (multi-select + exclude)
+        if (SelectedGroupFilters.Count > 0)
         {
-            var groupIds = _storageService.GetQuoteIdsInGroup(SelectedGroupFilter).ToHashSet();
-            source = source.Where(q => groupIds.Contains(q.Id));
+            var groupIds = new HashSet<int>();
+            foreach (var gid in SelectedGroupFilters)
+                foreach (var qid in _storageService.GetQuoteIdsInGroup(gid))
+                    groupIds.Add(qid);
+            source = GroupFilterExclude
+                ? source.Where(q => !groupIds.Contains(q.Id))
+                : source.Where(q => groupIds.Contains(q.Id));
         }
 
-        // Filter by tag
-        if (SelectedTagFilter > 0)
+        // Filter by tag (multi-select + exclude)
+        if (SelectedTagFilters.Count > 0)
         {
-            source = source.Where(q =>
-                _storageService.GetTagsForQuote(q.Id).Any(t => t.Id == SelectedTagFilter));
+            var filterTagIds = SelectedTagFilters.ToHashSet();
+            source = TagFilterExclude
+                ? source.Where(q => !_storageService.GetTagsForQuote(q.Id).Any(t => filterTagIds.Contains(t.Id)))
+                : source.Where(q => _storageService.GetTagsForQuote(q.Id).Any(t => filterTagIds.Contains(t.Id)));
         }
 
         // Filter by game
