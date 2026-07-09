@@ -19,7 +19,7 @@ public class CaptureService
     /// Capture the specified window and return the screenshot file path.
     /// Pass a saved handle to capture the game even after our window minimizes.
     /// </summary>
-    public string CaptureWindow(IntPtr hwnd, string format = "png")
+    public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0)
     {
         GetWindowRect(hwnd, out var rect);
 
@@ -30,9 +30,10 @@ public class CaptureService
             throw new InvalidOperationException("Invalid window dimensions");
 
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
+        var suffix = sequence > 1 ? $"_{sequence}" : "";
         var isJpg = format.Equals("jpg", StringComparison.OrdinalIgnoreCase);
         var ext = isJpg ? ".jpg" : ".png";
-        var filePath = Path.Combine(ScreenshotDir, $"{timestamp}{ext}");
+        var filePath = Path.Combine(ScreenshotDir, $"{timestamp}{suffix}{ext}");
 
         using var bitmap = new Bitmap(width, height);
 

@@ -1,4 +1,3 @@
-using System.Collections.ObjectModel;
 using System.Windows;
 using System.Windows.Input;
 using GalgameQuoteCollector.Models;
@@ -8,6 +7,7 @@ namespace GalgameQuoteCollector.Views;
 public partial class SettingsWindow : Window
 {
     private readonly HotkeyConfig _newConfig;
+    private bool _capturingAddShot;
 
     public HotkeyConfig? Result { get; private set; }
 
@@ -18,14 +18,13 @@ public partial class SettingsWindow : Window
 
         _newConfig = currentConfig.Clone();
         CurrentHotkeyText.Text = $"当前: {currentDisplay}";
+        CurrentAddShotText.Text = $"当前: {currentConfig.ToAddShotDisplay()}";
         AutoStartCheckBox.IsChecked = currentConfig.AutoStart;
         DelaySlider.Value = currentConfig.CaptureDelayMs;
         UpdateDelayLabel(currentConfig.CaptureDelayMs);
         SlideshowModeCombo.SelectedIndex = currentConfig.SlideshowMode;
 
-        // Fonts
-        var fonts = System.Windows.Media.Fonts.SystemFontFamilies
-            .OrderBy(f => f.Source).ToList();
+        var fonts = System.Windows.Media.Fonts.SystemFontFamilies.OrderBy(f => f.Source).ToList();
         FontCombo.ItemsSource = fonts;
         for (int i = 0; i < fonts.Count; i++)
         {
@@ -54,8 +53,16 @@ public partial class SettingsWindow : Window
 
     private void HotkeyBox_MouseDown(object sender, MouseButtonEventArgs e)
     {
+        _capturingAddShot = false;
         HotkeyDisplay.Text = "按快捷键...";
         HotkeyDisplay.Foreground = System.Windows.Media.Brushes.Black;
+    }
+
+    private void AddShotBox_MouseDown(object sender, MouseButtonEventArgs e)
+    {
+        _capturingAddShot = true;
+        AddShotDisplay.Text = "按快捷键...";
+        AddShotDisplay.Foreground = System.Windows.Media.Brushes.Black;
     }
 
     private void DelaySlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -89,12 +96,10 @@ public partial class SettingsWindow : Window
     {
         if (e.Key == Key.Escape)
         {
-            DialogResult = false;
-            Close();
+            DialogResult = false; Close();
             return;
         }
 
-        // If focus is in a text input box, let it handle typing normally
         if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
             return;
 
@@ -110,14 +115,28 @@ public partial class SettingsWindow : Window
 
         var virtualKey = (uint)KeyInterop.VirtualKeyFromKey(key);
 
-        _newConfig.Control = (modifiers & ModifierKeys.Control) != 0;
-        _newConfig.Alt = (modifiers & ModifierKeys.Alt) != 0;
-        _newConfig.Shift = (modifiers & ModifierKeys.Shift) != 0;
-        _newConfig.Win = (modifiers & ModifierKeys.Windows) != 0;
-        _newConfig.VirtualKey = virtualKey;
-
-        HotkeyDisplay.Text = _newConfig.ToDisplayString();
-        HotkeyDisplay.Foreground = System.Windows.Media.Brushes.Black;
+        if (_capturingAddShot)
+        {
+            _newConfig.AddShotControl = (modifiers & ModifierKeys.Control) != 0;
+            _newConfig.AddShotAlt = (modifiers & ModifierKeys.Alt) != 0;
+            _newConfig.AddShotShift = (modifiers & ModifierKeys.Shift) != 0;
+            _newConfig.AddShotWin = (modifiers & ModifierKeys.Windows) != 0;
+            _newConfig.AddShotVirtualKey = virtualKey;
+            AddShotDisplay.Text = _newConfig.ToAddShotDisplay();
+            AddShotDisplay.Foreground = System.Windows.Media.Brushes.Black;
+            _capturingAddShot = false;
+            SaveButton.IsEnabled = true;
+        }
+        else
+        {
+            _newConfig.Control = (modifiers & ModifierKeys.Control) != 0;
+            _newConfig.Alt = (modifiers & ModifierKeys.Alt) != 0;
+            _newConfig.Shift = (modifiers & ModifierKeys.Shift) != 0;
+            _newConfig.Win = (modifiers & ModifierKeys.Windows) != 0;
+            _newConfig.VirtualKey = virtualKey;
+            HotkeyDisplay.Text = _newConfig.ToDisplayString();
+            HotkeyDisplay.Foreground = System.Windows.Media.Brushes.Black;
+        }
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
 

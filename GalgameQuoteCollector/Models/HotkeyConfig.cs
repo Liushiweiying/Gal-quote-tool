@@ -19,6 +19,12 @@ public class HotkeyConfig
     public bool HideUnrecognized { get; set; }
     public string ScreenshotDirectory { get; set; } = "";
     public string ScreenshotFormat { get; set; } = "png";
+    // Secondary hotkey for adding screenshot to current quote
+    public bool AddShotAlt { get; set; } = true;
+    public bool AddShotControl { get; set; } = true;
+    public bool AddShotShift { get; set; }
+    public bool AddShotWin { get; set; }
+    public uint AddShotVirtualKey { get; set; } = 0x5A; // Z
     public List<GameNameRule> GameNameRules { get; set; } = new();
 
     /// <summary>
@@ -51,6 +57,27 @@ public class HotkeyConfig
     /// <summary>
     /// Whether at least one modifier is selected and key is not a modifier-only press.
     /// </summary>
+    public uint ToAddModifiers()
+    {
+        uint mod = 0;
+        if (AddShotAlt) mod |= 0x0001;
+        if (AddShotControl) mod |= 0x0002;
+        if (AddShotShift) mod |= 0x0004;
+        if (AddShotWin) mod |= 0x0008;
+        return mod;
+    }
+
+    public string ToAddShotDisplay()
+    {
+        var sb = new StringBuilder();
+        if (AddShotControl) sb.Append("Ctrl+");
+        if (AddShotAlt) sb.Append("Alt+");
+        if (AddShotShift) sb.Append("Shift+");
+        if (AddShotWin) sb.Append("Win+");
+        sb.Append((char)AddShotVirtualKey);
+        return sb.ToString();
+    }
+
     public bool IsValid()
     {
         return (Alt || Control || Shift || Win) && VirtualKey > 0;
@@ -74,6 +101,9 @@ public class HotkeyConfig
             HideUnrecognized = HideUnrecognized,
             ScreenshotDirectory = ScreenshotDirectory,
             ScreenshotFormat = ScreenshotFormat,
+            AddShotAlt = AddShotAlt, AddShotControl = AddShotControl,
+            AddShotShift = AddShotShift, AddShotWin = AddShotWin,
+            AddShotVirtualKey = AddShotVirtualKey,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

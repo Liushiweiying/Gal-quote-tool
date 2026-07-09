@@ -10,19 +10,26 @@ public class HotkeyService : IDisposable
     private const int WM_SYSKEYDOWN = 0x0104;
 
     private IntPtr _hookId = IntPtr.Zero;
-    private HookProc? _hookProc; // keep alive
+    private HookProc? _hookProc;
 
-    private uint _modifiers;  // cached modifier state
-    private uint _virtualKey;
-    private bool _winKeyDown;
+    // Primary hotkey
+    private uint _mod1, _vk1;
+    private bool _winKeyDown1;
+
+    // Secondary hotkey (add screenshot)
+    private uint _mod2, _vk2;
+    private bool _winKeyDown2;
 
     public event EventHandler? HotkeyPressed;
+    public event EventHandler? HotkeyPressedAdd;
+
     public string CurrentHotkeyDisplay { get; private set; } = "";
 
-    public HotkeyService(uint modifiers, uint virtualKey)
+    public HotkeyService(uint modifiers, uint virtualKey,
+                         uint addModifiers = 0, uint addVirtualKey = 0)
     {
-        _modifiers = modifiers;
-        _virtualKey = virtualKey;
+        _mod1 = modifiers; _vk1 = virtualKey;
+        _mod2 = addModifiers; _vk2 = addVirtualKey;
         CurrentHotkeyDisplay = FormatKeys(modifiers, virtualKey);
         InstallHook();
     }
@@ -38,10 +45,27 @@ public class HotkeyService : IDisposable
 
     public bool UpdateHotkey(uint modifiers, uint virtualKey)
     {
-        _modifiers = modifiers;
-        _virtualKey = virtualKey;
+        _mod1 = modifiers; _vk1 = virtualKey;
         CurrentHotkeyDisplay = FormatKeys(modifiers, virtualKey);
         return true;
+    }
+
+    public void UpdateAddHotkey(uint modifiers, uint virtualKey)
+    {
+        _mod2 = modifiers; _vk2 = virtualKey;
+    }
+
+    private bool WinKeyDown => (GetAsyncKeyState(0x5B) & 0x8000) != 0;
+
+    private bool ModifiersMatch(uint mods, bool winKey)
+    {
+        bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
+        bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
+        bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
+        return ctrl == ((mods & 0x0002) != 0) &&
+               alt == ((mods & 0x0001) != 0) &&
+               shift == ((mods & 0x0004) != 0) &&
+               winKey == ((mods & 0x0008) != 0);
     }
 
     private delegate IntPtr HookProc(int nCode, IntPtr wParam, IntPtr lParam);
@@ -53,37 +77,16 @@ public class HotkeyService : IDisposable
             int vkCode = Marshal.ReadInt32(lParam);
             bool keyDown = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
 
-            // Track modifier keys for state
-            switch (vkCode)
+            if (keyDown)
             {
-                case 0xA0: case 0xA1: /* L/R Shift */ break;
-                case 0xA2: case 0xA3: /* L/R Ctrl */ break;
-                case 0xA4: case 0xA5: /* L/R Alt */ break;
-                case 0x5B: case 0x5C: /* L/R Win */ _winKeyDown = keyDown; break;
-            }
+                if (vkCode == _vk1 && ModifiersMatch(_mod1, WinKeyDown))
+                    HotkeyPressed?.Invoke(this, EventArgs.Empty);
 
-            if (keyDown && vkCode == _virtualKey && ModifiersDown())
-            {
-                HotkeyPressed?.Invoke(this, EventArgs.Empty);
-                // Don't block - let the key pass through to other apps
+                if (_vk2 > 0 && vkCode == _vk2 && ModifiersMatch(_mod2, WinKeyDown))
+                    HotkeyPressedAdd?.Invoke(this, EventArgs.Empty);
             }
         }
-
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
-    }
-
-    private bool ModifiersDown()
-    {
-        bool ctrl = (GetAsyncKeyState(0x11) & 0x8000) != 0;
-        bool alt = (GetAsyncKeyState(0x12) & 0x8000) != 0;
-        bool shift = (GetAsyncKeyState(0x10) & 0x8000) != 0;
-
-        bool wantCtrl = (_modifiers & 0x0002) != 0;
-        bool wantAlt = (_modifiers & 0x0001) != 0;
-        bool wantShift = (_modifiers & 0x0004) != 0;
-        bool wantWin = (_modifiers & 0x0008) != 0;
-
-        return ctrl == wantCtrl && alt == wantAlt && shift == wantShift && _winKeyDown == wantWin;
     }
 
     public void Dispose()
@@ -108,16 +111,12 @@ public class HotkeyService : IDisposable
 
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, HookProc lpfn, IntPtr hMod, uint dwThreadId);
-
     [DllImport("user32.dll")]
     private static extern bool UnhookWindowsHookEx(IntPtr hhk);
-
     [DllImport("user32.dll")]
     private static extern IntPtr CallNextHookEx(IntPtr hhk, int nCode, IntPtr wParam, IntPtr lParam);
-
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
-
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
 }

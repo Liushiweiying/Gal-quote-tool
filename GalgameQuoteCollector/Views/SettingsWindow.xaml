@@ -26,6 +26,18 @@
             </Border>
             <TextBlock x:Name="CurrentHotkeyText" Foreground="#888" FontSize="12" Margin="0,8,0,0"/>
 
+            <TextBlock Text="补拍（为当前语录追加截图）" FontSize="13" Foreground="#555" Margin="0,12,0,4"/>
+            <Border x:Name="AddShotBox"
+                    BorderBrush="#5B6ABF" BorderThickness="2"
+                    Background="#EEF0FF" Height="38" Padding="12,0"
+                    CornerRadius="8"
+                    MouseDown="AddShotBox_MouseDown" Cursor="Hand">
+                <TextBlock x:Name="AddShotDisplay" Text="按键即捕获..."
+                           VerticalAlignment="Center" HorizontalAlignment="Center"
+                           FontSize="15" FontWeight="Bold" Foreground="#5B6ABF"/>
+            </Border>
+            <TextBlock x:Name="CurrentAddShotText" Foreground="#888" FontSize="12" Margin="0,8,0,0"/>
+
             <Separator Margin="0,18,0,16"/>
 
             <!-- ═══ General ═══ -->

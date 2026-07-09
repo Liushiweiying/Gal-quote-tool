@@ -49,6 +49,12 @@ public class StorageService : IDisposable
                 GroupId INTEGER NOT NULL REFERENCES GroupsTable(Id) ON DELETE CASCADE,
                 PRIMARY KEY (QuoteId, GroupId)
             );
+            CREATE TABLE IF NOT EXISTS Screenshots (
+                Id       INTEGER PRIMARY KEY AUTOINCREMENT,
+                QuoteId  INTEGER NOT NULL REFERENCES Quotes(Id) ON DELETE CASCADE,
+                FilePath TEXT NOT NULL,
+                SortOrder INTEGER NOT NULL DEFAULT 0
+            );
             """;
         cmd.ExecuteNonQuery();
 
@@ -63,6 +69,15 @@ public class StorageService : IDisposable
             try { using var m = _connection.CreateCommand(); m.CommandText = $"ALTER TABLE Quotes ADD COLUMN {col}"; m.ExecuteNonQuery(); }
             catch { }
         }
+
+        // Migrate old ScreenshotPath to Screenshots table
+        try
+        {
+            using var m = _connection.CreateCommand();
+            m.CommandText = "INSERT OR IGNORE INTO Screenshots (QuoteId, FilePath, SortOrder) SELECT Id, ScreenshotPath, 1 FROM Quotes WHERE ScreenshotPath != ''";
+            m.ExecuteNonQuery();
+        }
+        catch { }
     }
 
     public void InsertQuote(Quote quote)
@@ -329,6 +344,46 @@ public class StorageService : IDisposable
         while (reader.Read())
             ids.Add(reader.GetInt32(0));
         return ids;
+    }
+
+    // ── Screenshots ────────────────────────────────────
+
+    public List<Screenshot> GetScreenshots(int quoteId)
+    {
+        var list = new List<Screenshot>();
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "SELECT Id, QuoteId, FilePath, SortOrder FROM Screenshots WHERE QuoteId = @Q ORDER BY SortOrder";
+        cmd.Parameters.AddWithValue("@Q", quoteId);
+        using var r = cmd.ExecuteReader();
+        while (r.Read())
+            list.Add(new Screenshot { Id = r.GetInt32(0), QuoteId = r.GetInt32(1), FilePath = r.GetString(2), SortOrder = r.GetInt32(3) });
+        return list;
+    }
+
+    public int GetNextScreenshotOrder(int quoteId)
+    {
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "SELECT COALESCE(MAX(SortOrder), 0) + 1 FROM Screenshots WHERE QuoteId = @Q";
+        cmd.Parameters.AddWithValue("@Q", quoteId);
+        return Convert.ToInt32(cmd.ExecuteScalar());
+    }
+
+    public void AddScreenshot(int quoteId, string filePath, int sortOrder)
+    {
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) VALUES (@Q, @F, @S)";
+        cmd.Parameters.AddWithValue("@Q", quoteId);
+        cmd.Parameters.AddWithValue("@F", filePath);
+        cmd.Parameters.AddWithValue("@S", sortOrder);
+        cmd.ExecuteNonQuery();
+    }
+
+    public void DeleteScreenshot(int id)
+    {
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "DELETE FROM Screenshots WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.ExecuteNonQuery();
     }
 
     public void Dispose()

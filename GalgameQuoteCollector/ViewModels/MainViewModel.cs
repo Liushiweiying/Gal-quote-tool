@@ -71,8 +71,11 @@ public partial class MainViewModel : ObservableObject
             catch { }
         }
 
-        _hotkeyService = new HotkeyService(hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey);
+        _hotkeyService = new HotkeyService(
+            hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey,
+            hotkeyConfig.ToAddModifiers(), hotkeyConfig.AddShotVirtualKey);
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
+        _hotkeyService.HotkeyPressedAdd += OnHotkeyPressedAdd;
 
         // Usage tracker
         if (hotkeyConfig.EnableUsageTracking)
@@ -90,6 +93,15 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private Quote? _selectedQuote;
+
+    [ObservableProperty]
+    private ObservableCollection<Screenshot> _currentScreenshots = new();
+
+    [ObservableProperty]
+    private int _currentScreenshotIndex;
+
+    [ObservableProperty]
+    private string _currentScreenshotPath = "";
 
     [ObservableProperty]
     private string _searchText = string.Empty;
@@ -184,6 +196,7 @@ public partial class MainViewModel : ObservableObject
             EditCapturedAt = value.CapturedAt;
             RefreshCurrentTags();
             RefreshCurrentGroups();
+            RefreshCurrentScreenshots();
         }
     }
 
@@ -674,6 +687,8 @@ public partial class MainViewModel : ObservableObject
                 StatusText = $"截图目录已改为: {_screenshotDir}";
             }
 
+            _hotkeyService.UpdateAddHotkey(newConfig.ToAddModifiers(), newConfig.AddShotVirtualKey);
+
             if (_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey))
             {
                 _settingsService.SaveHotkeyConfig(newConfig);
@@ -876,21 +891,7 @@ public partial class MainViewModel : ObservableObject
         DeleteQuoteDirect(SelectedQuote);
     }
 
-    [RelayCommand]
-    private void OpenScreenshot()
-    {
-        if (SelectedQuote == null || string.IsNullOrEmpty(SelectedQuote.ScreenshotPath))
-            return;
-
-        if (File.Exists(SelectedQuote.ScreenshotPath))
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = SelectedQuote.ScreenshotPath,
-                UseShellExecute = true
-            });
-        }
-    }
+    
 
     [RelayCommand]
     private void BackupData()
@@ -1038,6 +1039,117 @@ public partial class MainViewModel : ObservableObject
     private async void OnHotkeyPressed(object? sender, EventArgs e)
     {
         await Capture();
+    }
+
+    [RelayCommand]
+    private async Task CaptureAdditional()
+    {
+        if (SelectedQuote == null)
+        {
+            StatusText = "请先选择一条语录再补拍";
+            return;
+        }
+
+        try
+        {
+            StatusText = "补拍截图...";
+            var gameHwnd = CaptureService.GetForegroundWindowHandle();
+            var windowTitle = CaptureService.GetWindowTitle(gameHwnd);
+            if (string.IsNullOrWhiteSpace(windowTitle))
+            {
+                StatusText = "未检测到活动窗口";
+                return;
+            }
+
+            _window.WindowState = WindowState.Minimized;
+            await Task.Delay(_captureDelayMs);
+
+            var nextOrder = _storageService.GetNextScreenshotOrder(SelectedQuote.Id);
+            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat, nextOrder);
+            _storageService.AddScreenshot(SelectedQuote.Id, screenshotPath, nextOrder);
+
+            var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张", 2000);
+            toast.Show();
+
+            StatusText = $"已为语录补拍第 {nextOrder} 张截图";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"补拍失败: {ex.Message}";
+        }
+    }
+
+    [RelayCommand]
+    private void DeleteScreenshot(Screenshot screenshot)
+    {
+        if (screenshot == null) return;
+        var result = MessageBox.Show("确定删除这张截图？（不影响语录）", "删除截图",
+            MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (result != MessageBoxResult.Yes) return;
+
+        if (File.Exists(screenshot.FilePath))
+            try { File.Delete(screenshot.FilePath); } catch { }
+
+        _storageService.DeleteScreenshot(screenshot.Id);
+        StatusText = "已删除截图";
+    }
+
+    [RelayCommand]
+    private void OpenScreenshotFile(Screenshot screenshot)
+    {
+        if (screenshot == null || !File.Exists(screenshot.FilePath)) return;
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = screenshot.FilePath,
+            UseShellExecute = true
+        });
+    }
+
+    private void RefreshCurrentScreenshots()
+    {
+        if (SelectedQuote == null) { CurrentScreenshots.Clear(); return; }
+        var list = _storageService.GetScreenshots(SelectedQuote.Id);
+        CurrentScreenshots = new ObservableCollection<Screenshot>(list);
+        CurrentScreenshotIndex = list.Count > 0 ? 0 : -1;
+        CurrentScreenshotPath = list.Count > 0 ? list[0].FilePath : "";
+    }
+
+    [RelayCommand]
+    private void PrevScreenshot()
+    {
+        if (CurrentScreenshots.Count == 0) return;
+        CurrentScreenshotIndex = (CurrentScreenshotIndex - 1 + CurrentScreenshots.Count) % CurrentScreenshots.Count;
+        CurrentScreenshotPath = CurrentScreenshots[CurrentScreenshotIndex].FilePath;
+    }
+
+    [RelayCommand]
+    private void NextScreenshot()
+    {
+        if (CurrentScreenshots.Count == 0) return;
+        CurrentScreenshotIndex = (CurrentScreenshotIndex + 1) % CurrentScreenshots.Count;
+        CurrentScreenshotPath = CurrentScreenshots[CurrentScreenshotIndex].FilePath;
+    }
+
+    [RelayCommand]
+    private void OpenScreenshot()
+    {
+        if (SelectedQuote == null) return;
+        var screenshots = _storageService.GetScreenshots(SelectedQuote.Id);
+        var first = screenshots.FirstOrDefault();
+        if (first != null && File.Exists(first.FilePath))
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = first.FilePath,
+                UseShellExecute = true
+            });
+        }
+    }
+
+    private async void OnHotkeyPressedAdd(object? sender, EventArgs e)
+    {
+        if (SelectedQuote != null)
+            await CaptureAdditional();
     }
 
     private async Task LoadQuotesAsync()
