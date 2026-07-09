@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
+using Microsoft.VisualBasic.FileIO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using GalgameQuoteCollector.Models;
@@ -854,7 +855,7 @@ public partial class MainViewModel : ObservableObject
         var fileName = Path.GetFileName(quote.ScreenshotPath);
         var paths = new[] { quote.ScreenshotPath, Path.Combine(_screenshotDir, fileName) };
         foreach (var p in paths)
-            if (File.Exists(p)) try { File.Delete(p); } catch { }
+            if (File.Exists(p)) try { FileSystem.DeleteFile(p, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin); } catch { }
     }
 
     [RelayCommand]
@@ -1082,7 +1083,7 @@ public partial class MainViewModel : ObservableObject
         if (result != MessageBoxResult.Yes) return;
 
         if (File.Exists(screenshot.FilePath))
-            try { File.Delete(screenshot.FilePath); } catch { }
+            try { Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(screenshot.FilePath, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin); } catch { }
 
         _storageService.DeleteScreenshot(screenshot.Id);
         RefreshCurrentScreenshots();
