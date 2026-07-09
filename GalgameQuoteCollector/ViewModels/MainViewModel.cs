@@ -1085,6 +1085,7 @@ public partial class MainViewModel : ObservableObject
             try { File.Delete(screenshot.FilePath); } catch { }
 
         _storageService.DeleteScreenshot(screenshot.Id);
+        RefreshCurrentScreenshots();
         StatusText = "已删除截图";
     }
 

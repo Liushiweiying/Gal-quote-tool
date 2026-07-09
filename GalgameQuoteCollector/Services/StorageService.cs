@@ -70,12 +70,23 @@ public class StorageService : IDisposable
             catch { }
         }
 
-        // Migrate old ScreenshotPath to Screenshots table
+        // Clean up duplicate screenshots (from previous bug) + migrate old ScreenshotPath
         try
         {
-            using var m = _connection.CreateCommand();
-            m.CommandText = "INSERT OR IGNORE INTO Screenshots (QuoteId, FilePath, SortOrder) SELECT Id, ScreenshotPath, 1 FROM Quotes WHERE ScreenshotPath != ''";
-            m.ExecuteNonQuery();
+            // Deduplicate: keep only the first entry for each distinct (QuoteId, FilePath)
+            using var dedup = _connection.CreateCommand();
+            dedup.CommandText = "DELETE FROM Screenshots WHERE Id NOT IN (SELECT MIN(Id) FROM Screenshots GROUP BY QuoteId, FilePath)";
+            dedup.ExecuteNonQuery();
+
+            // Migrate old ScreenshotPath if Screenshots table is empty
+            using var check = _connection.CreateCommand();
+            check.CommandText = "SELECT COUNT(*) FROM Screenshots";
+            if (Convert.ToInt32(check.ExecuteScalar()) == 0)
+            {
+                using var m = _connection.CreateCommand();
+                m.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) SELECT Id, ScreenshotPath, 1 FROM Quotes WHERE ScreenshotPath != ''";
+                m.ExecuteNonQuery();
+            }
         }
         catch { }
     }
