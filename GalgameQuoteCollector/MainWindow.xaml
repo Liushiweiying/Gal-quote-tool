@@ -119,6 +119,8 @@
                             <MenuItem Header="使用记录" Command="{Binding OpenUsageStatsCommand}"/>
                             <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
                             <Separator/>
+                            <MenuItem Header="网格视图" IsCheckable="True" IsChecked="{Binding IsGridView}"/>
+                            <Separator/>
                             <MenuItem Header="备份数据" Command="{Binding BackupDataCommand}"/>
                             <MenuItem Header="恢复数据" Command="{Binding RestoreDataCommand}"/>
                             <Separator/>
@@ -149,7 +151,8 @@
                              SelectionMode="Extended"
                              BorderThickness="0" Background="Transparent"
                              ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.ScrollUnit="Pixel">
+                             VirtualizingPanel.ScrollUnit="Pixel"
+                             Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
                         <ListBox.Resources>
                             <Style TargetType="ListBoxItem">
                                 <Setter Property="Padding" Value="0"/>
@@ -202,6 +205,39 @@
                                                 </ContentControl.Content>
                                             </ContentControl>
                                         </Grid>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Grid View -->
+                    <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
+                             BorderThickness="0" Background="Transparent"
+                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                             Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}}">
+                        <ListBox.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ListBox.ItemsPanel>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="#FAFAFA" BorderBrush="#F0F0F0" BorderThickness="1"
+                                        Width="120" Height="100" Margin="4" Padding="4">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition Height="*"/>
+                                        </Grid.RowDefinitions>
+                                        <Border Grid.Row="0" Height="60" Background="#EEE" ClipToBounds="True">
+                                            <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}"
+                                                   Stretch="UniformToFill" MaxHeight="60"/>
+                                        </Border>
+                                        <TextBlock Grid.Row="1" Text="{Binding PreviewText}"
+                                                   FontSize="10" Foreground="#666"
+                                                   TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
+                                                   MaxHeight="30"/>
                                     </Grid>
                                 </Border>
                             </DataTemplate>

@@ -168,6 +168,9 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedGameFilter = 0; // 0 = all
 
+    [ObservableProperty]
+    private bool _isGridView;
+
     private List<Quote> _allQuotes = new();
 
     partial void OnSelectedQuoteChanged(Quote? value)
