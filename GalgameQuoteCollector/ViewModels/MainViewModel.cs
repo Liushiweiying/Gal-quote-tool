@@ -98,12 +98,6 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<Screenshot> _currentScreenshots = new();
 
     [ObservableProperty]
-    private int _currentScreenshotIndex;
-
-    [ObservableProperty]
-    private string _currentScreenshotPath = "";
-
-    [ObservableProperty]
     private string _searchText = string.Empty;
 
     [ObservableProperty]
@@ -1110,24 +1104,37 @@ public partial class MainViewModel : ObservableObject
         if (SelectedQuote == null) { CurrentScreenshots.Clear(); return; }
         var list = _storageService.GetScreenshots(SelectedQuote.Id);
         CurrentScreenshots = new ObservableCollection<Screenshot>(list);
-        CurrentScreenshotIndex = list.Count > 0 ? 0 : -1;
-        CurrentScreenshotPath = list.Count > 0 ? list[0].FilePath : "";
     }
 
     [RelayCommand]
-    private void PrevScreenshot()
+    private void AddScreenshotFromFile()
     {
-        if (CurrentScreenshots.Count == 0) return;
-        CurrentScreenshotIndex = (CurrentScreenshotIndex - 1 + CurrentScreenshots.Count) % CurrentScreenshots.Count;
-        CurrentScreenshotPath = CurrentScreenshots[CurrentScreenshotIndex].FilePath;
-    }
+        if (SelectedQuote == null) return;
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "图片文件 (*.png;*.jpg;*.jpeg)|*.png;*.jpg;*.jpeg",
+            Title = "选择要添加的截图"
+        };
+        if (dialog.ShowDialog() != true) return;
 
-    [RelayCommand]
-    private void NextScreenshot()
-    {
-        if (CurrentScreenshots.Count == 0) return;
-        CurrentScreenshotIndex = (CurrentScreenshotIndex + 1) % CurrentScreenshots.Count;
-        CurrentScreenshotPath = CurrentScreenshots[CurrentScreenshotIndex].FilePath;
+        try
+        {
+            var srcPath = dialog.FileName;
+            var ext = Path.GetExtension(srcPath);
+            var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
+            var nextOrder = _storageService.GetNextScreenshotOrder(SelectedQuote.Id);
+            var destName = $"{timestamp}_{nextOrder}{ext}";
+            var destPath = Path.Combine(_screenshotDir, destName);
+            File.Copy(srcPath, destPath, false);
+
+            _storageService.AddScreenshot(SelectedQuote.Id, destPath, nextOrder);
+            RefreshCurrentScreenshots();
+            StatusText = $"已添加截图 ({nextOrder})";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"添加截图失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
     }
 
     [RelayCommand]

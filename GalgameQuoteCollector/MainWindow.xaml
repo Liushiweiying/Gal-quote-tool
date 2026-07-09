@@ -301,34 +301,31 @@
                                      FontSize="14" Background="#FAFAFA" BorderBrush="#E0E0E0" 
                                      Padding="8,6" Margin="0,0,0,12"/>
 
-                            <!-- Screenshot carousel -->
+                            <!-- Screenshots (vertical stack) -->
                             <TextBlock Text="截图" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <Border Background="#F5F5F5" Padding="4" Margin="0,0,0,4" MinHeight="120">
-                                <Grid>
-                                    <Image Source="{Binding CurrentScreenshotPath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
-                                           MaxHeight="200" Stretch="Uniform"/>
-                                </Grid>
-                            </Border>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="◀" Command="{Binding PrevScreenshotCommand}"
-                                        Padding="6,2" FontSize="12" Background="#EEE" BorderThickness="0" Cursor="Hand"/>
-                                <TextBlock Grid.Column="1" Text="{Binding CurrentScreenshotIndex, StringFormat={}{0}}"
-                                           FontSize="11" Foreground="#888" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                                <Button Grid.Column="2" Content="▶" Command="{Binding NextScreenshotCommand}"
-                                        Padding="6,2" FontSize="12" Background="#EEE" BorderThickness="0" Cursor="Hand"/>
-                                <Button Grid.Column="3" Content="📷 补拍" Command="{Binding CaptureAdditionalCommand}"
-                                        Padding="8,2" FontSize="11" Background="#1976D2" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
-                                <Button Grid.Column="4" Content="删除截图" Command="{Binding DeleteScreenshotCommand}"
-                                        CommandParameter="{Binding CurrentScreenshots[CurrentScreenshotIndex]}"
-                                        Padding="8,2" FontSize="11" Background="#E53935" Foreground="White" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
-                            </Grid>
+                            <StackPanel Margin="0,0,0,8">
+                                <ItemsControl ItemsSource="{Binding CurrentScreenshots}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#F5F5F5" Padding="4" Margin="0,0,0,6" MinHeight="80">
+                                                <Grid>
+                                                    <Image Source="{Binding FilePath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
+                                                           MaxHeight="180" Stretch="Uniform" HorizontalAlignment="Center"/>
+                                                    <Button Content="×" Width="22" Height="22" FontSize="12" FontWeight="Bold"
+                                                            Background="#E53935" Foreground="White" BorderThickness="0"
+                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                            Margin="0,0,4,4" Cursor="Hand"
+                                                            Command="{Binding DataContext.DeleteScreenshotCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                            CommandParameter="{Binding}"/>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                                <Button Content="+ 添加截图" Command="{Binding AddScreenshotFromFileCommand}"
+                                        Padding="8,4" Background="#1976D2" Foreground="White" BorderThickness="0"
+                                        FontSize="12" Cursor="Hand" HorizontalAlignment="Center"/>
+                            </StackPanel>
 
                             <!-- Tags — show all, toggle on/off -->
                             <TextBlock Text="标签" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
