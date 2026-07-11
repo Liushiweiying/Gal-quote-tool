@@ -13,6 +13,7 @@
         <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <conv:ThumbnailConverter x:Key="ThumbConv"/>
         <conv:SearchHighlightConverter x:Key="HighlightConv"/>
+        <conv:ViewToggleTextConverter x:Key="ViewToggleText"/>
     </Window.Resources>
 
     <Grid Margin="12,8,12,8">
@@ -137,356 +138,382 @@
 
         <!-- ===== Main Content ===== -->
         <Grid Grid.Row="1">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="280"/>
-                <ColumnDefinition Width="8"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
 
-            <!-- Left: Quote List -->
-            <Border Grid.Column="0" Background="White"  BorderThickness="0"
-                    Padding="4">
-                <Grid>
-                    <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
-                             SelectionMode="Extended"
-                             BorderThickness="0" Background="Transparent"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             VirtualizingPanel.ScrollUnit="Pixel"
-                             Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
-                        <ListBox.Resources>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="Margin" Value="0,0,0,4"/>
-                                <Setter Property="Background" Value="Transparent"/>
-                                <Setter Property="BorderThickness" Value="0"/>
-                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                                <Style.Triggers>
-                                    <Trigger Property="IsSelected" Value="True">
-                                        <Setter Property="Background" Value="#D0D6FF"/>
-                                        <Setter Property="BorderBrush" Value="#5B6ABF"/>
-                                        <Setter Property="BorderThickness" Value="1"/>
-                                    </Trigger>
-                                </Style.Triggers>
-                            </Style>
-                        </ListBox.Resources>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#FAFAFA" Padding="8,6"
-                                        BorderBrush="#F0F0F0" BorderThickness="1">
-                                    <Grid>
-                                        <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="40"/>
-                                            <ColumnDefinition Width="*"/>
-                                        </Grid.ColumnDefinitions>
+            <!-- Normal layout: list + detail (hidden in grid mode) -->
+            <Grid Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}, ConverterParameter=invert}">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="280"/>
+                    <ColumnDefinition Width="8"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
 
-                                        <!-- Thumbnail -->
-                                        <Border Grid.Column="0" Width="36" Height="28"
-                                                 Background="#EEE"
-                                                Margin="0,0,6,0" ClipToBounds="True">
-                                            <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}"
-                                                   Stretch="UniformToFill" MaxWidth="36" MaxHeight="28"/>
-                                        </Border>
+                <!-- Left: Quote List -->
+                <Border Grid.Column="0" Background="White"  BorderThickness="0"
+                        Padding="4">
+                    <Grid>
+                        <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
+                                 SelectionMode="Extended"
+                                 BorderThickness="0" Background="Transparent"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                                 VirtualizingPanel.ScrollUnit="Pixel">
+                            <ListBox.Resources>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Margin" Value="0,0,0,4"/>
+                                    <Setter Property="Background" Value="Transparent"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                                    <Style.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter Property="Background" Value="#D0D6FF"/>
+                                            <Setter Property="BorderBrush" Value="#5B6ABF"/>
+                                            <Setter Property="BorderThickness" Value="1"/>
+                                        </Trigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </ListBox.Resources>
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#FAFAFA" Padding="8,6"
+                                            BorderBrush="#F0F0F0" BorderThickness="1">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="40"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
 
-                                        <!-- Text -->
-                                        <Grid Grid.Column="1">
-                                            <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto"/>
-                                                <RowDefinition Height="Auto"/>
-                                            </Grid.RowDefinitions>
-                                            <TextBlock Grid.Row="0" Text="{Binding GameName}"
-                                                       FontWeight="SemiBold" Foreground="#5B6ABF" FontSize="12"/>
-                                            <ContentControl Grid.Row="1" FontSize="11" Foreground="#666"
-                                                            MaxHeight="30" Margin="0,1,0,0">
-                                                <ContentControl.Content>
-                                                    <MultiBinding Converter="{StaticResource HighlightConv}">
-                                                        <Binding Path="PreviewText"/>
-                                                        <Binding Path="DataContext.SearchText" RelativeSource="{RelativeSource AncestorType=Window}"/>
-                                                    </MultiBinding>
-                                                </ContentControl.Content>
-                                            </ContentControl>
-                                        </Grid>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <!-- Grid View -->
-                    <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
-                             BorderThickness="0" Background="Transparent"
-                             ScrollViewer.HorizontalScrollBarVisibility="Disabled"
-                             Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}}">
-                        <ListBox.ItemsPanel>
-                            <ItemsPanelTemplate>
-                                <WrapPanel Orientation="Horizontal"/>
-                            </ItemsPanelTemplate>
-                        </ListBox.ItemsPanel>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Border Background="#FAFAFA" BorderBrush="#F0F0F0" BorderThickness="1"
-                                        Width="120" Height="100" Margin="4" Padding="4">
-                                    <Grid>
-                                        <Grid.RowDefinitions>
-                                            <RowDefinition Height="Auto"/>
-                                            <RowDefinition Height="*"/>
-                                        </Grid.RowDefinitions>
-                                        <Border Grid.Row="0" Height="60" Background="#EEE" ClipToBounds="True">
-                                            <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}"
-                                                   Stretch="UniformToFill" MaxHeight="60"/>
-                                        </Border>
-                                        <TextBlock Grid.Row="1" Text="{Binding PreviewText}"
-                                                   FontSize="10" Foreground="#666"
-                                                   TextTrimming="CharacterEllipsis" Margin="0,2,0,0"
-                                                   MaxHeight="30"/>
-                                    </Grid>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <TextBlock Text="还没有语录，按 Ctrl+Win+Z 采集"
-                               Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                               Foreground="#AAA" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"/>
-                </Grid>
-            </Border>
-
-            <!-- Splitter -->
-            <GridSplitter Grid.Column="1" Width="4" Background="Transparent"
-                          HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
-
-            <!-- Right: Detail Panel -->
-            <Border Grid.Column="2" Background="White"  BorderThickness="0"
-                    Padding="16,12">
-                <Grid>
-                    <TextBlock Text="选择一条语录查看详情"
-                               Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                               HorizontalAlignment="Center" VerticalAlignment="Center"
-                               Foreground="#AAA" FontSize="14"/>
-
-                    <ScrollViewer Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}}"
-                                  VerticalScrollBarVisibility="Auto">
-                        <StackPanel>
-                            <!-- Game name + Window title -->
-                            <TextBlock Text="游戏" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <TextBox Text="{Binding EditGameName, UpdateSourceTrigger=PropertyChanged}"
-                                     FontSize="15" FontWeight="SemiBold" Foreground="#333"
-                                     Background="#FAFAFA" BorderBrush="#E0E0E0" 
-                                     Padding="8,6" Margin="0,0,0,4"/>
-
-                            <TextBlock Text="窗口标题" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <TextBox Text="{Binding EditWindowTitle}" IsReadOnly="True"
-                                     FontSize="12" Foreground="#888" Background="#F5F5F5"
-                                     BorderBrush="#E0E0E0" 
-                                     Padding="8,6" Margin="0,0,0,12"/>
-
-                            <!-- Time -->
-                            <TextBlock Text="采集时间" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <Grid Margin="0,0,0,12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <DatePicker Grid.Column="0" SelectedDate="{Binding EditCapturedAt}"
-                                            Padding="4,2" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
-                                <TextBox Grid.Column="1" Text="{Binding EditCapturedAt, StringFormat={}{0:HH:mm:ss}}"
-                                         Width="70" Padding="4,2" Margin="4,0,0,0"
-                                         Background="#FAFAFA" BorderBrush="#E0E0E0"/>
-                            </Grid>
-
-                            <!-- Quote text -->
-                            <TextBlock Text="语录内容" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <TextBox Text="{Binding EditText, UpdateSourceTrigger=PropertyChanged}"
-                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70"
-                                     FontSize="14" Background="#FAFAFA" BorderBrush="#E0E0E0" 
-                                     Padding="8,6" Margin="0,0,0,12"/>
-
-                            <!-- Screenshots (vertical stack) -->
-                            <TextBlock Text="截图" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <StackPanel Margin="0,0,0,8">
-                                <ItemsControl ItemsSource="{Binding CurrentScreenshots}">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Border Background="#F5F5F5" Padding="4" Margin="0,0,0,6" MinHeight="80">
-                                                <Grid>
-                                                    <Image Source="{Binding FilePath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
-                                                           MaxHeight="180" Stretch="Uniform" HorizontalAlignment="Center"/>
-                                                    <Button Content="×" Width="22" Height="22" FontSize="12" FontWeight="Bold"
-                                                            Background="#E53935" Foreground="White" BorderThickness="0"
-                                                            HorizontalAlignment="Right" VerticalAlignment="Top"
-                                                            Margin="0,0,4,4" Cursor="Hand"
-                                                            Command="{Binding DataContext.DeleteScreenshotCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                            CommandParameter="{Binding}"/>
-                                                </Grid>
+                                            <!-- Thumbnail -->
+                                            <Border Grid.Column="0" Width="36" Height="28"
+                                                     Background="#EEE"
+                                                    Margin="0,0,6,0" ClipToBounds="True">
+                                                <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}}"
+                                                       Stretch="UniformToFill" MaxWidth="36" MaxHeight="28"/>
                                             </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <Button Content="+ 添加截图" Command="{Binding AddScreenshotFromFileCommand}"
-                                        Padding="8,4" Background="#1976D2" Foreground="White" BorderThickness="0"
-                                        FontSize="12" Cursor="Hand" HorizontalAlignment="Center"/>
+
+                                            <!-- Text -->
+                                            <Grid Grid.Column="1">
+                                                <Grid.RowDefinitions>
+                                                    <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
+                                                </Grid.RowDefinitions>
+                                                <TextBlock Grid.Row="0" Text="{Binding GameName}"
+                                                           FontWeight="SemiBold" Foreground="#5B6ABF" FontSize="12"/>
+                                                <ContentControl Grid.Row="1" FontSize="11" Foreground="#666"
+                                                                MaxHeight="30" Margin="0,1,0,0">
+                                                    <ContentControl.Content>
+                                                        <MultiBinding Converter="{StaticResource HighlightConv}">
+                                                            <Binding Path="PreviewText"/>
+                                                            <Binding Path="DataContext.SearchText" RelativeSource="{RelativeSource AncestorType=Window}"/>
+                                                        </MultiBinding>
+                                                    </ContentControl.Content>
+                                                </ContentControl>
+                                            </Grid>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+
+                        <TextBlock Text="还没有语录，按 Ctrl+Win+Z 采集"
+                                   Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="#AAA" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"/>
+                    </Grid>
+                </Border>
+
+                <!-- Splitter -->
+                <GridSplitter Grid.Column="1" Width="4" Background="Transparent"
+                              HorizontalAlignment="Center" VerticalAlignment="Stretch"/>
+
+                <!-- Right: Detail Panel -->
+                <Border Grid.Column="2" Background="White"  BorderThickness="0"
+                        Padding="16,12">
+                    <Grid>
+                        <TextBlock Text="选择一条语录查看详情"
+                                   Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"
+                                   Foreground="#AAA" FontSize="14"/>
+
+                        <ScrollViewer Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}}"
+                                      VerticalScrollBarVisibility="Auto">
+                            <StackPanel>
+                                <!-- Game name + Window title -->
+                                <TextBlock Text="游戏" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                                <TextBox Text="{Binding EditGameName, UpdateSourceTrigger=PropertyChanged}"
+                                         FontSize="15" FontWeight="SemiBold" Foreground="#333"
+                                         Background="#FAFAFA" BorderBrush="#E0E0E0"
+                                         Padding="8,6" Margin="0,0,0,4"/>
+
+                                <TextBlock Text="窗口标题" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                                <TextBox Text="{Binding EditWindowTitle}" IsReadOnly="True"
+                                         FontSize="12" Foreground="#888" Background="#F5F5F5"
+                                         BorderBrush="#E0E0E0"
+                                         Padding="8,6" Margin="0,0,0,12"/>
+
+                                <!-- Time -->
+                                <TextBlock Text="采集时间" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                                <Grid Margin="0,0,0,12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <DatePicker Grid.Column="0" SelectedDate="{Binding EditCapturedAtDate}"
+                                                Padding="4,2" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                                    <TextBox Grid.Column="1" Text="{Binding EditCapturedAtTimeString, UpdateSourceTrigger=LostFocus}"
+                                             Width="70" Padding="4,2" Margin="4,0,0,0"
+                                             Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                                </Grid>
+
+                                <!-- Quote text -->
+                                <TextBlock Text="语录内容" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                                <TextBox Text="{Binding EditText, UpdateSourceTrigger=LostFocus}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="70"
+                                         FontSize="14" Background="#FAFAFA" BorderBrush="#E0E0E0"
+                                         Padding="8,6" Margin="0,0,0,12"/>
+
+                                <!-- Screenshots (vertical stack) -->
+                                <TextBlock Text="截图" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                                <StackPanel Margin="0,0,0,8">
+                                    <ItemsControl ItemsSource="{Binding CurrentScreenshots}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Border Background="#F5F5F5" Padding="4" Margin="0,0,0,6" MinHeight="80">
+                                                    <Grid>
+                                                        <Image Source="{Binding FilePath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
+                                                               MaxHeight="180" Stretch="Uniform" HorizontalAlignment="Center"
+                                                               PreviewMouseDown="OnScreenshotPreviewMouseDown" Cursor="Hand"/>
+                                                        <Button Content="×" Width="22" Height="22" FontSize="12" FontWeight="Bold"
+                                                                Background="#E53935" Foreground="White" BorderThickness="0"
+                                                                HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                                Margin="0,0,4,4" Cursor="Hand"
+                                                                Command="{Binding DataContext.DeleteScreenshotCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                CommandParameter="{Binding}"/>
+                                                    </Grid>
+                                                </Border>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <Button Content="+ 添加截图" Command="{Binding AddScreenshotFromFileCommand}"
+                                            Padding="8,4" Background="#1976D2" Foreground="White" BorderThickness="0"
+                                            FontSize="12" Cursor="Hand" HorizontalAlignment="Center"/>
+                                </StackPanel>
+
+                                <!-- Tags — show all, toggle on/off -->
+                                <TextBlock Text="标签" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                                <WrapPanel Margin="0,0,0,4">
+                                    <ItemsControl ItemsSource="{Binding CurrentTags}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                        Background="#5B6ABF" Foreground="White" BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        Command="{Binding DataContext.ToggleTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ItemsControl ItemsSource="{Binding UnassignedTags}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                        Background="#E0E0E0" Foreground="#666" BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        Command="{Binding DataContext.ToggleTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </WrapPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                                    <Button Grid.Column="1" Content="+ 创建标签" Command="{Binding AddTagCommand}"
+                                            Padding="8,4" Margin="4,0,0,0"
+                                            Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
+                                </Grid>
+
+                                <TextBlock Text="分组" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                                <WrapPanel Margin="0,0,0,4">
+                                    <ItemsControl ItemsSource="{Binding CurrentGroups}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                        Background="#5B6ABF" Foreground="White" BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                    <ItemsControl ItemsSource="{Binding UnassignedGroups}">
+                                        <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
+                                                        Background="#E0E0E0" Foreground="#666" BorderThickness="0"
+                                                        Cursor="Hand"
+                                                        Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </WrapPanel>
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                    <TextBox Grid.Column="0" Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
+                                             Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
+                                    <Button Grid.Column="1" Content="+ 创建分组" Command="{Binding AddGroupCommand}"
+                                            Padding="8,4" Margin="4,0,0,0"
+                                            Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
+                                </Grid>
+
+                                <!-- Slideshow display options -->
+                                <TextBlock Text="回想显示" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
+                                <WrapPanel Margin="0,0,0,10">
+                                    <Button Content="游戏名" Margin="2" Padding="8,2" FontSize="11"
+                                            BorderThickness="0" Cursor="Hand"
+                                            Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="game">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#E0E0E0"/>
+                                                <Setter Property="Foreground" Value="#666"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowGameName}" Value="True">
+                                                        <Setter Property="Background" Value="#5B6ABF"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Content="语录内容" Margin="2" Padding="8,2" FontSize="11"
+                                            BorderThickness="0" Cursor="Hand"
+                                            Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="text">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#E0E0E0"/>
+                                                <Setter Property="Foreground" Value="#666"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowText}" Value="True">
+                                                        <Setter Property="Background" Value="#5B6ABF"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                    <Button Content="备注" Margin="2" Padding="8,2" FontSize="11"
+                                            BorderThickness="0" Cursor="Hand"
+                                            Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="notes">
+                                        <Button.Style>
+                                            <Style TargetType="Button">
+                                                <Setter Property="Background" Value="#E0E0E0"/>
+                                                <Setter Property="Foreground" Value="#666"/>
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowNotes}" Value="True">
+                                                        <Setter Property="Background" Value="#5B6ABF"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Button.Style>
+                                    </Button>
+                                </WrapPanel>
+
+                                <!-- Notes -->
+                                <TextBlock Text="备注" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
+                                <TextBox Text="{Binding EditNotes, UpdateSourceTrigger=PropertyChanged}"
+                                         AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50"
+                                         Background="#FAFAFA" BorderBrush="#E0E0E0"
+                                         Padding="8,6" Margin="0,0,0,10"/>
+
+                                <!-- Actions -->
+                                <Grid Margin="0,4,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <Button Grid.Column="0" Content="导出" Command="{Binding ExportSelectedCommand}"
+                                            Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" Margin="0,0,4,0"/>
+                                    <Button Grid.Column="1" Content="打开截图" Command="{Binding OpenScreenshotCommand}"
+                                            Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" />
+                                    <Button Grid.Column="3" Content="保存" Command="{Binding SaveEditCommand}"
+                                            Padding="14,5" FontSize="12" Background="#5B6ABF" Foreground="White" BorderThickness="0" Margin="0,0,4,0"/>
+                                    <Button Grid.Column="4" Content="删除" Command="{Binding DeleteQuoteCommand}"
+                                            Padding="14,5" FontSize="12" Background="#E53935" Foreground="White" BorderThickness="0" />
+                                </Grid>
                             </StackPanel>
+                        </ScrollViewer>
+                    </Grid>
+                </Border>
+            </Grid>
 
-                            <!-- Tags — show all, toggle on/off -->
-                            <TextBlock Text="标签" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
-                            <WrapPanel Margin="0,0,0,4">
-                                <ItemsControl ItemsSource="{Binding CurrentTags}">
-                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
-                                                    Background="#5B6ABF" Foreground="White" BorderThickness="0"
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.ToggleTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <ItemsControl ItemsSource="{Binding UnassignedTags}">
-                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
-                                                    Background="#E0E0E0" Foreground="#666" BorderThickness="0"
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.ToggleTagCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </WrapPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Text="{Binding NewTagText, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
-                                <Button Grid.Column="1" Content="+ 创建标签" Command="{Binding AddTagCommand}"
-                                        Padding="8,4" Margin="4,0,0,0"
-                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
-                            </Grid>
+            <!-- Full-screen grid view -->
+            <Grid Visibility="{Binding IsGridView, Converter={StaticResource BoolToVis}}">
+                <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
+                         BorderThickness="0" Background="Transparent"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         MouseDoubleClick="OnGridListDoubleClick">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal" ItemWidth="170" ItemHeight="155"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <Border Background="#FAFAFA" BorderBrush="#E8E8E8" BorderThickness="1"
+                                    Width="160" Height="145" Margin="6,6,0,0" Padding="6">
+                                <Grid>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="*"/>
+                                        <RowDefinition Height="Auto"/>
+                                    </Grid.RowDefinitions>
+                                    <Border Grid.Row="0" Height="90" Background="#EEE" ClipToBounds="True">
+                                        <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
+                                               Stretch="UniformToFill" MaxHeight="90"/>
+                                    </Border>
+                                    <TextBlock Grid.Row="1" Text="{Binding GameName}"
+                                               FontWeight="SemiBold" Foreground="#5B6ABF" FontSize="11"
+                                               TextTrimming="CharacterEllipsis" Margin="0,3,0,0"/>
+                                    <TextBlock Grid.Row="2" Text="{Binding PreviewText}"
+                                               FontSize="10" Foreground="#888"
+                                               TextTrimming="CharacterEllipsis" MaxHeight="16"/>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
 
-                            <TextBlock Text="分组" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
-                            <WrapPanel Margin="0,0,0,4">
-                                <ItemsControl ItemsSource="{Binding CurrentGroups}">
-                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
-                                                    Background="#5B6ABF" Foreground="White" BorderThickness="0"
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                                <ItemsControl ItemsSource="{Binding UnassignedGroups}">
-                                    <ItemsControl.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Content="{Binding Name}" Margin="2" Padding="8,2" FontSize="11"
-                                                    Background="#E0E0E0" Foreground="#666" BorderThickness="0"
-                                                    Cursor="Hand"
-                                                    Command="{Binding DataContext.ToggleQuoteGroupCommand, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                    CommandParameter="{Binding}"/>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </WrapPanel>
-                            <Grid Margin="0,0,0,10">
-                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0" Text="{Binding NewGroupText, UpdateSourceTrigger=PropertyChanged}"
-                                         Padding="6,4" Background="#FAFAFA" BorderBrush="#E0E0E0"/>
-                                <Button Grid.Column="1" Content="+ 创建分组" Command="{Binding AddGroupCommand}"
-                                        Padding="8,4" Margin="4,0,0,0"
-                                        Background="#5B6ABF" Foreground="White" BorderThickness="0" FontSize="11" Cursor="Hand"/>
-                            </Grid>
+                <TextBlock Text="还没有语录，按 Ctrl+Win+Z 采集"
+                           Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Foreground="#AAA" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"/>
+            </Grid>
 
-                            <!-- Slideshow display options -->
-                            <TextBlock Text="回想显示" FontSize="11" Foreground="#999" Margin="0,0,0,4"/>
-                            <WrapPanel Margin="0,0,0,10">
-                                <Button Content="游戏名" Margin="2" Padding="8,2" FontSize="11"
-                                        BorderThickness="0" Cursor="Hand"
-                                        Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="game">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="#E0E0E0"/>
-                                            <Setter Property="Foreground" Value="#666"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowGameName}" Value="True">
-                                                    <Setter Property="Background" Value="#5B6ABF"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                <Button Content="语录内容" Margin="2" Padding="8,2" FontSize="11"
-                                        BorderThickness="0" Cursor="Hand"
-                                        Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="text">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="#E0E0E0"/>
-                                            <Setter Property="Foreground" Value="#666"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowText}" Value="True">
-                                                    <Setter Property="Background" Value="#5B6ABF"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                                <Button Content="备注" Margin="2" Padding="8,2" FontSize="11"
-                                        BorderThickness="0" Cursor="Hand"
-                                        Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="notes">
-                                    <Button.Style>
-                                        <Style TargetType="Button">
-                                            <Setter Property="Background" Value="#E0E0E0"/>
-                                            <Setter Property="Foreground" Value="#666"/>
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding SelectedQuote.SlideshowShowNotes}" Value="True">
-                                                    <Setter Property="Background" Value="#5B6ABF"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Button.Style>
-                                </Button>
-                            </WrapPanel>
-
-                            <!-- Notes -->
-                            <TextBlock Text="备注" FontSize="11" Foreground="#999" Margin="0,0,0,2"/>
-                            <TextBox Text="{Binding EditNotes, UpdateSourceTrigger=PropertyChanged}"
-                                     AcceptsReturn="True" TextWrapping="Wrap" MinHeight="50"
-                                     Background="#FAFAFA" BorderBrush="#E0E0E0" 
-                                     Padding="8,6" Margin="0,0,0,10"/>
-
-                            <!-- Actions -->
-                            <Grid Margin="0,4,0,0">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <Button Grid.Column="0" Content="导出" Command="{Binding ExportSelectedCommand}"
-                                        Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" Margin="0,0,4,0"/>
-                                <Button Grid.Column="1" Content="打开截图" Command="{Binding OpenScreenshotCommand}"
-                                        Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" />
-                                <Button Grid.Column="3" Content="保存" Command="{Binding SaveEditCommand}"
-                                        Padding="14,5" FontSize="12" Background="#5B6ABF" Foreground="White" BorderThickness="0" Margin="0,0,4,0"/>
-                                <Button Grid.Column="4" Content="删除" Command="{Binding DeleteQuoteCommand}"
-                                        Padding="14,5" FontSize="12" Background="#E53935" Foreground="White" BorderThickness="0" />
-                            </Grid>
-                        </StackPanel>
-                    </ScrollViewer>
-                </Grid>
-            </Border>
         </Grid>
 
         <!-- ===== Status Bar ===== -->
         <Border Grid.Row="2" Margin="0,8,0,0" Background="Transparent">
-            <TextBlock Text="{Binding StatusText}" Foreground="#888" FontSize="12"/>
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="{Binding StatusText}" Foreground="#888" FontSize="12"
+                           VerticalAlignment="Center"/>
+                <ToggleButton Grid.Column="1" Content="{Binding IsGridView, Converter={StaticResource ViewToggleText}}"
+                              IsChecked="{Binding IsGridView}"
+                              Background="Transparent" Foreground="#5B6ABF" BorderBrush="#5B6ABF"
+                              FontSize="11" Padding="8,2" Cursor="Hand"/>
+            </Grid>
         </Border>
     </Grid>
 </Window>

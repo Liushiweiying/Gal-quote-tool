@@ -1,6 +1,6 @@
 ; Galgame Quote Collector — Inno Setup Script
 #define MyAppName "Galgame Quote Collector"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.6"
 #define MyAppPublisher "Liushiweiying"
 #define MyAppURL "https://github.com/Liushiweiying/Galgame-quote-tool"
 #define MyAppExeName "GalgameQuoteCollector.exe"
@@ -14,7 +14,7 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=no
 DisableProgramGroupPage=yes
-OutputDir=publish-v107
+OutputDir=publish-v140
 OutputBaseFilename=GalgameQuoteCollector_Setup
 Compression=lzma
 SolidCompression=yes
@@ -29,11 +29,10 @@ Name: "desktopicon"; Description: "Create a &desktop shortcut"; GroupDescription
 
 [Dirs]
 Name: "{app}"; Flags: uninsalwaysuninstall
+Name: "{app}\runtimes"; Flags: uninsalwaysuninstall
 
 [Files]
-Source: "publish-tmp3\GalgameQuoteCollector.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "publish-tmp3\*.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "publish-tmp3\*.json"; DestDir: "{app}"; Flags: ignoreversion
+Source: "publish-installer\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs
 Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

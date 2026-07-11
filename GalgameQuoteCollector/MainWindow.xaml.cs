@@ -141,6 +141,21 @@ public partial class MainWindow : Window
         }
     }
 
+    private void OnScreenshotPreviewMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is not Image image) return;
+        if (image.DataContext is not Screenshot screenshot) return;
+        if (DataContext is not MainViewModel vm) return;
+        vm.OpenScreenshotFileCommand.Execute(screenshot);
+    }
+
+    private void OnGridListDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        // Switch back to list view and auto-select the double-clicked item
+        vm.IsGridView = false;
+    }
+
     private void OnBatchDelete(object sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm) return;

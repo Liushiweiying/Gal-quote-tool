@@ -113,7 +113,19 @@ public class StorageService : IDisposable
 
         var result = cmd.ExecuteScalar();
         if (result is long id)
+        {
             quote.Id = (int)id;
+
+            // Also add to Screenshots table for multi-screenshot support
+            if (!string.IsNullOrEmpty(quote.ScreenshotPath))
+            {
+                using var ssCmd = _connection!.CreateCommand();
+                ssCmd.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) VALUES (@Q, @F, 0)";
+                ssCmd.Parameters.AddWithValue("@Q", quote.Id);
+                ssCmd.Parameters.AddWithValue("@F", quote.ScreenshotPath);
+                ssCmd.ExecuteNonQuery();
+            }
+        }
     }
 
     public List<Quote> GetAllQuotes()
@@ -391,8 +403,36 @@ public class StorageService : IDisposable
 
     public void DeleteScreenshot(int id)
     {
+        // Get the QuoteId before deleting
+        int quoteId;
+        using (var get = _connection!.CreateCommand())
+        {
+            get.CommandText = "SELECT QuoteId FROM Screenshots WHERE Id = @Id";
+            get.Parameters.AddWithValue("@Id", id);
+            var result = get.ExecuteScalar();
+            if (result == null) return;
+            quoteId = Convert.ToInt32(result);
+        }
+
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = "DELETE FROM Screenshots WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@Id", id);
+        cmd.ExecuteNonQuery();
+
+        // Renumber SortOrder to fill gaps
+        using (var renum = _connection!.CreateCommand())
+        {
+            renum.CommandText = "UPDATE Screenshots SET SortOrder = (SELECT COUNT(*) FROM Screenshots s2 WHERE s2.QuoteId = @Q AND s2.SortOrder <= Screenshots.SortOrder) WHERE QuoteId = @Q";
+            renum.Parameters.AddWithValue("@Q", quoteId);
+            renum.ExecuteNonQuery();
+        }
+    }
+
+    public void UpdateScreenshotPath(int id, string newPath)
+    {
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "UPDATE Screenshots SET FilePath = @P WHERE Id = @Id";
+        cmd.Parameters.AddWithValue("@P", newPath);
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.ExecuteNonQuery();
     }

@@ -14,7 +14,7 @@ namespace GalgameQuoteCollector.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const string AppVersion = "v1.1.5";
+    public const string AppVersion = "v1.1.6";
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -126,7 +126,10 @@ public partial class MainViewModel : ObservableObject
     private string _editText = string.Empty;
 
     [ObservableProperty]
-    private DateTime _editCapturedAt = DateTime.Now;
+    private DateTime _editCapturedAtDate = DateTime.Now;
+
+    [ObservableProperty]
+    private string _editCapturedAtTimeString = "00:00:00";
 
     // ── Tags ──
     [ObservableProperty]
@@ -188,7 +191,8 @@ public partial class MainViewModel : ObservableObject
             EditGameName = value.GameName;
             EditWindowTitle = value.WindowTitle;
             EditNotes = value.Notes;
-            EditCapturedAt = value.CapturedAt;
+            EditCapturedAtDate = value.CapturedAt.Date;
+            EditCapturedAtTimeString = value.CapturedAt.ToString("HH:mm:ss");
             RefreshCurrentTags();
             RefreshCurrentGroups();
             RefreshCurrentScreenshots();
@@ -830,7 +834,47 @@ public partial class MainViewModel : ObservableObject
         SelectedQuote.GameName = EditGameName;
         SelectedQuote.WindowTitle = EditWindowTitle;
         SelectedQuote.Notes = EditNotes;
-        SelectedQuote.CapturedAt = EditCapturedAt;
+        if (TimeSpan.TryParse(EditCapturedAtTimeString, out var ts))
+        {
+            var newCapturedAt = EditCapturedAtDate.Date + ts;
+            var oldCapturedAt = SelectedQuote.CapturedAt;
+
+            // Rename screenshot files if timestamp changed
+            if (oldCapturedAt != newCapturedAt)
+            {
+                var oldTimestamp = oldCapturedAt.ToString("yyyy-MM-dd_HHmmss_fff");
+                var newTimestamp = newCapturedAt.ToString("yyyy-MM-dd_HHmmss_fff");
+                var screenshots = _storageService.GetScreenshots(SelectedQuote.Id);
+                foreach (var ss in screenshots)
+                {
+                    var oldPath = ss.FilePath;
+                    if (!File.Exists(oldPath)) continue;
+                    var dir = Path.GetDirectoryName(oldPath)!;
+                    var oldName = Path.GetFileName(oldPath);
+                    var newName = oldName.Replace(oldTimestamp, newTimestamp);
+                    if (newName == oldName) continue;
+                    var newPath = Path.Combine(dir, newName);
+                    try
+                    {
+                        File.Move(oldPath, newPath);
+                        _storageService.UpdateScreenshotPath(ss.Id, newPath);
+                    }
+                    catch { }
+                }
+                RefreshCurrentScreenshots();
+            }
+
+            SelectedQuote.CapturedAt = newCapturedAt;
+        }
+        else
+        {
+            SelectedQuote.CapturedAt = EditCapturedAtDate;
+        }
+
+        // Re-populate ScreenshotPath for list thumbnail
+        var firstSs = _storageService.GetScreenshots(SelectedQuote.Id).FirstOrDefault();
+        SelectedQuote.ScreenshotPath = firstSs?.FilePath ?? "";
+
         _storageService.UpdateQuote(SelectedQuote);
 
         RefreshQuotes();
@@ -1169,6 +1213,10 @@ public partial class MainViewModel : ObservableObject
             int updated = 0;
             foreach (var q in quotes)
             {
+                // Populate ScreenshotPath for list thumbnail (first screenshot)
+                var firstSs = _storageService.GetScreenshots(q.Id).FirstOrDefault();
+                q.ScreenshotPath = firstSs?.FilePath ?? q.ScreenshotPath;
+
                 var source = !string.IsNullOrWhiteSpace(q.WindowTitle) ? q.WindowTitle : q.GameName;
                 var detected = _gameDetectService.DetectGameName(source);
                 if (!string.IsNullOrWhiteSpace(detected) && detected != q.GameName)
