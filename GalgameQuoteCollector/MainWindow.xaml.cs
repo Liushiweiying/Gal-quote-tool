@@ -39,12 +39,30 @@ public partial class MainWindow : Window
         sortMenu.Items.Add(MakeRadioItem("按相关度", vm.SortMode == 2, () => vm.SortMode = 2));
         menu.Items.Add(sortMenu);
 
-        // ── Game ──
+        // ── Game (multi-select, click to toggle, right-click to exclude) ──
         var gameMenu = new MenuItem { Header = "游戏" };
+        var gameExcludeItem = new MenuItem
+        {
+            Header = vm.GameFilterExclude ? "✓ 排除模式" : "  排除模式",
+            IsCheckable = true, IsChecked = vm.GameFilterExclude,
+            StaysOpenOnClick = true
+        };
+        gameExcludeItem.Click += (_, _) => { vm.GameFilterExclude = !vm.GameFilterExclude; };
+        gameMenu.Items.Add(gameExcludeItem);
+        gameMenu.Items.Add(new Separator());
         foreach (var g in vm.AvailableGamesForFilter)
         {
-            var isSelected = g.Id == vm.SelectedGameFilter;
-            var item = MakeRadioItem(g.Name, isSelected, () => vm.SelectedGameFilter = g.Id);
+            var id = g.Id;
+            var isSelected = vm.SelectedGameFilters.Contains(id);
+            var item = new MenuItem { Header = g.Name, IsCheckable = true, IsChecked = isSelected, StaysOpenOnClick = true };
+            item.Click += (_, _) =>
+            {
+                if (vm.SelectedGameFilters.Contains(id))
+                    vm.SelectedGameFilters.Remove(id);
+                else
+                    vm.SelectedGameFilters.Add(id);
+                vm.RefreshQuotes();
+            };
             gameMenu.Items.Add(item);
         }
         menu.Items.Add(gameMenu);

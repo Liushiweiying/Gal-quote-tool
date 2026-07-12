@@ -176,7 +176,10 @@ public partial class MainViewModel : ObservableObject
     private ObservableCollection<FilterItem> _availableGamesForFilter = new();
 
     [ObservableProperty]
-    private int _selectedGameFilter = 0; // 0 = all
+    private ObservableCollection<int> _selectedGameFilters = new();
+
+    [ObservableProperty]
+    private bool _gameFilterExclude;
 
     [ObservableProperty]
     private bool _isGridView;
@@ -201,11 +204,7 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnGroupFilterExcludeChanged(bool value) { RefreshQuotes(); }
     partial void OnTagFilterExcludeChanged(bool value) { RefreshQuotes(); }
-
-    partial void OnSelectedGameFilterChanged(int value)
-    {
-        RefreshQuotes();
-    }
+    partial void OnGameFilterExcludeChanged(bool value) { RefreshQuotes(); }
 
     partial void OnSearchTextChanged(string value)
     {
@@ -1369,13 +1368,17 @@ public partial class MainViewModel : ObservableObject
                 : source.Where(q => _storageService.GetTagsForQuote(q.Id).Any(t => filterTagIds.Contains(t.Id)));
         }
 
-        // Filter by game
-        if (SelectedGameFilter > 0)
+        // Filter by game (multi-select + exclude)
+        if (SelectedGameFilters.Count > 0)
         {
-            var gameName = AvailableGamesForFilter
-                .FirstOrDefault(f => f.Id == SelectedGameFilter)?.Name;
-            if (gameName != null)
-                source = source.Where(q => q.GameName == gameName);
+            var gameNames = AvailableGamesForFilter
+                .Where(f => SelectedGameFilters.Contains(f.Id))
+                .Select(f => f.Name)
+                .Where(n => n != null)
+                .ToHashSet();
+            source = GameFilterExclude
+                ? source.Where(q => !gameNames.Contains(q.GameName))
+                : source.Where(q => gameNames.Contains(q.GameName));
         }
 
         // Filter by text
