@@ -66,6 +66,21 @@ public partial class App : Application
             _startMinimized = e.Args.Contains("--minimized");
             Log($"Minimized mode: {_startMinimized}");
 
+            // High priority for auto-start scenarios (faster capture hotkey response)
+            if (_startMinimized)
+            {
+                try
+                {
+                    using var proc = System.Diagnostics.Process.GetCurrentProcess();
+                    proc.PriorityClass = System.Diagnostics.ProcessPriorityClass.High;
+                    Log("Priority set to High");
+                }
+                catch (Exception ex)
+                {
+                    Log($"Failed to set priority: {ex.Message}");
+                }
+            }
+
             CreateTrayIcon();
             Log("Tray icon created");
 
