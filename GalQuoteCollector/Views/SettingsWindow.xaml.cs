@@ -32,6 +32,20 @@ public partial class SettingsWindow : Window
             { FontCombo.SelectedIndex = i; break; }
         }
 
+        // Slideshow fonts
+        SlideshowChineseFontCombo.ItemsSource = fonts;
+        for (int i = 0; i < fonts.Count; i++)
+        {
+            if (fonts[i].Source == currentConfig.SlideshowChineseFont)
+            { SlideshowChineseFontCombo.SelectedIndex = i; break; }
+        }
+        SlideshowEnglishFontCombo.ItemsSource = fonts;
+        for (int i = 0; i < fonts.Count; i++)
+        {
+            if (fonts[i].Source == currentConfig.SlideshowEnglishFont)
+            { SlideshowEnglishFontCombo.SelectedIndex = i; break; }
+        }
+
         RulesList.ItemsSource = currentConfig.GameNameRules;
         EnableTrackingCheckBox.IsChecked = currentConfig.EnableUsageTracking;
         HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
@@ -171,6 +185,8 @@ public partial class SettingsWindow : Window
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         _newConfig.SlideshowLoop = SlideshowLoopCheckBox.IsChecked == true;
         _newConfig.FontFamily = FontCombo.SelectedItem is System.Windows.Media.FontFamily f ? f.Source : "Segoe UI";
+        _newConfig.SlideshowChineseFont = SlideshowChineseFontCombo.SelectedItem is System.Windows.Media.FontFamily cf ? cf.Source : "Microsoft YaHei";
+        _newConfig.SlideshowEnglishFont = SlideshowEnglishFontCombo.SelectedItem is System.Windows.Media.FontFamily ef ? ef.Source : "Segoe UI";
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
         var dir = ScreenshotDirBox.Text.Trim();

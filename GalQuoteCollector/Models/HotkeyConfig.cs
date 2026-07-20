@@ -15,6 +15,8 @@ public class HotkeyConfig
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public bool SlideshowLoop { get; set; }
     public string FontFamily { get; set; } = "Segoe UI";
+    public string SlideshowChineseFont { get; set; } = "Microsoft YaHei";
+    public string SlideshowEnglishFont { get; set; } = "Segoe UI";
     public bool EnableUsageTracking { get; set; }
     public bool HideUnrecognized { get; set; }
     public string ScreenshotDirectory { get; set; } = "";
@@ -97,6 +99,8 @@ public class HotkeyConfig
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
             FontFamily = FontFamily,
+            SlideshowChineseFont = SlideshowChineseFont,
+            SlideshowEnglishFont = SlideshowEnglishFont,
             EnableUsageTracking = EnableUsageTracking,
             HideUnrecognized = HideUnrecognized,
             ScreenshotDirectory = ScreenshotDirectory,

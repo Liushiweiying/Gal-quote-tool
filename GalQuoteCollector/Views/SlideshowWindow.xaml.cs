@@ -24,13 +24,16 @@ public partial class SlideshowWindow : Window
     private bool _ready;
     private bool _isFullscreen;
     private bool _isTopmost;
+    private readonly string _chineseFont;
+    private readonly string _englishFont;
 
     public SlideshowWindow(Window owner, List<Quote> quotes,
         Dictionary<int, List<Tag>> tagsByQuote,
         Dictionary<int, List<QuoteGroup>> groupsByQuote,
         List<QuoteGroup> availableGroups,
         List<Tag> availableTags,
-        int slideshowMode, bool slideshowLoop)
+        int slideshowMode, bool slideshowLoop,
+        string chineseFont = "Microsoft YaHei", string englishFont = "Segoe UI")
     {
         InitializeComponent();
         Owner = owner;
@@ -41,6 +44,8 @@ public partial class SlideshowWindow : Window
         _availableTags = availableTags;
         _mode = slideshowMode;
         _loop = slideshowLoop;
+        _chineseFont = chineseFont;
+        _englishFont = englishFont;
 
         // Populate group filter
         foreach (var g in availableGroups)
@@ -97,6 +102,17 @@ public partial class SlideshowWindow : Window
         var quote = Current;
         GameNameText.Text = string.IsNullOrWhiteSpace(quote.GameName) ? "未分类" : quote.GameName;
         QuoteText.Text = quote.Text;
+
+        // Apply Chinese/English font based on text content
+        var hasChinese = quote.Text.Any(c => c >= 0x4E00 && c <= 0x9FFF);
+        var fontName = hasChinese ? _chineseFont : _englishFont;
+        var font = new System.Windows.Media.FontFamily(fontName);
+        GameNameText.FontFamily = font;
+        QuoteText.FontFamily = font;
+        FsGameNameText.FontFamily = font;
+        FsQuoteText.FontFamily = font;
+        FsNotesText.FontFamily = font;
+        TagsText.FontFamily = font;
 
         TagsText.Text = _tagsByQuote.TryGetValue(quote.Id, out var tags) && tags.Count > 0
             ? string.Join("  ", tags.Select(t => $"#{t.Name}")) : "";

@@ -67,6 +67,15 @@
             <CheckBox x:Name="SlideshowLoopCheckBox" Content="循环播放（到末尾自动回到开头）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"/>
 
+            <TextBlock Text="回想中文字体" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
+            <ComboBox x:Name="SlideshowChineseFontCombo" FontSize="13" Margin="0,0,0,4"
+                      Background="White" BorderBrush="#DDD"
+                      DisplayMemberPath="Source"/>
+            <TextBlock Text="回想英文字体" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
+            <ComboBox x:Name="SlideshowEnglishFontCombo" FontSize="13" Margin="0,0,0,6"
+                      Background="White" BorderBrush="#DDD"
+                      DisplayMemberPath="Source"/>
+
             <TextBlock Text="界面字体" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <ComboBox x:Name="FontCombo" FontSize="13" Margin="0,0,0,6"
                       Background="White" BorderBrush="#DDD"

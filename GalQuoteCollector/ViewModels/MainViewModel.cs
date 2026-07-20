@@ -530,7 +530,8 @@ public partial class MainViewModel : ObservableObject
         var allTags = _storageService.GetAllTags();
 
         var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote,
-            groupsByQuote, allGroups, allTags, slideshowMode, slideshowLoop);
+            groupsByQuote, allGroups, allTags, slideshowMode, slideshowLoop,
+            cfg.SlideshowChineseFont, cfg.SlideshowEnglishFont);
         win.ShowDialog();
     }
 
