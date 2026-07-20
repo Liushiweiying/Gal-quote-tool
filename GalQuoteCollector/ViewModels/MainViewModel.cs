@@ -1046,6 +1046,27 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void RepairScreenshots()
+    {
+        int fixedCount = 0;
+        foreach (var q in _allQuotes)
+        {
+            if (string.IsNullOrEmpty(q.ScreenshotPath)) continue;
+            var existing = _storageService.GetScreenshots(q.Id);
+            if (existing.Count == 0)
+            {
+                _storageService.AddScreenshot(q.Id, q.ScreenshotPath, 0);
+                fixedCount++;
+            }
+        }
+        RefreshQuotes();
+        if (SelectedQuote != null) RefreshCurrentScreenshots();
+        StatusText = fixedCount > 0
+            ? $"已修复 {fixedCount} 条语录的截图关联"
+            : "所有语录截图关联正常";
+    }
+
+    [RelayCommand]
     private void RematchScreenshots()
     {
         if (!Directory.Exists(_screenshotDir))
