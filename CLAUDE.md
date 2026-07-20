@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Build & Run
 
 ```bash
-cd GalgameQuoteCollector
+cd GalQuoteCollector
 dotnet build
 dotnet run
 ```
@@ -23,7 +23,7 @@ dotnet publish -r win-x64 -c Release -p:PublishSingleFile=true --self-contained 
 rm -rf publish-tmp publish-tmp2 && mkdir -p publish-v{N} && \
 dotnet publish -r win-x64 -c Release --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-v{N} --force && \
 dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-tmp --force && \
-mv publish-tmp/GalgameQuoteCollector.exe publish-v{N}/GalgameQuoteCollector_selfcontained.exe && \
+mv publish-tmp/GalQuoteCollector.exe publish-v{N}/GalQuoteCollector_selfcontained.exe && \
 dotnet publish -r win-x64 -c Release --self-contained true -o publish-tmp2 --force && \
 powershell -Command "Compress-Archive -Path 'publish-tmp2/*' -DestinationPath 'publish-v{N}/publish-folder.zip' -Force"
 ```
@@ -72,7 +72,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 
 ### Database
 
-`%LOCALAPPDATA%\GalgameQuoteCollector\quotes.db` — Quotes, Tags, QuoteTags, GroupsTable, QuoteGroupMaps.
+`%LOCALAPPDATA%\GalQuoteCollector\quotes.db` — Quotes, Tags, QuoteTags, GroupsTable, QuoteGroupMaps.
 
 ### Key Behaviors
 
@@ -83,4 +83,4 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **Slideshow**: White theme. Chronological or shuffled order (setting). Group/tag filters. Enter = random jump. Fullscreen F11.
 - **Search highlight**: Keyword matches shown with yellow background in list preview.
 - **Thumbnail loading**: Asynchronous via `ThumbnailConverter` (DecodePixelWidth=84).
-- **Screenshot path**: `C:\Users\...\Pictures\GalgameQuoteCollector\` (migrated from AppData on first run).
+- **Screenshot path**: `C:\Users\...\Pictures\GalQuoteCollector\` (migrated from AppData on first run).

@@ -1,9 +1,9 @@
-; Galgame Quote Collector — Inno Setup Script
-#define MyAppName "Galgame Quote Collector"
+; Gal Quote Collector — Inno Setup Script
+#define MyAppName "Gal Quote Collector"
 #define MyAppVersion "1.1.6"
 #define MyAppPublisher "Liushiweiying"
-#define MyAppURL "https://github.com/Liushiweiying/Galgame-quote-tool"
-#define MyAppExeName "GalgameQuoteCollector.exe"
+#define MyAppURL "https://github.com/Liushiweiying/Gal-quote-tool"
+#define MyAppExeName "GalQuoteCollector.exe"
 
 [Setup]
 AppId={{B4F8C1A2-3D5E-4F67-9A0B-1C2D3E4F5G6H}
@@ -15,7 +15,7 @@ DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=no
 DisableProgramGroupPage=yes
 OutputDir=publish-v140
-OutputBaseFilename=GalgameQuoteCollector_Setup
+OutputBaseFilename=GalQuoteCollector_Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
@@ -93,14 +93,14 @@ begin
 
   if (CurUninstallStep = usPostUninstall) and DeleteData then
   begin
-    DataDir := ExpandConstant('{localappdata}') + '\GalgameQuoteCollector';
+    DataDir := ExpandConstant('{localappdata}') + '\GalQuoteCollector';
 
     SettingsPath := DataDir + '\settings.json';
     ScreenDir := ExtractScreenshotDir(SettingsPath);
     if (ScreenDir <> '') and (DirExists(ScreenDir)) then
       DelTree(ScreenDir, True, True, True);
 
-    ScreenDir := ExpandConstant('{userpictures}') + '\GalgameQuoteCollector';
+    ScreenDir := ExpandConstant('{userpictures}') + '\GalQuoteCollector';
     if DirExists(ScreenDir) then
       DelTree(ScreenDir, True, True, True);
 

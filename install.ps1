@@ -1,4 +1,4 @@
-# Galgame Quote Collector - Installer
+# Gal Quote Collector - Installer
 # Run this script to install the application
 
 param(
@@ -7,15 +7,15 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
-$AppName = "Galgame 语录收藏"
-$ExeName = "GalgameQuoteCollector.exe"
+$AppName = "Gal 语录收藏"
+$ExeName = "GalQuoteCollector.exe"
 
 # Paths
-$InstallDir = "$env:LOCALAPPDATA\Programs\GalgameQuoteCollector"
+$InstallDir = "$env:LOCALAPPDATA\Programs\GalQuoteCollector"
 $StartMenuDir = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\$AppName"
 $DesktopDir = [Environment]::GetFolderPath("Desktop")
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$SourceExe = Join-Path $ScriptDir "publish-v105\GalgameQuoteCollector.exe"
+$SourceExe = Join-Path $ScriptDir "publish-v105\GalQuoteCollector.exe"
 
 # Admin check
 $IsAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -25,7 +25,7 @@ function Write-Error($msg) { Write-Host "!! $msg" -ForegroundColor Red }
 
 if (!(Test-Path $SourceExe)) {
     Write-Error "Source exe not found: $SourceExe"
-    Write-Error "Make sure this script is in the project root with publish-v105\GalgameQuoteCollector.exe"
+    Write-Error "Make sure this script is in the project root with publish-v105\GalQuoteCollector.exe"
     exit 1
 }
 
@@ -41,7 +41,7 @@ $wshell = New-Object -ComObject WScript.Shell
 $shortcut = $wshell.CreateShortcut("$StartMenuDir\$AppName.lnk")
 $shortcut.TargetPath = "$InstallDir\$ExeName"
 $shortcut.WorkingDirectory = $InstallDir
-$shortcut.Description = "Galgame Quote Collector"
+$shortcut.Description = "Gal Quote Collector"
 $shortcut.Save()
 
 # 3. Desktop shortcut (optional)
@@ -50,13 +50,13 @@ if ($DesktopShortcut) {
     $shortcut = $wshell.CreateShortcut("$DesktopDir\$AppName.lnk")
     $shortcut.TargetPath = "$InstallDir\$ExeName"
     $shortcut.WorkingDirectory = $InstallDir
-    $shortcut.Description = "Galgame Quote Collector"
+    $shortcut.Description = "Gal Quote Collector"
     $shortcut.Save()
 }
 
 # 4. Uninstall registry entry (per-user, no admin needed)
 Write-Info "Registering uninstall..."
-$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GalgameQuoteCollector"
+$uninstallKey = "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GalQuoteCollector"
 New-Item -Path $uninstallKey -Force | Out-Null
 Set-ItemProperty -Path $uninstallKey -Name "DisplayName" -Value $AppName
 Set-ItemProperty -Path $uninstallKey -Name "DisplayVersion" -Value "1.0.0"
@@ -69,7 +69,7 @@ Set-ItemProperty -Path $uninstallKey -Name "NoRepair" -Value 1
 
 # Copy uninstall script
 @"
-# Galgame Quote Collector - Uninstaller
+# Gal Quote Collector - Uninstaller
 `$InstallDir = "$InstallDir"
 `$AppName = "$AppName"
 `$StartMenuDir = "$StartMenuDir"
@@ -86,7 +86,7 @@ if (Test-Path `$StartMenuDir) { Remove-Item -Recurse -Force `$StartMenuDir }
 if (Test-Path `$desktopLnk) { Remove-Item -Force `$desktopLnk }
 
 # Remove uninstall entry
-Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GalgameQuoteCollector" -Force
+Remove-Item -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Uninstall\GalQuoteCollector" -Force
 
 Write-Host "Uninstalled successfully."
 Start-Sleep 2

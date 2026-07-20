@@ -1,0 +1,3 @@
+D:\claude-code\Galgame-quote-tool\publish\framework-dependent\GalgameQuoteCollector.pdb
+D:\claude-code\Galgame-quote-tool\publish\framework-dependent\e_sqlite3.dll
+D:\claude-code\Galgame-quote-tool\publish\framework-dependent\GalgameQuoteCollector.exe

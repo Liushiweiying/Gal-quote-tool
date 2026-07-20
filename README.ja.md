@@ -1,4 +1,4 @@
-# Galgame セリフ収集ツール
+# Gal セリフ収集ツール
 
 [English](README.md) | [中文](README.zh.md)
 
@@ -28,11 +28,11 @@
 
 | ファイル | サイズ | 説明 |
 |---|---|---|
-| `GalgameQuoteCollector.exe` | ~27MB | .NET 8 ランタイムが必要 |
-| `GalgameQuoteCollector_selfcontained.exe` | ~181MB | 単一ファイル、ランタイム不要 |
+| `GalQuoteCollector.exe` | ~27MB | .NET 8 ランタイムが必要 |
+| `GalQuoteCollector_selfcontained.exe` | ~181MB | 単一ファイル、ランタイム不要 |
 | `publish-folder.zip` | ~74MB | 自己完結 ZIP、解凍して実行 |
 
-> データ保存先：`%LOCALAPPDATA%\GalgameQuoteCollector\`
+> データ保存先：`%LOCALAPPDATA%\GalQuoteCollector\`
 
 ## 使い方
 
@@ -70,7 +70,7 @@
 
 ### ビルド
 ```bash
-cd GalgameQuoteCollector
+cd GalQuoteCollector
 dotnet build
 dotnet run
 ```
@@ -94,7 +94,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## データ保存先
 ```
-%LOCALAPPDATA%\GalgameQuoteCollector\
+%LOCALAPPDATA%\GalQuoteCollector\
 ├── quotes.db          - SQLite データベース
 ├── settings.json      - 設定ファイル
 └── screenshots\       - PNG スクリーンショット

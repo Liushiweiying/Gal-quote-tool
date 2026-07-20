@@ -1,4 +1,4 @@
-# Galgame Quote Collector
+# Gal Quote Collector
 
 [中文](README.zh.md) | [日本語](README.ja.md)
 
@@ -30,11 +30,11 @@ From the [Releases](../../releases) page:
 
 | File | Size | Notes |
 |---|---|---|
-| `GalgameQuoteCollector.exe` | ~27MB | Requires .NET 8 runtime |
-| `GalgameQuoteCollector_selfcontained.exe` | ~181MB | Self-contained, no runtime needed |
+| `GalQuoteCollector.exe` | ~27MB | Requires .NET 8 runtime |
+| `GalQuoteCollector_selfcontained.exe` | ~181MB | Self-contained, no runtime needed |
 | `publish-folder.zip` | ~74MB | Self-contained ZIP, extract and run |
 
-> Data is stored at `%LOCALAPPDATA%\GalgameQuoteCollector\` (database, screenshots, settings).
+> Data is stored at `%LOCALAPPDATA%\GalQuoteCollector\` (database, screenshots, settings).
 
 ## Usage
 
@@ -72,7 +72,7 @@ Add custom rules in Settings. E.g. `Summer Pockets -> Summer Pockets REFLECTION 
 
 ### Build & Run
 ```bash
-cd GalgameQuoteCollector
+cd GalQuoteCollector
 dotnet build
 dotnet run
 ```
@@ -96,7 +96,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Data Location
 ```
-%LOCALAPPDATA%\GalgameQuoteCollector\
+%LOCALAPPDATA%\GalQuoteCollector\
 ├── quotes.db          - SQLite database
 ├── settings.json      - Hotkey, rules, delay config
 └── screenshots\       - PNG screenshots

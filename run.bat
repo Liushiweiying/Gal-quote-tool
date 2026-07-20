@@ -1,6 +1,6 @@
 @echo off
-title Galgame Quote Collector
-cd /d "%~dp0GalgameQuoteCollector"
+title Gal Quote Collector
+cd /d "%~dp0GalQuoteCollector"
 
 :: check dotnet SDK
 dotnet --version >nul 2>&1
@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
 )
 
 :: kill lingering process
-taskkill /F /IM GalgameQuoteCollector.exe 2>nul >nul
+taskkill /F /IM GalQuoteCollector.exe 2>nul >nul
 
 :: build and run
 dotnet run --no-build 2>nul

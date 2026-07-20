@@ -1,4 +1,4 @@
-# Galgame 语录收藏工具
+# Gal 语录收藏工具
 
 [English](README.md) | [日本語](README.ja.md)
 
@@ -28,11 +28,11 @@
 
 | 文件 | 大小 | 说明 |
 |---|---|---|
-| `GalgameQuoteCollector.exe` | ~27MB | 需 .NET 8 运行时 |
-| `GalgameQuoteCollector_selfcontained.exe` | ~181MB | 单文件自包含，无需运行时 |
+| `GalQuoteCollector.exe` | ~27MB | 需 .NET 8 运行时 |
+| `GalQuoteCollector_selfcontained.exe` | ~181MB | 单文件自包含，无需运行时 |
 | `publish-folder.zip` | ~74MB | 自包含压缩包，解压即用 |
 
-> 数据目录：`%LOCALAPPDATA%\GalgameQuoteCollector\`
+> 数据目录：`%LOCALAPPDATA%\GalQuoteCollector\`
 
 ## 使用
 
@@ -70,7 +70,7 @@
 
 ### 构建
 ```bash
-cd GalgameQuoteCollector
+cd GalQuoteCollector
 dotnet build
 dotnet run
 ```
@@ -94,7 +94,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## 数据目录
 ```
-%LOCALAPPDATA%\GalgameQuoteCollector\
+%LOCALAPPDATA%\GalQuoteCollector\
 ├── quotes.db
 ├── settings.json
 └── screenshots\
