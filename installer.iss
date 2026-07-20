@@ -93,7 +93,10 @@ begin
 
   if (CurUninstallStep = usPostUninstall) and DeleteData then
   begin
+    // Check both old and new data paths
     DataDir := ExpandConstant('{localappdata}') + '\GalQuoteCollector';
+    if not DirExists(DataDir) then
+      DataDir := ExpandConstant('{localappdata}') + '\GalgameQuoteCollector';
 
     SettingsPath := DataDir + '\settings.json';
     ScreenDir := ExtractScreenshotDir(SettingsPath);
@@ -101,6 +104,8 @@ begin
       DelTree(ScreenDir, True, True, True);
 
     ScreenDir := ExpandConstant('{userpictures}') + '\GalQuoteCollector';
+    if not DirExists(ScreenDir) then
+      ScreenDir := ExpandConstant('{userpictures}') + '\GalgameQuoteCollector';
     if DirExists(ScreenDir) then
       DelTree(ScreenDir, True, True, True);
 

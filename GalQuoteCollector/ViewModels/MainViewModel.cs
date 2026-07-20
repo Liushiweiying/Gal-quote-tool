@@ -43,6 +43,20 @@ public partial class MainViewModel : ObservableObject
         _dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GalQuoteCollector");
+
+        // Backward compatibility: use old GalgameQuoteCollector paths if they exist
+        var oldDataDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "GalgameQuoteCollector");
+        if (Directory.Exists(oldDataDir))
+            _dataDir = oldDataDir;
+
+        var oldScreenshotDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            "GalgameQuoteCollector");
+        if (Directory.Exists(oldScreenshotDir))
+            _screenshotDir = oldScreenshotDir;
+
         Directory.CreateDirectory(_dataDir);
 
         _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
