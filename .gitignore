@@ -4,6 +4,8 @@ publish-v*/
 publish/
 
 # Build results
+GalQuoteCollector/bin/
+GalQuoteCollector/obj/
 GalgameQuoteCollector/bin/
 GalgameQuoteCollector/obj/
 
