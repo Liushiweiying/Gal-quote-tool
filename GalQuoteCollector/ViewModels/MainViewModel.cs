@@ -773,6 +773,12 @@ public partial class MainViewModel : ObservableObject
                 if (string.IsNullOrEmpty(exePath))
                     return (false, "无法获取程序路径");
 
+                // Clean up old VBS/lnk from previous naming
+                var oldVbs = Path.Combine(startupFolder, "GalgameQuoteCollector.vbs");
+                if (File.Exists(oldVbs)) File.Delete(oldVbs);
+                var oldLnk = Path.Combine(startupFolder, "GalgameQuoteCollector.lnk");
+                if (File.Exists(oldLnk)) File.Delete(oldLnk);
+
                 // Write a VBScript to startup folder — no admin rights needed, no console flash
                 var vbsPath = Path.Combine(startupFolder, "GalQuoteCollector.vbs");
                 var vbsContent = $"CreateObject(\"WScript.Shell\").Run \"\"\"{exePath}\"\" --minimized\", 0, False";
@@ -785,15 +791,18 @@ public partial class MainViewModel : ObservableObject
             }
             else
             {
-                // Remove VBS
-                var vbsPath = Path.Combine(startupFolder, "GalQuoteCollector.vbs");
-                if (File.Exists(vbsPath))
-                    File.Delete(vbsPath);
-
+                // Remove VBS (both old and new naming)
+                foreach (var name in new[] { "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs" })
+                {
+                    var path = Path.Combine(startupFolder, name);
+                    if (File.Exists(path)) File.Delete(path);
+                }
                 // Also clean up old shortcut if exists
-                var lnkPath = Path.Combine(startupFolder, "GalQuoteCollector.lnk");
-                if (File.Exists(lnkPath))
-                    File.Delete(lnkPath);
+                foreach (var name in new[] { "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
+                {
+                    var path = Path.Combine(startupFolder, name);
+                    if (File.Exists(path)) File.Delete(path);
+                }
 
                 return (true, "已移除开机自启");
             }
@@ -809,10 +818,12 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            var vbsPath = Path.Combine(startupFolder, "GalQuoteCollector.vbs");
-            if (File.Exists(vbsPath)) return "✓ 已开启";
-            var lnkPath = Path.Combine(startupFolder, "GalQuoteCollector.lnk");
-            if (File.Exists(lnkPath)) return "✓ 已开启";
+            foreach (var name in new[] { "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs",
+                                         "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
+            {
+                if (File.Exists(Path.Combine(startupFolder, name)))
+                    return "✓ 已开启";
+            }
             return "已关闭";
         }
         catch
