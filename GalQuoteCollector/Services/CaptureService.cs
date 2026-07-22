@@ -29,13 +29,18 @@ public class CaptureService
         if (width <= 0 || height <= 0)
             throw new InvalidOperationException("Invalid window dimensions");
 
-        // If window covers most of the primary screen, capture full screen instead.
-        // This handles Magpie upscaling and borderless fullscreen where GetWindowRect
-        // may return the game's internal resolution rather than the actual display area.
+        // Detect borderless fullscreen / Magpie-upscaled windows: if the window style
+        // is WS_POPUP and has no title bar (WS_CAPTION), it's likely a game running in
+        // exclusive/borderless fullscreen. GetWindowRect may return the game's internal
+        // resolution while the actual display covers the entire screen.
         int screenW = GetSystemMetrics(SM_CXSCREEN);
         int screenH = GetSystemMetrics(SM_CYSCREEN);
-        if (rect.left <= 0 && rect.top <= 0 && width >= screenW * 0.9 && height >= screenH * 0.9)
+        int style = GetWindowLong(hwnd, GWL_STYLE);
+        bool isGameFullscreen = (style & WS_POPUP) != 0 && (style & WS_CAPTION) != WS_CAPTION;
+        if (isGameFullscreen)
         {
+            rect.left = 0;
+            rect.top = 0;
             width = screenW;
             height = screenH;
         }
@@ -86,9 +91,15 @@ public class CaptureService
 
     private const int SM_CXSCREEN = 0;
     private const int SM_CYSCREEN = 1;
+    private const int GWL_STYLE = -16;
+    private const int WS_POPUP = unchecked((int)0x80000000);
+    private const int WS_CAPTION = unchecked((int)0x00C00000);
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
+
+    [DllImport("user32.dll")]
+    private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
