@@ -19,7 +19,7 @@ public class CaptureService
     /// Capture the specified window and return the screenshot file path.
     /// Pass a saved handle to capture the game even after our window minimizes.
     /// </summary>
-    public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0)
+    public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0, bool forceFullscreen = false)
     {
         GetWindowRect(hwnd, out var rect);
 
@@ -29,15 +29,19 @@ public class CaptureService
         if (width <= 0 || height <= 0)
             throw new InvalidOperationException("Invalid window dimensions");
 
-        // Detect borderless fullscreen / Magpie-upscaled windows: if the window style
-        // is WS_POPUP and has no title bar (WS_CAPTION), it's likely a game running in
-        // exclusive/borderless fullscreen. GetWindowRect may return the game's internal
-        // resolution while the actual display covers the entire screen.
+        // Game windows (especially Magpie-upscaled) may report their internal resolution
+        // via GetWindowRect while the actual visible content fills the entire screen.
+        // forceFullscreen is set by the caller when the window is recognized as a game.
+        // Also auto-detect borderless fullscreen windows (WS_POPUP, no caption).
         int screenW = GetSystemMetrics(SM_CXSCREEN);
         int screenH = GetSystemMetrics(SM_CYSCREEN);
-        int style = GetWindowLong(hwnd, GWL_STYLE);
-        bool isGameFullscreen = (style & WS_POPUP) != 0 && (style & WS_CAPTION) != WS_CAPTION;
-        if (isGameFullscreen)
+        bool shouldCaptureFullscreen = forceFullscreen;
+        if (!shouldCaptureFullscreen)
+        {
+            int style = GetWindowLong(hwnd, GWL_STYLE);
+            shouldCaptureFullscreen = (style & WS_POPUP) != 0 && (style & WS_CAPTION) != WS_CAPTION;
+        }
+        if (shouldCaptureFullscreen)
         {
             rect.left = 0;
             rect.top = 0;

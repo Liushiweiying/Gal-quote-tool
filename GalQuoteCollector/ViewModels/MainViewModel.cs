@@ -255,7 +255,8 @@ public partial class MainViewModel : ObservableObject
             }
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
-            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat);
+            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat,
+                forceFullscreen: !string.IsNullOrWhiteSpace(gameName));
 
             var text = await _ocrService.RecognizeTextAsync(screenshotPath);
 
@@ -1149,8 +1150,10 @@ public partial class MainViewModel : ObservableObject
             _window.WindowState = WindowState.Minimized;
             await Task.Delay(_captureDelayMs);
 
+            var gameName = _gameDetectService.DetectGameName(windowTitle);
             var nextOrder = _storageService.GetNextScreenshotOrder(SelectedQuote.Id);
-            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat, nextOrder);
+            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat, nextOrder,
+                forceFullscreen: !string.IsNullOrWhiteSpace(gameName));
             _storageService.AddScreenshot(SelectedQuote.Id, screenshotPath, nextOrder);
 
             var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张", 2000);
