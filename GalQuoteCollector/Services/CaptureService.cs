@@ -29,6 +29,17 @@ public class CaptureService
         if (width <= 0 || height <= 0)
             throw new InvalidOperationException("Invalid window dimensions");
 
+        // If window covers most of the primary screen, capture full screen instead.
+        // This handles Magpie upscaling and borderless fullscreen where GetWindowRect
+        // may return the game's internal resolution rather than the actual display area.
+        int screenW = GetSystemMetrics(SM_CXSCREEN);
+        int screenH = GetSystemMetrics(SM_CYSCREEN);
+        if (rect.left <= 0 && rect.top <= 0 && width >= screenW * 0.9 && height >= screenH * 0.9)
+        {
+            width = screenW;
+            height = screenH;
+        }
+
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
         var suffix = sequence > 1 ? $"_{sequence}" : "";
         var isJpg = format.Equals("jpg", StringComparison.OrdinalIgnoreCase);
@@ -72,6 +83,12 @@ public class CaptureService
 
     /// <summary>Get the foreground window's title text.</summary>
     public static string GetForegroundWindowTitle() => GetWindowTitle(GetForegroundWindow());
+
+    private const int SM_CXSCREEN = 0;
+    private const int SM_CYSCREEN = 1;
+
+    [DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
 
     [DllImport("user32.dll")]
     private static extern IntPtr GetForegroundWindow();
