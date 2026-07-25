@@ -518,10 +518,12 @@ public partial class MainViewModel : ObservableObject
 
         var tagsByQuote = new Dictionary<int, List<Tag>>();
         var groupsByQuote = new Dictionary<int, List<QuoteGroup>>();
+        var screenshotsByQuote = new Dictionary<int, List<Screenshot>>();
         foreach (var q in quotes)
         {
             tagsByQuote[q.Id] = _storageService.GetTagsForQuote(q.Id);
             groupsByQuote[q.Id] = _storageService.GetGroupsForQuote(q.Id);
+            screenshotsByQuote[q.Id] = _storageService.GetScreenshots(q.Id);
         }
 
         var cfg = _settingsService.LoadHotkeyConfig();
@@ -531,7 +533,7 @@ public partial class MainViewModel : ObservableObject
         var allTags = _storageService.GetAllTags();
 
         var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote,
-            groupsByQuote, allGroups, allTags, slideshowMode, slideshowLoop,
+            groupsByQuote, screenshotsByQuote, allGroups, allTags, slideshowMode, slideshowLoop,
             cfg.SlideshowChineseFont, cfg.SlideshowEnglishFont);
         win.ShowDialog();
     }

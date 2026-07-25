@@ -9,18 +9,20 @@ namespace GalQuoteCollector.Views;
 
 public partial class SlideshowWindow : Window
 {
-    private readonly List<Quote> _allQuotes;         // full unfiltered list
+    private readonly List<Quote> _allQuotes;
     private readonly Dictionary<int, List<Tag>> _tagsByQuote;
     private readonly Dictionary<int, List<QuoteGroup>> _groupsByQuote;
+    private readonly Dictionary<int, List<Screenshot>> _screenshotsByQuote;
     private readonly List<QuoteGroup> _availableGroups;
     private readonly List<Tag> _availableTags;
     private readonly Random _random = new();
-    private readonly int _mode;  // 0=时间, 1=随机
+    private readonly int _mode;
     private bool _loop;
 
-    private List<Quote> _filtered;  // current filtered list
-    private int[] _order;
-    private int _pos;
+    private List<Quote> _filtered;          // currently filtered quotes
+    private int[] _order;                   // quote order indices into _filtered
+    private int _pos;                       // current quote index in _order
+    private int _ssPos;                     // current screenshot index for the current quote
     private bool _ready;
     private bool _isFullscreen;
     private bool _isTopmost;
@@ -30,6 +32,7 @@ public partial class SlideshowWindow : Window
     public SlideshowWindow(Window owner, List<Quote> quotes,
         Dictionary<int, List<Tag>> tagsByQuote,
         Dictionary<int, List<QuoteGroup>> groupsByQuote,
+        Dictionary<int, List<Screenshot>> screenshotsByQuote,
         List<QuoteGroup> availableGroups,
         List<Tag> availableTags,
         int slideshowMode, bool slideshowLoop,
@@ -40,6 +43,7 @@ public partial class SlideshowWindow : Window
         _allQuotes = quotes;
         _tagsByQuote = tagsByQuote;
         _groupsByQuote = groupsByQuote;
+        _screenshotsByQuote = screenshotsByQuote;
         _availableGroups = availableGroups;
         _availableTags = availableTags;
         _mode = slideshowMode;
@@ -47,7 +51,6 @@ public partial class SlideshowWindow : Window
         _chineseFont = chineseFont;
         _englishFont = englishFont;
 
-        // Populate group filter
         foreach (var g in availableGroups)
             GroupFilter.Items.Add(new ComboBoxItem { Content = g.Name, Tag = g });
         if (availableTags.Count > 0)
@@ -65,11 +68,9 @@ public partial class SlideshowWindow : Window
     {
         var items = _allQuotes.AsEnumerable();
 
-        // Group filter
         if (GroupFilter.SelectedItem is ComboBoxItem gi && gi.Tag is QuoteGroup g)
             items = items.Where(q => _groupsByQuote.GetValueOrDefault(q.Id, []).Any(gg => gg.Id == g.Id));
 
-        // Tag filter
         if (TagFilter.SelectedItem is ComboBoxItem ti && ti.Tag is Tag t)
             items = items.Where(q => _tagsByQuote.GetValueOrDefault(q.Id, []).Any(tt => tt.Id == t.Id));
 
@@ -81,9 +82,24 @@ public partial class SlideshowWindow : Window
             _order = Enumerable.Range(0, _filtered.Count).ToArray();
 
         _pos = 0;
+        _ssPos = 0;
     }
 
     private Quote Current => _filtered.Count > 0 ? _filtered[_order[_pos]] : null!;
+
+    private List<Screenshot> CurrentScreenshots =>
+        _screenshotsByQuote.GetValueOrDefault(Current?.Id ?? 0, []);
+
+    private string CurrentScreenshotPath
+    {
+        get
+        {
+            var screenshots = CurrentScreenshots;
+            if (_ssPos >= 0 && _ssPos < screenshots.Count)
+                return screenshots[_ssPos].FilePath;
+            return Current?.ScreenshotPath ?? "";
+        }
+    }
 
     private void ShowCurrent()
     {
@@ -117,7 +133,13 @@ public partial class SlideshowWindow : Window
         TagsText.Text = _tagsByQuote.TryGetValue(quote.Id, out var tags) && tags.Count > 0
             ? string.Join("  ", tags.Select(t => $"#{t.Name}")) : "";
 
-        ProgressText.Text = $"{_pos + 1} / {_filtered.Count}";
+        // Show which screenshot within the current quote
+        var ssList = CurrentScreenshots;
+        if (ssList.Count > 1)
+            ProgressText.Text = $"{_pos + 1} / {_filtered.Count}  |  截图 {_ssPos + 1}/{ssList.Count}";
+        else
+            ProgressText.Text = $"{_pos + 1} / {_filtered.Count}";
+
         LoopText.Text = _loop ? "🔁 循环" : "";
         PrevOrCloseBtn.Content = _pos == 0 && !_loop ? "← 关闭" : "← 上一条";
         NextOrCloseBtn.Content = _pos == _filtered.Count - 1 && !_loop ? "关闭 →" : "下一条 →";
@@ -133,15 +155,17 @@ public partial class SlideshowWindow : Window
         FsOverlay.Visibility = (quote.SlideshowShowGameName || quote.SlideshowShowText ||
             (hasNotes && quote.SlideshowShowNotes)) ? Visibility.Visible : Visibility.Collapsed;
 
+        // Load screenshot (current index within this quote)
         BitmapImage? bitmap = null;
-        if (!string.IsNullOrEmpty(quote.ScreenshotPath) && File.Exists(quote.ScreenshotPath))
+        var ssPath = CurrentScreenshotPath;
+        if (!string.IsNullOrEmpty(ssPath) && File.Exists(ssPath))
         {
             try
             {
                 bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
-                bitmap.UriSource = new Uri(quote.ScreenshotPath);
+                bitmap.UriSource = new Uri(ssPath);
                 bitmap.EndInit();
             }
             catch { }
@@ -154,23 +178,49 @@ public partial class SlideshowWindow : Window
 
     private void GoPrev()
     {
-        if (_pos > 0) { _pos--; ShowCurrent(); }
-        else if (_loop && _filtered.Count > 0) { _pos = _filtered.Count - 1; ShowCurrent(); }
+        var ssList = CurrentScreenshots;
+        // If we have more screenshots for this quote, go back one screenshot first
+        if (_ssPos > 0)
+        {
+            _ssPos--;
+            ShowCurrent();
+            return;
+        }
+
+        if (_pos > 0) { _pos--; _ssPos = CurrentScreenshots.Count - 1; ShowCurrent(); }
+        else if (_loop && _filtered.Count > 0) { _pos = _filtered.Count - 1; _ssPos = CurrentScreenshots.Count - 1; ShowCurrent(); }
         else { Close(); }
     }
+
     private void GoNext()
     {
-        if (_pos < _filtered.Count - 1) { _pos++; ShowCurrent(); }
-        else if (_loop && _filtered.Count > 0) { _pos = 0; ShowCurrent(); }
+        var ssList = CurrentScreenshots;
+        // If we have more screenshots for this quote, show the next one first
+        if (_ssPos < ssList.Count - 1)
+        {
+            _ssPos++;
+            ShowCurrent();
+            return;
+        }
+
+        if (_pos < _filtered.Count - 1) { _pos++; _ssPos = 0; ShowCurrent(); }
+        else if (_loop && _filtered.Count > 0) { _pos = 0; _ssPos = 0; ShowCurrent(); }
         else { Close(); }
     }
-    private void GoRandom() { _pos = _random.Next(_filtered.Count); ShowCurrent(); }
+
+    private void GoRandom()
+    {
+        _pos = _random.Next(_filtered.Count);
+        var ssList = CurrentScreenshots;
+        _ssPos = ssList.Count > 0 ? _random.Next(ssList.Count) : 0;
+        ShowCurrent();
+    }
 
     private void OnPrevOrClose(object sender, RoutedEventArgs e) => GoPrev();
     private void OnNextOrClose(object sender, RoutedEventArgs e) => GoNext();
     private void OnCloseClick(object sender, RoutedEventArgs e) => Close();
     private void OnMinimize(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
-    private void OnFilterChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    private void OnFilterChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!_ready) return;
         ApplyFilter();
@@ -216,8 +266,8 @@ public partial class SlideshowWindow : Window
             case Key.Escape:
                 if (_isFullscreen) ToggleFullscreen(); else Close();
                 break;
-            case Key.Home:          _pos = 0; ShowCurrent(); break;
-            case Key.End:           _pos = _filtered.Count - 1; ShowCurrent(); break;
+            case Key.Home:          _pos = 0; _ssPos = 0; ShowCurrent(); break;
+            case Key.End:           _pos = _filtered.Count - 1; _ssPos = 0; ShowCurrent(); break;
             case Key.R:             _loop = !_loop; break;
         }
         e.Handled = true;
