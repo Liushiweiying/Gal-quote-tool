@@ -92,7 +92,8 @@ public class ExportService
                 CapturedAt = el.TryGetProperty("capturedAt", out var d) && DateTime.TryParse(d.GetString(), out var dt) ? dt : DateTime.Now,
                 Tags = el.TryGetProperty("tags", out var t) ? t.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s != "").ToList() : [],
                 Groups = el.TryGetProperty("groups", out var gr) ? gr.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s != "").ToList() : [],
-                Notes = el.TryGetProperty("notes", out var n) ? n.GetString() ?? "" : ""
+                Notes = el.TryGetProperty("notes", out var n) ? n.GetString() ?? "" : "",
+                Screenshot = el.TryGetProperty("screenshot", out var s) ? s.GetString() ?? "" : ""
             });
         }
 
@@ -194,4 +195,5 @@ public class ImportItem
     public List<string> Tags { get; set; } = [];
     public List<string> Groups { get; set; } = [];
     public string Notes { get; set; } = "";
+    public string Screenshot { get; set; } = "";
 }

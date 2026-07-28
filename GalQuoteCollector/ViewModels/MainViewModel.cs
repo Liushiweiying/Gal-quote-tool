@@ -680,6 +680,178 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    // ── Bundled export/import (quotes + screenshots in a ZIP) ──
+
+    [RelayCommand]
+    private void ExportBundled()
+    {
+        if (_allQuotes.Count == 0)
+        {
+            MessageBox.Show("没有可导出的语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "压缩包 (*.zip)|*.zip",
+            DefaultExt = ".zip",
+            FileName = $"gal-quotes_{DateTime.Now:yyyy-MM-dd}"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var tempDir = Path.Combine(Path.GetTempPath(), $"galexport_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            var screenshotsDir = Path.Combine(tempDir, "screenshots");
+            Directory.CreateDirectory(screenshotsDir);
+
+            // Build tags + groups lookup
+            var tagsByQuote = new Dictionary<int, List<Tag>>();
+            var groupsByQuote = new Dictionary<int, List<QuoteGroup>>();
+            foreach (var q in _allQuotes)
+            {
+                tagsByQuote[q.Id] = _storageService.GetTagsForQuote(q.Id);
+                groupsByQuote[q.Id] = _storageService.GetGroupsForQuote(q.Id);
+            }
+
+            // Copy screenshots into the temp dir and update paths
+            var exportQuotes = _allQuotes.Select(q =>
+            {
+                var ssList = _storageService.GetScreenshots(q.Id);
+                if (ssList.Count > 0 && File.Exists(ssList[0].FilePath))
+                {
+                    var ssName = $"{q.Id}_{Path.GetFileName(ssList[0].FilePath)}";
+                    File.Copy(ssList[0].FilePath, Path.Combine(screenshotsDir, ssName), true);
+                    // Don't modify the original quote, work with a clone
+                    var clone = new Quote
+                    {
+                        Id = q.Id, Text = q.Text, GameName = q.GameName,
+                        ScreenshotPath = $"screenshots/{ssName}",
+                        CapturedAt = q.CapturedAt, Notes = q.Notes,
+                        WindowTitle = q.WindowTitle,
+                        SlideshowShowGameName = q.SlideshowShowGameName,
+                        SlideshowShowText = q.SlideshowShowText,
+                        SlideshowShowNotes = q.SlideshowShowNotes
+                    };
+                    return clone;
+                }
+                return q;
+            }).ToList();
+
+            var json = _exportService.ToJson(exportQuotes, tagsByQuote, groupsByQuote);
+            File.WriteAllText(Path.Combine(tempDir, "quotes.json"), json);
+
+            var zipPath = dialog.FileName;
+            if (File.Exists(zipPath)) File.Delete(zipPath);
+            System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, zipPath);
+
+            try { Directory.Delete(tempDir, true); } catch { }
+            StatusText = $"已导出 {_allQuotes.Count} 条语录及截图到 {zipPath}";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+    }
+
+    [RelayCommand]
+    private void ImportBundled()
+    {
+        var dialog = new Microsoft.Win32.OpenFileDialog
+        {
+            Filter = "压缩包 (*.zip)|*.zip",
+            Title = "导入语录压缩包"
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        string? tempDir = null;
+        try
+        {
+            tempDir = Path.Combine(Path.GetTempPath(), $"galimport_{Guid.NewGuid():N}");
+            Directory.CreateDirectory(tempDir);
+            System.IO.Compression.ZipFile.ExtractToDirectory(dialog.FileName, tempDir);
+
+            var jsonPath = Path.Combine(tempDir, "quotes.json");
+            if (!File.Exists(jsonPath))
+            {
+                MessageBox.Show("压缩包中未找到 quotes.json", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var content = File.ReadAllText(jsonPath);
+            var items = _exportService.ParseJson(content);
+
+            if (items.Count == 0)
+            {
+                MessageBox.Show("未找到可导入的语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            int imported = 0;
+            foreach (var item in items)
+            {
+                var quote = new Quote
+                {
+                    Text = item.Text,
+                    GameName = item.GameName,
+                    CapturedAt = item.CapturedAt,
+                    Notes = item.Notes
+                };
+
+                // Import screenshot if bundled
+                if (!string.IsNullOrWhiteSpace(item.Screenshot))
+                {
+                    var srcPath = Path.Combine(tempDir, item.Screenshot);
+                    if (File.Exists(srcPath))
+                    {
+                        var ext = Path.GetExtension(srcPath);
+                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
+                        var destName = $"{timestamp}_import{ext}";
+                        var destPath = Path.Combine(_screenshotDir, destName);
+                        File.Copy(srcPath, destPath);
+                        quote.ScreenshotPath = destPath;
+                    }
+                    else if (File.Exists(item.Screenshot))
+                    {
+                        // Absolute path fallback (from non-bundled JSON)
+                        quote.ScreenshotPath = item.Screenshot;
+                    }
+                }
+
+                _storageService.InsertQuote(quote);
+
+                foreach (var tagName in item.Tags)
+                {
+                    var tag = _storageService.AddTag(tagName);
+                    _storageService.AddTagToQuote(quote.Id, tag.Id);
+                }
+
+                foreach (var groupName in item.Groups)
+                {
+                    var group = _storageService.AddGroup(groupName);
+                    _storageService.AddQuoteToGroup(quote.Id, group.Id);
+                }
+
+                _allQuotes.Insert(0, quote);
+                imported++;
+            }
+
+            RefreshQuotes();
+            RefreshAvailableTags();
+            RefreshAvailableGroups();
+            StatusText = $"已导入 {imported} 条语录及截图";
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            if (tempDir != null) try { Directory.Delete(tempDir, true); } catch { }
+        }
+    }
+
     // ── Settings ──
 
     [RelayCommand]

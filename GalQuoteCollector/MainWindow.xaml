@@ -117,6 +117,9 @@
                             <MenuItem Header="导出全部" Command="{Binding ExportCommand}"/>
                             <MenuItem Header="导出分组" Command="{Binding ExportGroupCommand}"/>
                             <Separator/>
+                            <MenuItem Header="打包导出（含截图）" Command="{Binding ExportBundledCommand}"/>
+                            <MenuItem Header="打包导入（含截图）" Command="{Binding ImportBundledCommand}"/>
+                            <Separator/>
                             <MenuItem Header="使用记录" Command="{Binding OpenUsageStatsCommand}"/>
                             <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
                             <Separator/>
