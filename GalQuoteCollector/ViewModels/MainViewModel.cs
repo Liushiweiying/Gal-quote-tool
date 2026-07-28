@@ -742,6 +742,14 @@ public partial class MainViewModel : ObservableObject
             var json = _exportService.ToJson(exportQuotes, tagsByQuote, groupsByQuote);
             File.WriteAllText(Path.Combine(tempDir, "quotes.json"), json);
 
+            // Include settings and usage data
+            foreach (var fn in new[] { "settings.json", "usage.json" })
+            {
+                var src = Path.Combine(_dataDir, fn);
+                if (File.Exists(src))
+                    File.Copy(src, Path.Combine(tempDir, fn));
+            }
+
             var zipPath = dialog.FileName;
             if (File.Exists(zipPath)) File.Delete(zipPath);
             System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, zipPath);
@@ -835,6 +843,15 @@ public partial class MainViewModel : ObservableObject
 
                 _allQuotes.Insert(0, quote);
                 imported++;
+            }
+
+            // Restore settings and usage data if bundled
+            foreach (var fn in new[] { "settings.json", "usage.json" })
+            {
+                var src = Path.Combine(tempDir, fn);
+                var dest = Path.Combine(_dataDir, fn);
+                if (File.Exists(src))
+                    File.Copy(src, dest, true);
             }
 
             RefreshQuotes();
