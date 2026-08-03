@@ -78,7 +78,7 @@ public partial class MainWindow : Window
         groupExcludeItem.Click += (_, _) => { vm.GroupFilterExclude = !vm.GroupFilterExclude; };
         groupMenu.Items.Add(groupExcludeItem);
         groupMenu.Items.Add(new Separator());
-        foreach (var g in vm.AvailableGroups.Where(x => x.Id > 0))
+        foreach (var g in vm.AvailableGroups)
         {
             var id = g.Id;
             var isSelected = vm.SelectedGroupFilters.Contains(id);

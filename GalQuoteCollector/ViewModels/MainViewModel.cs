@@ -393,7 +393,7 @@ public partial class MainViewModel : ObservableObject
     private void RefreshAvailableGroups()
     {
         var groups = _storageService.GetAllGroups();
-        var list = new List<QuoteGroup> { new() { Id = 0, Name = "全部" } };
+        var list = new List<QuoteGroup> { new() { Id = -1, Name = "未分组" } };
         list.AddRange(groups);
         AvailableGroups = new ObservableCollection<QuoteGroup>(list);
     }
@@ -401,7 +401,7 @@ public partial class MainViewModel : ObservableObject
     private void RefreshAvailableTagsForFilter()
     {
         var tags = _storageService.GetAllTags();
-        var list = new List<Tag> { new() { Id = 0, Name = "全部" } };
+        var list = new List<Tag> { new() { Id = -1, Name = "无标签" } };
         list.AddRange(tags);
         AvailableTagsForFilter = new ObservableCollection<Tag>(list);
     }
@@ -413,7 +413,7 @@ public partial class MainViewModel : ObservableObject
             .Distinct()
             .OrderBy(n => n)
             .ToList();
-        var list = new List<FilterItem> { new() { Id = 0, Name = "全部" } };
+        var list = new List<FilterItem> { new() { Id = -1, Name = "未分类" } };
         int id = 1;
         foreach (var g in games)
             list.Add(new FilterItem { Id = id++, Name = g });
@@ -487,9 +487,14 @@ public partial class MainViewModel : ObservableObject
         }
 
         var groupQuoteIds = new HashSet<int>();
-        foreach (var gid in SelectedGroupFilters)
+        foreach (var gid in SelectedGroupFilters.Where(id => id > 0))
             foreach (var qid in _storageService.GetQuoteIdsInGroup(gid))
                 groupQuoteIds.Add(qid);
+
+        // "未分组" (Id == -1) selected → include quotes not in any group
+        if (SelectedGroupFilters.Contains(-1))
+            foreach (var q in _allQuotes.Where(q => _storageService.GetGroupsForQuote(q.Id).Count == 0))
+                groupQuoteIds.Add(q.Id);
 
         var filtered = GroupFilterExclude
             ? _allQuotes.Where(q => !groupQuoteIds.Contains(q.Id)).ToList()
@@ -1147,108 +1152,6 @@ public partial class MainViewModel : ObservableObject
         DeleteQuoteDirect(SelectedQuote);
     }
 
-    
-
-    [RelayCommand]
-    private void BackupData()
-    {
-        var dialog = new Microsoft.Win32.SaveFileDialog
-        {
-            Filter = "备份文件 (*.zip)|*.zip",
-            DefaultExt = ".zip",
-            FileName = $"galgame-backup_{DateTime.Now:yyyy-MM-dd}"
-        };
-        if (dialog.ShowDialog() != true) return;
-
-        try
-        {
-            // Copy files to temp dir to avoid SQLite file lock
-            var tempDir = Path.Combine(Path.GetTempPath(), $"galbackup_{Guid.NewGuid():N}");
-            Directory.CreateDirectory(tempDir);
-            Directory.CreateDirectory(Path.Combine(tempDir, "screenshots"));
-
-            foreach (var f in Directory.GetFiles(_dataDir))
-                File.Copy(f, Path.Combine(tempDir, Path.GetFileName(f)), true);
-
-            if (Directory.Exists(_screenshotDir))
-            {
-                foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
-                    File.Copy(f, Path.Combine(tempDir, "screenshots", Path.GetFileName(f)), true);
-            }
-
-            System.IO.Compression.ZipFile.CreateFromDirectory(tempDir, dialog.FileName,
-                System.IO.Compression.CompressionLevel.Optimal, true);
-
-            try { Directory.Delete(tempDir, true); } catch { }
-
-            StatusText = $"已备份到: {dialog.FileName}";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"备份失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
-    [RelayCommand]
-    private void RestoreData()
-    {
-        var dialog = new Microsoft.Win32.OpenFileDialog
-        {
-            Filter = "备份文件 (*.zip)|*.zip",
-            Title = "选择备份文件恢复"
-        };
-        if (dialog.ShowDialog() != true) return;
-
-        var result = MessageBox.Show("恢复将覆盖当前所有数据（语录、截图、设置），确定继续？",
-            "确认恢复", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (result != MessageBoxResult.Yes) return;
-
-        try
-        {
-            // Extract to a temp directory first
-            var tempDir = Path.Combine(Path.GetTempPath(), $"galrestore_{Guid.NewGuid():N}");
-            Directory.CreateDirectory(tempDir);
-            System.IO.Compression.ZipFile.ExtractToDirectory(dialog.FileName, tempDir);
-
-            // Stop usage tracker to release file locks
-            _usageTracker?.Stop();
-
-            // Dispose old services
-            _storageService.Dispose();
-
-            // Copy files over
-            foreach (var f in Directory.GetFiles(tempDir))
-            {
-                var dest = Path.Combine(_dataDir, Path.GetFileName(f));
-                File.Copy(f, dest, true);
-            }
-
-            // Restore screenshots subdirectory
-            var tempScreenshots = Path.Combine(tempDir, "screenshots");
-            if (Directory.Exists(tempScreenshots))
-            {
-                foreach (var f in Directory.GetFiles(tempScreenshots))
-                    File.Copy(f, Path.Combine(_screenshotDir, Path.GetFileName(f)), true);
-            }
-
-            // Clean up temp
-            try { Directory.Delete(tempDir, true); } catch { }
-
-            // Reinitialize
-            _storageService = new StorageService(Path.Combine(_dataDir, "quotes.db"));
-            _allQuotes = _storageService.GetAllQuotes();
-            RefreshQuotes();
-            RefreshAvailableTags();
-            RefreshAvailableGroups();
-
-            StatusText = "已从备份恢复";
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"恢复失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-    }
-
     [RelayCommand]
     private void RepairScreenshots()
     {
@@ -1588,38 +1491,53 @@ public partial class MainViewModel : ObservableObject
     {
         IEnumerable<Quote> source = _allQuotes;
 
-        // Filter by group (multi-select + exclude)
+        // Filter by group (multi-select + exclude); Id == -1 means "未分组"
         if (SelectedGroupFilters.Count > 0)
         {
+            var includeUngrouped = SelectedGroupFilters.Contains(-1);
             var groupIds = new HashSet<int>();
-            foreach (var gid in SelectedGroupFilters)
+            foreach (var gid in SelectedGroupFilters.Where(id => id > 0))
                 foreach (var qid in _storageService.GetQuoteIdsInGroup(gid))
                     groupIds.Add(qid);
+            bool MatchGroup(Quote q) =>
+                groupIds.Contains(q.Id)
+                || (includeUngrouped && _storageService.GetGroupsForQuote(q.Id).Count == 0);
             source = GroupFilterExclude
-                ? source.Where(q => !groupIds.Contains(q.Id))
-                : source.Where(q => groupIds.Contains(q.Id));
+                ? source.Where(q => !MatchGroup(q))
+                : source.Where(q => MatchGroup(q));
         }
 
-        // Filter by tag (multi-select + exclude)
+        // Filter by tag (multi-select + exclude); Id == -1 means "无标签"
         if (SelectedTagFilters.Count > 0)
         {
-            var filterTagIds = SelectedTagFilters.ToHashSet();
+            var includeNoTags = SelectedTagFilters.Contains(-1);
+            var filterTagIds = SelectedTagFilters.Where(id => id > 0).ToHashSet();
+            bool MatchTag(Quote q)
+            {
+                var tags = _storageService.GetTagsForQuote(q.Id);
+                if (includeNoTags && tags.Count == 0) return true;
+                return tags.Any(t => filterTagIds.Contains(t.Id));
+            }
             source = TagFilterExclude
-                ? source.Where(q => !_storageService.GetTagsForQuote(q.Id).Any(t => filterTagIds.Contains(t.Id)))
-                : source.Where(q => _storageService.GetTagsForQuote(q.Id).Any(t => filterTagIds.Contains(t.Id)));
+                ? source.Where(q => !MatchTag(q))
+                : source.Where(q => MatchTag(q));
         }
 
-        // Filter by game (multi-select + exclude)
+        // Filter by game (multi-select + exclude); Id == -1 means "未分类"
         if (SelectedGameFilters.Count > 0)
         {
+            var includeUncategorized = SelectedGameFilters.Contains(-1);
             var gameNames = AvailableGamesForFilter
-                .Where(f => SelectedGameFilters.Contains(f.Id))
+                .Where(f => f.Id > 0 && SelectedGameFilters.Contains(f.Id))
                 .Select(f => f.Name)
                 .Where(n => n != null)
                 .ToHashSet();
+            bool MatchGame(Quote q) =>
+                (includeUncategorized && string.IsNullOrWhiteSpace(q.GameName))
+                || (q.GameName != null && gameNames.Contains(q.GameName));
             source = GameFilterExclude
-                ? source.Where(q => !gameNames.Contains(q.GameName))
-                : source.Where(q => gameNames.Contains(q.GameName));
+                ? source.Where(q => !MatchGame(q))
+                : source.Where(q => MatchGame(q));
         }
 
         // Filter by text

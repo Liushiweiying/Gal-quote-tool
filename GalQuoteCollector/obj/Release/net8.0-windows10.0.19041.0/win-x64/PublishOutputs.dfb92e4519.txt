@@ -1,8 +1,2 @@
 D:\claude-code\Galgame-quote-tool\publish-sc-tmp\GalQuoteCollector.pdb
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\D3DCompiler_47_cor3.dll
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\PenImc_cor3.dll
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\PresentationNative_cor3.dll
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\vcruntime140_cor3.dll
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\wpfgfx_cor3.dll
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\e_sqlite3.dll
 D:\claude-code\Galgame-quote-tool\publish-sc-tmp\GalQuoteCollector.exe

@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GalQuoteCollector")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+73705359626b317bcbcdaca5ce3419926a494fe6")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+7d27a33a90a4d572f12532d2b4a9f7193cb51206")]
 [assembly: System.Reflection.AssemblyProductAttribute("GalQuoteCollector")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GalQuoteCollector")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
