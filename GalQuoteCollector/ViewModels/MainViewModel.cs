@@ -1732,7 +1732,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ShowAbout()
     {
-        var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
+        var updateUrl = "https://github.com/Liushiweiying/Galgame-quote-tool/releases";
         MessageBox.Show(
             $"Gal 语录收藏工具 {AppVersion}\n\n" +
             $"作者: 未时\n" +
@@ -1750,7 +1750,7 @@ public partial class MainViewModel : ObservableObject
             http.DefaultRequestHeaders.UserAgent.ParseAdd("GalQuoteCollector/1.0");
             http.Timeout = TimeSpan.FromSeconds(5);
             var response = await http.GetStringAsync(
-                "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases/latest");
+                "https://api.github.com/repos/Liushiweiying/Galgame-quote-tool/releases/latest");
             var json = System.Text.Json.JsonDocument.Parse(response);
             var latest = json.RootElement.GetProperty("tag_name").GetString();
             if (string.IsNullOrWhiteSpace(latest)) return;
@@ -1762,7 +1762,7 @@ public partial class MainViewModel : ObservableObject
             if (latestV == null || currentV == null || latestV <= currentV) return;
 
             StatusText = $"发现新版本 {latest} → {StatusText}";
-            var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
+            var updateUrl = "https://github.com/Liushiweiying/Galgame-quote-tool/releases";
             MessageBox.Show(
                 $"发现新版本: {latest}\n当前版本: {AppVersion}\n\n前往下载:\n{updateUrl}",
                 "版本更新", MessageBoxButton.OK, MessageBoxImage.Information);

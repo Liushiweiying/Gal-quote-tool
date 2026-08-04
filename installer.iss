@@ -2,7 +2,7 @@
 #define MyAppName "Gal Quote Collector"
 #define MyAppVersion "1.1.8"
 #define MyAppPublisher "Liushiweiying"
-#define MyAppURL "https://github.com/Liushiweiying/Gal-quote-tool"
+#define MyAppURL "https://github.com/Liushiweiying/Galgame-quote-tool"
 #define MyAppExeName "GalQuoteCollector.exe"
 
 [Setup]
