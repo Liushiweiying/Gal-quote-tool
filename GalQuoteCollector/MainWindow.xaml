@@ -127,6 +127,7 @@
                             <Separator/>
                             <MenuItem Header="重新关联截图" Command="{Binding RematchScreenshotsCommand}"/>
                             <MenuItem Header="修复截图关联" Command="{Binding RepairScreenshotsCommand}"/>
+                            <MenuItem Header="删除未关联截图" Command="{Binding DeleteUnassociatedScreenshotsCommand}"/>
                             <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                             <Separator/>

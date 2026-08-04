@@ -14,7 +14,7 @@ namespace GalQuoteCollector.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const string AppVersion = "v1.1.6";
+    public const string AppVersion = "v1.1.8";
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -39,23 +39,32 @@ public partial class MainViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
             "GalQuoteCollector");
 
-        // Always use %LOCALAPPDATA% for data — consistent across versions
+        // Always use %LOCALAPPDATA% for data. From now on everything is READ and
+        // WRITTEN under "GalQuoteCollector"; legacy "GalgameQuoteCollector" data is
+        // only READ once (copied below), never written to.
         _dataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GalQuoteCollector");
 
-        // Backward compatibility: use old GalgameQuoteCollector paths if they exist
+        // Backward compatibility (Galgame -> Gal rename): if the legacy data dir holds
+        // a real database and the new dir's DB is still empty, copy the legacy data
+        // over so nothing is lost, then use the new dir exclusively. The old dir stays
+        // untouched as a backup.
         var oldDataDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "GalgameQuoteCollector");
-        if (Directory.Exists(oldDataDir))
-            _dataDir = oldDataDir;
+        var oldDbPath = Path.Combine(oldDataDir, "quotes.db");
+        if (File.Exists(oldDbPath) && !DbHasQuotes(Path.Combine(_dataDir, "quotes.db")))
+            MigrateDataDir(oldDataDir, _dataDir);
 
+        // Same rename for the default screenshot dir; only applied later when the user
+        // has NOT configured a custom screenshot directory.
         var oldScreenshotDir = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
             "GalgameQuoteCollector");
-        if (Directory.Exists(oldScreenshotDir))
-            _screenshotDir = oldScreenshotDir;
+        var migrateDefaultScreenshotDir =
+            Directory.Exists(oldScreenshotDir)
+            && (!Directory.Exists(_screenshotDir) || !Directory.EnumerateFileSystemEntries(_screenshotDir).Any());
 
         Directory.CreateDirectory(_dataDir);
 
@@ -77,6 +86,12 @@ public partial class MainViewModel : ObservableObject
             _screenshotDir = hotkeyConfig.ScreenshotDirectory;
             Directory.CreateDirectory(_screenshotDir);
             _captureService = new CaptureService(_screenshotDir);
+        }
+        // Legacy default dir rename: move screenshots that still live under the old
+        // "GalgameQuoteCollector" folder into the new default, updating the DB paths.
+        else if (migrateDefaultScreenshotDir)
+        {
+            MigrateScreenshots(_screenshotDir);
         }
 
         // Apply custom font
@@ -720,31 +735,40 @@ public partial class MainViewModel : ObservableObject
                 groupsByQuote[q.Id] = _storageService.GetGroupsForQuote(q.Id);
             }
 
-            // Copy screenshots into the temp dir and update paths
-            var exportQuotes = _allQuotes.Select(q =>
+            // Copy all screenshots into the temp dir and update paths (keep original Quote objects)
+            var exportQuotes = new List<Quote>();
+            var screenshotsByQuote = new Dictionary<int, List<string>>();
+            foreach (var q in _allQuotes)
             {
-                var ssList = _storageService.GetScreenshots(q.Id);
-                if (ssList.Count > 0 && File.Exists(ssList[0].FilePath))
+                var clone = new Quote
                 {
-                    var ssName = $"{q.Id}_{Path.GetFileName(ssList[0].FilePath)}";
-                    File.Copy(ssList[0].FilePath, Path.Combine(screenshotsDir, ssName), true);
-                    // Don't modify the original quote, work with a clone
-                    var clone = new Quote
-                    {
-                        Id = q.Id, Text = q.Text, GameName = q.GameName,
-                        ScreenshotPath = $"screenshots/{ssName}",
-                        CapturedAt = q.CapturedAt, Notes = q.Notes,
-                        WindowTitle = q.WindowTitle,
-                        SlideshowShowGameName = q.SlideshowShowGameName,
-                        SlideshowShowText = q.SlideshowShowText,
-                        SlideshowShowNotes = q.SlideshowShowNotes
-                    };
-                    return clone;
-                }
-                return q;
-            }).ToList();
+                    Id = q.Id, Text = q.Text, GameName = q.GameName,
+                    ScreenshotPath = q.ScreenshotPath,
+                    CapturedAt = q.CapturedAt, Notes = q.Notes,
+                    WindowTitle = q.WindowTitle,
+                    SlideshowShowGameName = q.SlideshowShowGameName,
+                    SlideshowShowText = q.SlideshowShowText,
+                    SlideshowShowNotes = q.SlideshowShowNotes
+                };
 
-            var json = _exportService.ToJson(exportQuotes, tagsByQuote, groupsByQuote);
+                var ssList = _storageService.GetScreenshots(q.Id);
+                var relPaths = new List<string>();
+                for (int i = 0; i < ssList.Count; i++)
+                {
+                    if (string.IsNullOrWhiteSpace(ssList[i].FilePath) || !File.Exists(ssList[i].FilePath)) continue;
+                    var ssName = $"{q.Id}_{i}_{Path.GetFileName(ssList[i].FilePath)}";
+                    File.Copy(ssList[i].FilePath, Path.Combine(screenshotsDir, ssName), true);
+                    var rel = $"screenshots/{ssName}";
+                    relPaths.Add(rel);
+                    if (i == 0) clone.ScreenshotPath = rel; // first screenshot for list thumbnail
+                }
+                if (relPaths.Count > 0)
+                    screenshotsByQuote[q.Id] = relPaths;
+
+                exportQuotes.Add(clone);
+            }
+
+            var json = _exportService.ToJson(exportQuotes, tagsByQuote, groupsByQuote, screenshotsByQuote);
             File.WriteAllText(Path.Combine(tempDir, "quotes.json"), json);
 
             // Include settings and usage data
@@ -812,27 +836,31 @@ public partial class MainViewModel : ObservableObject
                     Notes = item.Notes
                 };
 
-                // Import screenshot if bundled
-                if (!string.IsNullOrWhiteSpace(item.Screenshot))
+                // Import screenshots if bundled (all of them; "screenshots" array, fall back to single "screenshot")
+                var ssDests = new List<string>();
+                var ssSrcs = item.Screenshots.Count > 0
+                    ? item.Screenshots
+                    : (!string.IsNullOrWhiteSpace(item.Screenshot) ? new List<string> { item.Screenshot } : []);
+                foreach (var relPath in ssSrcs)
                 {
-                    var srcPath = Path.Combine(tempDir, item.Screenshot);
-                    if (File.Exists(srcPath))
-                    {
-                        var ext = Path.GetExtension(srcPath);
-                        var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
-                        var destName = $"{timestamp}_import{ext}";
-                        var destPath = Path.Combine(_screenshotDir, destName);
-                        File.Copy(srcPath, destPath);
-                        quote.ScreenshotPath = destPath;
-                    }
-                    else if (File.Exists(item.Screenshot))
-                    {
-                        // Absolute path fallback (from non-bundled JSON)
-                        quote.ScreenshotPath = item.Screenshot;
-                    }
+                    var srcPath = Path.Combine(tempDir, relPath);
+                    if (!File.Exists(srcPath)) srcPath = relPath; // absolute path fallback
+                    if (!File.Exists(srcPath)) continue;
+                    var ext = Path.GetExtension(srcPath);
+                    var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
+                    var destPath = Path.Combine(_screenshotDir, $"{timestamp}_{ssDests.Count}_import{ext}");
+                    File.Copy(srcPath, destPath);
+                    ssDests.Add(destPath);
                 }
 
+                if (ssDests.Count > 0)
+                    quote.ScreenshotPath = ssDests[0];
+
                 _storageService.InsertQuote(quote);
+
+                // InsertQuote already created the Screenshots row for the first file; add the rest
+                for (int i = 1; i < ssDests.Count; i++)
+                    _storageService.AddScreenshot(quote.Id, ssDests[i], i);
 
                 foreach (var tagName in item.Tags)
                 {
@@ -887,12 +915,14 @@ public partial class MainViewModel : ObservableObject
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
 
-            // Just save new screenshot directory — don't migrate anything
             var newScreenshotDir = newConfig.ScreenshotDirectory;
-            if (!string.IsNullOrWhiteSpace(newScreenshotDir) && newScreenshotDir != _screenshotDir)
+            if (!string.IsNullOrWhiteSpace(newScreenshotDir)
+                && !PathsEqual(newScreenshotDir, _screenshotDir))
             {
+                Directory.CreateDirectory(newScreenshotDir);
+                // Move existing screenshots to the new directory, then recycle-bin the originals
+                MigrateScreenshots(newScreenshotDir);
                 _screenshotDir = newScreenshotDir;
-                Directory.CreateDirectory(_screenshotDir);
                 _captureService = new CaptureService(_screenshotDir);
                 StatusText = $"截图目录已改为: {_screenshotDir}";
             }
@@ -935,6 +965,160 @@ public partial class MainViewModel : ObservableObject
                     MessageBoxButton.OK, MessageBoxImage.Warning);
             }
         }
+    }
+
+    /// <summary>
+    /// Copy every referenced screenshot into the new directory and update the DB paths.
+    /// Originals are only sent to the recycle bin after every copy exists and the DB is
+    /// updated, so a mid-way failure never loses data.
+    /// </summary>
+    private void MigrateScreenshots(string newDir)
+    {
+        if (string.IsNullOrWhiteSpace(newDir)) return;
+        Directory.CreateDirectory(newDir);
+
+        // Collect every screenshot location: DB rows first, legacy field as fallback
+        var entries = new List<(int QuoteId, string FilePath, int? ScreenshotId)>();
+        foreach (var quote in _allQuotes)
+        {
+            var rows = _storageService.GetScreenshots(quote.Id);
+            if (rows.Count == 0)
+            {
+                if (!string.IsNullOrWhiteSpace(quote.ScreenshotPath))
+                    entries.Add((quote.Id, quote.ScreenshotPath, null));
+            }
+            else
+            {
+                foreach (var ss in rows)
+                    entries.Add((quote.Id, ss.FilePath, ss.Id));
+            }
+        }
+
+        var migrated = new List<(string OldPath, string NewPath)>();
+        var failed = new List<string>();
+        int skipped = 0;
+
+        // Pass 1: copy to the new directory and update DB paths (originals are kept for now)
+        foreach (var (quoteId, filePath, ssId) in entries)
+        {
+            if (!File.Exists(filePath)) { failed.Add($"{Path.GetFileName(filePath)} (文件不存在)"); continue; }
+            if (IsUnderDir(filePath, newDir)) { skipped++; continue; }
+
+            var dest = Path.Combine(newDir, Path.GetFileName(filePath));
+            if (File.Exists(dest))
+            {
+                var ext = Path.GetExtension(filePath);
+                var stem = Path.GetFileNameWithoutExtension(filePath);
+                dest = Path.Combine(newDir, $"{stem}_{DateTime.Now:yyyyMMddHHmmssfff}_{migrated.Count}{ext}");
+            }
+
+            try
+            {
+                File.Copy(filePath, dest);
+                if (!File.Exists(dest)) { failed.Add($"{Path.GetFileName(filePath)} (复制后不存在)"); continue; }
+
+                if (ssId is int id)
+                    _storageService.UpdateScreenshotPath(id, dest);
+                else
+                    _storageService.AddScreenshot(quoteId, dest, _storageService.GetNextScreenshotOrder(quoteId));
+
+                migrated.Add((filePath, dest));
+            }
+            catch (Exception ex)
+            {
+                try { if (File.Exists(dest)) File.Delete(dest); } catch { }
+                failed.Add($"{Path.GetFileName(filePath)} ({ex.Message})");
+            }
+        }
+
+        // Re-sync the legacy ScreenshotPath field to each quote's first screenshot
+        foreach (var quote in _allQuotes)
+        {
+            var first = _storageService.GetScreenshots(quote.Id).FirstOrDefault();
+            quote.ScreenshotPath = first?.FilePath ?? "";
+        }
+
+        // Pass 2: only after every copy exists and the DB is updated, recycle-bin the originals
+        foreach (var (oldPath, _) in migrated)
+        {
+            try
+            {
+                if (File.Exists(oldPath))
+                    FileSystem.DeleteFile(oldPath, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+            }
+            catch { }
+        }
+
+        RefreshQuotes();
+
+        var msg = $"已迁移 {migrated.Count} 张截图到新目录";
+        if (skipped > 0) msg += $"，{skipped} 张本就在新目录";
+        if (failed.Count > 0) msg += $"\n{failed.Count} 张失败：\n{string.Join("\n", failed.Take(5))}";
+        MessageBox.Show(msg, "截图迁移", MessageBoxButton.OK,
+            failed.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+    }
+
+    /// <summary>
+    /// One-time copy of the legacy "GalgameQuoteCollector" data dir into the new
+    /// "GalQuoteCollector" dir. The old dir is left untouched as a backup; from this
+    /// point on the app reads and writes only the new dir.
+    /// </summary>
+    private static void MigrateDataDir(string oldDir, string newDir)
+    {
+        try { Directory.CreateDirectory(newDir); }
+        catch { return; }
+
+        foreach (var file in Directory.GetFiles(oldDir, "*", System.IO.SearchOption.AllDirectories))
+        {
+            try
+            {
+                var dest = Path.Combine(newDir, Path.GetRelativePath(oldDir, file));
+                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                // Overwrite: this only runs when the new DB has no quotes yet, so any
+                // schema-only/empty leftovers in the new dir are safely replaced.
+                File.Copy(file, dest, true);
+            }
+            catch
+            {
+                // Non-fatal: a single unreadable file must not abort the migration.
+            }
+        }
+    }
+
+    /// <summary>True when the quotes.db at <paramref name="dbPath"/> contains at least
+    /// one quote row. Used to decide whether the new data dir still needs the legacy
+    /// data migrated into it.</summary>
+    private static bool DbHasQuotes(string dbPath)
+    {
+        try
+        {
+            if (!File.Exists(dbPath)) return false;
+            using var conn = new Microsoft.Data.Sqlite.SqliteConnection($"Data Source={dbPath}");
+            conn.Open();
+            using var cmd = conn.CreateCommand();
+            cmd.CommandText = "SELECT COUNT(*) FROM Quotes";
+            return Convert.ToInt32(cmd.ExecuteScalar()) > 0;
+        }
+        catch
+        {
+            return false; // unreadable/absent file ⇒ treat as needing migration
+        }
+    }
+
+    private static bool IsUnderDir(string path, string dir)
+    {
+        var fullPath = Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        var fullDir = Path.GetFullPath(dir).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return fullPath.StartsWith(fullDir + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool PathsEqual(string a, string b)
+    {
+        if (string.IsNullOrWhiteSpace(a) || string.IsNullOrWhiteSpace(b)) return false;
+        return string.Equals(
+            Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
+            StringComparison.OrdinalIgnoreCase);
     }
 
     private void ReapplyRulesToAllQuotes()
@@ -1117,11 +1301,22 @@ public partial class MainViewModel : ObservableObject
 
     private void DeleteScreenshots(Quote quote)
     {
-        if (string.IsNullOrEmpty(quote.ScreenshotPath)) return;
-        var fileName = Path.GetFileName(quote.ScreenshotPath);
-        var paths = new[] { quote.ScreenshotPath, Path.Combine(_screenshotDir, fileName) };
-        foreach (var p in paths)
-            if (File.Exists(p)) try { FileSystem.DeleteFile(p, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin); } catch { }
+        var screenshotPaths = _storageService.GetScreenshots(quote.Id)
+            .Select(s => s.FilePath)
+            .Where(p => !string.IsNullOrWhiteSpace(p))
+            .Distinct()
+            .ToList();
+        // Fallback to the legacy single-screenshot field if the table has no rows
+        if (screenshotPaths.Count == 0 && !string.IsNullOrWhiteSpace(quote.ScreenshotPath))
+            screenshotPaths.Add(quote.ScreenshotPath);
+
+        foreach (var path in screenshotPaths)
+        {
+            // Delete both the recorded path and the same file name inside the screenshot dir
+            var paths = new[] { path, Path.Combine(_screenshotDir, Path.GetFileName(path)) };
+            foreach (var p in paths)
+                if (File.Exists(p)) try { FileSystem.DeleteFile(p, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin); } catch { }
+        }
     }
 
     [RelayCommand]
@@ -1132,9 +1327,9 @@ public partial class MainViewModel : ObservableObject
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes) return;
 
-        // Ask about screenshots
-        var hasScreenshots = !string.IsNullOrEmpty(SelectedQuote.ScreenshotPath);
-        if (hasScreenshots)
+        // Ask about screenshots (check the Screenshots table first, fall back to legacy field)
+        var hasScreenshots = _storageService.GetScreenshots(SelectedQuote.Id).Any();
+        if (!hasScreenshots && !string.IsNullOrEmpty(SelectedQuote.ScreenshotPath))
         {
             var fileName = Path.GetFileName(SelectedQuote.ScreenshotPath);
             var paths = new[] { SelectedQuote.ScreenshotPath, Path.Combine(_screenshotDir, fileName) };
@@ -1182,28 +1377,55 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var filesByTime = new Dictionary<string, string>();
-        foreach (var f in Directory.GetFiles(_screenshotDir, "*.png"))
+        // Index screenshot files by their 17-char timestamp prefix (yyyy-MM-dd_HHmmss)
+        var filesByTime = new Dictionary<string, List<string>>();
+        foreach (var pattern in new[] { "*.png", "*.jpg" })
         {
-            var name = Path.GetFileNameWithoutExtension(f);
-            if (name.Length >= 19)
-                filesByTime[name[..19]] = f;
+            foreach (var f in Directory.GetFiles(_screenshotDir, pattern))
+            {
+                var name = Path.GetFileNameWithoutExtension(f);
+                if (name.Length < 17) continue;
+                var key = name[..17];
+                if (!filesByTime.TryGetValue(key, out var list))
+                    filesByTime[key] = list = new List<string>();
+                list.Add(f);
+            }
         }
 
         if (filesByTime.Count == 0)
         {
-            StatusText = "截图目录中没有找到 PNG 文件";
+            StatusText = "截图目录中没有找到截图文件";
             return;
         }
 
         int matched = 0;
         foreach (var q in _allQuotes)
         {
-            if (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
+            // Skip quotes that already have a usable screenshot
+            if (_storageService.GetScreenshots(q.Id).Count > 0
+                || (!string.IsNullOrEmpty(q.ScreenshotPath) && File.Exists(q.ScreenshotPath)))
                 continue;
-            var key = q.CapturedAt.ToString("yyyy-MM-dd_HHmmss");
-            if (filesByTime.TryGetValue(key, out var filePath))
+
+            // CapturedAt is set after OCR completes, while the filename carries the capture
+            // second — allow a tolerance window so the match survives the OCR delay.
+            var target = q.CapturedAt;
+            string? bestKey = null;
+            double bestDelta = double.MaxValue;
+            foreach (var kvp in filesByTime)
             {
+                if (!DateTime.TryParseExact(kvp.Key, "yyyy-MM-dd_HHmmss",
+                        System.Globalization.CultureInfo.InvariantCulture,
+                        System.Globalization.DateTimeStyles.None, out var fileTime))
+                    continue;
+                var delta = Math.Abs((fileTime - target).TotalSeconds);
+                if (delta <= 120 && delta < bestDelta) { bestDelta = delta; bestKey = kvp.Key; }
+            }
+
+            if (bestKey != null && filesByTime.TryGetValue(bestKey, out var candidates) && candidates.Count > 0)
+            {
+                var filePath = candidates[0];
+                candidates.RemoveAt(0);
+                _storageService.AddScreenshot(q.Id, filePath, 0);
                 q.ScreenshotPath = filePath;
                 _storageService.UpdateQuote(q);
                 matched++;
@@ -1211,9 +1433,64 @@ public partial class MainViewModel : ObservableObject
         }
 
         RefreshQuotes();
+        if (SelectedQuote != null) RefreshCurrentScreenshots();
         StatusText = matched > 0
             ? $"已关联 {matched} 条语录与截图"
             : "没有需要关联的语录";
+    }
+
+    [RelayCommand]
+    private void DeleteUnassociatedScreenshots()
+    {
+        if (!Directory.Exists(_screenshotDir))
+        {
+            StatusText = "截图目录不存在";
+            return;
+        }
+
+        // Every path referenced by the DB (Screenshots table + legacy field)
+        var referenced = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var p in _storageService.GetAllScreenshotPaths())
+            if (!string.IsNullOrWhiteSpace(p)) referenced.Add(Path.GetFullPath(p));
+        foreach (var q in _allQuotes)
+            if (!string.IsNullOrWhiteSpace(q.ScreenshotPath))
+                referenced.Add(Path.GetFullPath(q.ScreenshotPath));
+
+        var orphans = new List<string>();
+        foreach (var f in Directory.GetFiles(_screenshotDir, "*.png")
+            .Concat(Directory.GetFiles(_screenshotDir, "*.jpg")))
+        {
+            if (!referenced.Contains(Path.GetFullPath(f)))
+                orphans.Add(f);
+        }
+
+        if (orphans.Count == 0)
+        {
+            MessageBox.Show("没有未关联的截图文件", "删除未关联截图",
+                MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+
+        var res = MessageBox.Show(
+            $"发现 {orphans.Count} 个未被任何语录引用的截图文件，确认删除？\n\n删除后将移入回收站，可恢复。",
+            "删除未关联截图", MessageBoxButton.YesNo, MessageBoxImage.Warning);
+        if (res != MessageBoxResult.Yes) return;
+
+        int deleted = 0;
+        foreach (var f in orphans)
+        {
+            try
+            {
+                if (File.Exists(f))
+                {
+                    FileSystem.DeleteFile(f, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin);
+                    deleted++;
+                }
+            }
+            catch { }
+        }
+
+        StatusText = $"已删除 {deleted} 个未关联截图（移入回收站）";
     }
 
     private async void OnHotkeyPressed(object? sender, EventArgs e)
@@ -1476,15 +1753,30 @@ public partial class MainViewModel : ObservableObject
                 "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases/latest");
             var json = System.Text.Json.JsonDocument.Parse(response);
             var latest = json.RootElement.GetProperty("tag_name").GetString();
-            if (!string.IsNullOrEmpty(latest) && latest != AppVersion)
-            {
-                StatusText = $"发现新版本 {latest} → {StatusText}";
-            }
+            if (string.IsNullOrWhiteSpace(latest)) return;
+
+            // Compare numerically ("v1.1.8" > "v1.1.7"), never as plain strings, so
+            // version ordering is correct and we don't nag when tag == current.
+            var latestV = TryParseVersion(latest);
+            var currentV = TryParseVersion(AppVersion);
+            if (latestV == null || currentV == null || latestV <= currentV) return;
+
+            StatusText = $"发现新版本 {latest} → {StatusText}";
+            var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
+            MessageBox.Show(
+                $"发现新版本: {latest}\n当前版本: {AppVersion}\n\n前往下载:\n{updateUrl}",
+                "版本更新", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch
         {
             // Silently fail - no network or rate limited
         }
+    }
+
+    private static Version? TryParseVersion(string v)
+    {
+        v = v.Trim().TrimStart('v', 'V');
+        return Version.TryParse(v, out var ver) ? ver : null;
     }
 
     public void RefreshQuotes()

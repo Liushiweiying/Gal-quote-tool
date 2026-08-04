@@ -154,35 +154,6 @@ public class StorageService : IDisposable
         return quotes;
     }
 
-    public List<Quote> SearchQuotes(string keyword)
-    {
-        var quotes = new List<Quote>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            SELECT Id, Text, GameName, ScreenshotPath, CapturedAt, Notes
-            FROM Quotes
-            WHERE Text LIKE @Keyword OR GameName LIKE @Keyword
-            ORDER BY CapturedAt DESC
-            """;
-        cmd.Parameters.AddWithValue("@Keyword, $Keyword", $"%{keyword}%");
-
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-        {
-            quotes.Add(new Quote
-            {
-                Id = reader.GetInt32(0),
-                Text = reader.GetString(1),
-                GameName = reader.GetString(2),
-                ScreenshotPath = reader.GetString(3),
-                CapturedAt = DateTime.Parse(reader.GetString(4)),
-                Notes = reader.GetString(5),
-                WindowTitle = reader.GetString(6)
-            });
-        }
-        return quotes;
-    }
-
     public void UpdateQuote(Quote quote)
     {
         using var cmd = _connection!.CreateCommand();
@@ -201,6 +172,21 @@ public class StorageService : IDisposable
 
     public void DeleteQuote(int id)
     {
+        // SQLite foreign keys (ON DELETE CASCADE) are off by default on this
+        // connection, so dependent rows must be removed explicitly.
+        foreach (var sql in new[]
+        {
+            "DELETE FROM Screenshots WHERE QuoteId = @Id",
+            "DELETE FROM QuoteTags WHERE QuoteId = @Id",
+            "DELETE FROM QuoteGroupMaps WHERE QuoteId = @Id"
+        })
+        {
+            using var d = _connection!.CreateCommand();
+            d.CommandText = sql;
+            d.Parameters.AddWithValue("@Id", id);
+            d.ExecuteNonQuery();
+        }
+
         using var cmd = _connection!.CreateCommand();
         cmd.CommandText = "DELETE FROM Quotes WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", id);
@@ -259,8 +245,9 @@ public class StorageService : IDisposable
 
     public void DeleteTag(int tagId)
     {
+        // Foreign-key cascades are off, so mapping rows must be removed explicitly
         using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM Tags WHERE Id = @Id";
+        cmd.CommandText = "DELETE FROM QuoteTags WHERE TagId = @Id; DELETE FROM Tags WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", tagId);
         cmd.ExecuteNonQuery();
     }
@@ -333,8 +320,9 @@ public class StorageService : IDisposable
 
     public void DeleteGroup(int id)
     {
+        // Foreign-key cascades are off, so mapping rows must be removed explicitly
         using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM GroupsTable WHERE Id = @Id";
+        cmd.CommandText = "DELETE FROM QuoteGroupMaps WHERE GroupId = @Id; DELETE FROM GroupsTable WHERE Id = @Id";
         cmd.Parameters.AddWithValue("@Id", id);
         cmd.ExecuteNonQuery();
     }
@@ -370,6 +358,17 @@ public class StorageService : IDisposable
     }
 
     // ── Screenshots ────────────────────────────────────
+
+    public List<string> GetAllScreenshotPaths()
+    {
+        var list = new List<string>();
+        using var cmd = _connection!.CreateCommand();
+        cmd.CommandText = "SELECT FilePath FROM Screenshots";
+        using var reader = cmd.ExecuteReader();
+        while (reader.Read())
+            list.Add(reader.GetString(0));
+        return list;
+    }
 
     public List<Screenshot> GetScreenshots(int quoteId)
     {

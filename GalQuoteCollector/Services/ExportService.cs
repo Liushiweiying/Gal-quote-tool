@@ -9,7 +9,8 @@ namespace GalQuoteCollector.Services;
 public class ExportService
 {
     public string ToJson(List<Quote> quotes, Dictionary<int, List<Tag>> tagsByQuote,
-                         Dictionary<int, List<QuoteGroup>> groupsByQuote)
+                         Dictionary<int, List<QuoteGroup>> groupsByQuote,
+                         Dictionary<int, List<string>>? screenshotsByQuote = null)
     {
         var items = quotes.Select(q => new
         {
@@ -19,6 +20,9 @@ public class ExportService
             tags = tagsByQuote.GetValueOrDefault(q.Id, []).Select(t => t.Name).ToList(),
             groups = groupsByQuote.GetValueOrDefault(q.Id, []).Select(g => g.Name).ToList(),
             screenshot = q.ScreenshotPath,
+            screenshots = screenshotsByQuote != null && screenshotsByQuote.TryGetValue(q.Id, out var sl)
+                ? sl
+                : null,
             notes = q.Notes
         });
 
@@ -93,7 +97,10 @@ public class ExportService
                 Tags = el.TryGetProperty("tags", out var t) ? t.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s != "").ToList() : [],
                 Groups = el.TryGetProperty("groups", out var gr) ? gr.EnumerateArray().Select(x => x.GetString() ?? "").Where(s => s != "").ToList() : [],
                 Notes = el.TryGetProperty("notes", out var n) ? n.GetString() ?? "" : "",
-                Screenshot = el.TryGetProperty("screenshot", out var s) ? s.GetString() ?? "" : ""
+                Screenshot = el.TryGetProperty("screenshot", out var s) ? s.GetString() ?? "" : "",
+                Screenshots = el.TryGetProperty("screenshots", out var ss) && ss.ValueKind == JsonValueKind.Array
+                    ? ss.EnumerateArray().Select(x => x.GetString() ?? "").Where(x => x != "").ToList()
+                    : []
             });
         }
 
@@ -196,4 +203,5 @@ public class ImportItem
     public List<string> Groups { get; set; } = [];
     public string Notes { get; set; } = "";
     public string Screenshot { get; set; } = "";
+    public List<string> Screenshots { get; set; } = [];
 }

@@ -1,6 +1,6 @@
 ; Gal Quote Collector — Inno Setup Script
 #define MyAppName "Gal Quote Collector"
-#define MyAppVersion "1.1.6"
+#define MyAppVersion "1.1.8"
 #define MyAppPublisher "Liushiweiying"
 #define MyAppURL "https://github.com/Liushiweiying/Gal-quote-tool"
 #define MyAppExeName "GalQuoteCollector.exe"
@@ -46,6 +46,74 @@ Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: po
 var
   DeleteData: Boolean;
 
+function HexVal(C: Char): Integer;
+begin
+  case C of
+    '0'..'9': Result := Ord(C) - Ord('0');
+    'a'..'f': Result := Ord(C) - Ord('a') + 10;
+    'A'..'F': Result := Ord(C) - Ord('A') + 10;
+  else
+    Result := 0;
+  end;
+end;
+
+{ Decode JSON string escapes so CJK/Japanese directory names work. The app writes
+  settings.json with the .NET default encoder, which escapes non-ASCII as \uXXXX and
+  backslashes as \\ — without decoding, the uninstaller could not find (and thus not
+  delete) a custom screenshot directory containing Chinese/Japanese characters. }
+function JsonUnescape(const S: string): string;
+var
+  I, J, Code, HexLen: Integer;
+begin
+  Result := '';
+  I := 1;
+  while I <= Length(S) do
+  begin
+    if (S[I] = '\') and (I < Length(S)) then
+    begin
+      Inc(I);
+      case S[I] of
+        '\': Result := Result + '\';
+        '"': Result := Result + '"';
+        '/': Result := Result + '/';
+        'b': Result := Result + #8;
+        'f': Result := Result + #12;
+        'n': Result := Result + #10;
+        'r': Result := Result + #13;
+        't': Result := Result + #9;
+        'u':
+        begin
+          Code := 0;
+          HexLen := 0;
+          J := I + 1;
+          while (HexLen < 4) and (J <= Length(S)) do
+          begin
+            case S[J] of
+              '0'..'9': Code := Code * 16 + (Ord(S[J]) - Ord('0'));
+              'a'..'f': Code := Code * 16 + (Ord(S[J]) - Ord('a') + 10);
+              'A'..'F': Code := Code * 16 + (Ord(S[J]) - Ord('A') + 10);
+            else
+              Break;
+            end;
+            Inc(J);
+            Inc(HexLen);
+          end;
+          if HexLen = 4 then
+            Result := Result + Chr(Code)
+          else
+            Result := Result + '\u' + Copy(S, I + 1, HexLen);
+          I := J - 1;
+        end;
+      else
+        Result := Result + S[I];
+      end;
+    end
+    else
+      Result := Result + S[I];
+    Inc(I);
+  end;
+end;
+
 function ExtractScreenshotDir(const JsonPath: string): string;
 var
   Lines: TArrayOfString;
@@ -65,6 +133,7 @@ begin
       if Copy(Result, 1, 1) = '"' then Result := Copy(Result, 2, Length(Result));
       P := Pos('"', Result);
       if P > 0 then Result := Copy(Result, 1, P - 1);
+      Result := JsonUnescape(Result);
       Exit;
     end;
   end;
