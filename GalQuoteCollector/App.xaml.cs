@@ -38,7 +38,7 @@ public partial class App : Application
         {
             Log("Another instance already running — activating it and exiting.");
             // Find existing window and bring to front
-            foreach (var p in Process.GetProcessesByName("GalQuoteCollector"))
+            foreach (var p in Process.GetProcessesByName("Gal-quote-tool"))
             {
                 if (p.MainWindowHandle != IntPtr.Zero)
                 {

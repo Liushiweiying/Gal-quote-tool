@@ -28,8 +28,8 @@
 
 | 文件 | 大小 | 说明 |
 |---|---|---|
-| `GalQuoteCollector.exe` | ~27MB | 需 .NET 8 运行时 |
-| `GalQuoteCollector_selfcontained.exe` | ~181MB | 单文件自包含，无需运行时 |
+| `Gal-quote-tool.exe` | ~27MB | 需 .NET 8 运行时 |
+| `Gal-quote-tool_selfcontained.exe` | ~181MB | 单文件自包含，无需运行时 |
 | `publish-folder.zip` | ~74MB | 自包含压缩包，解压即用 |
 
 > 数据目录：`%LOCALAPPDATA%\GalQuoteCollector\`

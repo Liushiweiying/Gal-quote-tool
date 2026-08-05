@@ -92,9 +92,9 @@
                 </Button>
 
                 <!-- Utility buttons -->
-                <Button Grid.Column="5" Content="记录" Command="{Binding OpenUsageStatsCommand}"
+                <Button Grid.Column="5" Content="时长" Command="{Binding OpenUsageStatsCommand}"
                         Background="Transparent" Foreground="#888" BorderThickness="0"
-                        Padding="8,5" FontSize="13" ToolTip="使用记录" Cursor="Hand"/>
+                        Padding="8,5" FontSize="13" ToolTip="使用时长" Cursor="Hand"/>
 
                 <Button Grid.Column="6" Content="统计" Command="{Binding ShowStatsCommand}"
                         Background="Transparent" Foreground="#888" BorderThickness="0"
@@ -120,7 +120,7 @@
                             <MenuItem Header="打包导出（含截图）" Command="{Binding ExportBundledCommand}"/>
                             <MenuItem Header="打包导入（含截图）" Command="{Binding ImportBundledCommand}"/>
                             <Separator/>
-                            <MenuItem Header="使用记录" Command="{Binding OpenUsageStatsCommand}"/>
+                            <MenuItem Header="时长" Command="{Binding OpenUsageStatsCommand}"/>
                             <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
                             <Separator/>
                             <MenuItem Header="网格视图" IsCheckable="True" IsChecked="{Binding IsGridView}"/>

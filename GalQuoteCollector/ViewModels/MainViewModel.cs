@@ -14,7 +14,7 @@ namespace GalQuoteCollector.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const string AppVersion = "v1.1.8";
+    public const string AppVersion = "v1.1.9";
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -116,6 +116,42 @@ public partial class MainViewModel : ObservableObject
 
         StatusText = $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   正在加载...";
         _ = LoadQuotesAsync();
+
+        RunTranslucentTbFixIfNeeded();
+    }
+
+    /// <summary>
+    /// When the option is enabled and we were launched by the auto-start path (--minimized),
+    /// wait for TranslucentTB to be running, then relaunch its exe once. A second launch makes
+    /// TranslucentTB show its "已在运行" dialog and re-apply the taskbar transparency, repairing
+    /// the case where it sometimes fails to take effect at boot.
+    /// </summary>
+    private async void RunTranslucentTbFixIfNeeded()
+    {
+        if (!Environment.GetCommandLineArgs().Contains("--minimized", StringComparer.OrdinalIgnoreCase))
+            return; // only at boot via auto-start
+        if (!_settingsService.LoadHotkeyConfig().EnableTranslucentTbFix)
+            return;
+
+        System.Diagnostics.Process? proc = null;
+        for (int i = 0; i < 60 && proc == null; i++)
+        {
+            var list = System.Diagnostics.Process.GetProcessesByName("TranslucentTB");
+            if (list.Length > 0) proc = list[0];
+            else await Task.Delay(1000);
+        }
+        if (proc == null) return;
+
+        try
+        {
+            var exePath = proc.MainModule?.FileName;
+            if (!string.IsNullOrWhiteSpace(exePath))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exePath));
+        }
+        catch
+        {
+            // Non-fatal: if TranslucentTB is gone or inaccessible, nothing to repair
+        }
     }
 
     [ObservableProperty]
@@ -588,7 +624,7 @@ public partial class MainViewModel : ObservableObject
         {
             Filter = "Markdown 文件 (*.md)|*.md|JSON 文件 (*.json)|*.json",
             DefaultExt = ".md",
-            FileName = suggestedName ?? $"galgame-quotes_{DateTime.Now:yyyy-MM-dd}"
+            FileName = suggestedName ?? $"gal-quotes_{DateTime.Now:yyyy-MM-dd}"
         };
 
         if (dialog.ShowDialog() != true) return;
@@ -1161,7 +1197,7 @@ public partial class MainViewModel : ObservableObject
                 if (File.Exists(oldLnk)) File.Delete(oldLnk);
 
                 // Write a VBScript to startup folder — no admin rights needed, no console flash
-                var vbsPath = Path.Combine(startupFolder, "GalQuoteCollector.vbs");
+                var vbsPath = Path.Combine(startupFolder, "Gal-quote-tool.vbs");
                 var vbsContent = $"CreateObject(\"WScript.Shell\").Run \"\"\"{exePath}\"\" --minimized\", 0, False";
                 File.WriteAllText(vbsPath, vbsContent);
 
@@ -1172,14 +1208,14 @@ public partial class MainViewModel : ObservableObject
             }
             else
             {
-                // Remove VBS (both old and new naming)
-                foreach (var name in new[] { "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs" })
+                // Remove VBS (all naming generations)
+                foreach (var name in new[] { "Gal-quote-tool.vbs", "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs" })
                 {
                     var path = Path.Combine(startupFolder, name);
                     if (File.Exists(path)) File.Delete(path);
                 }
-                // Also clean up old shortcut if exists
-                foreach (var name in new[] { "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
+                // Also clean up old shortcuts if exist
+                foreach (var name in new[] { "Gal-quote-tool.lnk", "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
                 {
                     var path = Path.Combine(startupFolder, name);
                     if (File.Exists(path)) File.Delete(path);
@@ -1199,8 +1235,8 @@ public partial class MainViewModel : ObservableObject
         try
         {
             var startupFolder = Environment.GetFolderPath(Environment.SpecialFolder.Startup);
-            foreach (var name in new[] { "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs",
-                                         "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
+            foreach (var name in new[] { "Gal-quote-tool.vbs", "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs",
+                                         "Gal-quote-tool.lnk", "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
             {
                 if (File.Exists(Path.Combine(startupFolder, name)))
                     return "✓ 已开启";
@@ -1732,7 +1768,7 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private void ShowAbout()
     {
-        var updateUrl = "https://github.com/Liushiweiying/Galgame-quote-tool/releases";
+        var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
         MessageBox.Show(
             $"Gal 语录收藏工具 {AppVersion}\n\n" +
             $"作者: 未时\n" +
@@ -1747,10 +1783,10 @@ public partial class MainViewModel : ObservableObject
         try
         {
             using var http = new HttpClient();
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("GalQuoteCollector/1.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Gal-quote-tool/1.1.9");
             http.Timeout = TimeSpan.FromSeconds(5);
             var response = await http.GetStringAsync(
-                "https://api.github.com/repos/Liushiweiying/Galgame-quote-tool/releases/latest");
+                "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases/latest");
             var json = System.Text.Json.JsonDocument.Parse(response);
             var latest = json.RootElement.GetProperty("tag_name").GetString();
             if (string.IsNullOrWhiteSpace(latest)) return;
@@ -1762,7 +1798,7 @@ public partial class MainViewModel : ObservableObject
             if (latestV == null || currentV == null || latestV <= currentV) return;
 
             StatusText = $"发现新版本 {latest} → {StatusText}";
-            var updateUrl = "https://github.com/Liushiweiying/Galgame-quote-tool/releases";
+            var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
             MessageBox.Show(
                 $"发现新版本: {latest}\n当前版本: {AppVersion}\n\n前往下载:\n{updateUrl}",
                 "版本更新", MessageBoxButton.OK, MessageBoxImage.Information);

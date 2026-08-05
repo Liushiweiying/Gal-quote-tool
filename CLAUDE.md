@@ -23,7 +23,7 @@ dotnet publish -r win-x64 -c Release -p:PublishSingleFile=true --self-contained 
 rm -rf publish-tmp publish-tmp2 && mkdir -p publish-v{N} && \
 dotnet publish -r win-x64 -c Release --self-contained false -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-v{N} --force && \
 dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o publish-tmp --force && \
-mv publish-tmp/GalQuoteCollector.exe publish-v{N}/GalQuoteCollector_selfcontained.exe && \
+mv publish-tmp/Gal-quote-tool.exe publish-v{N}/Gal-quote-tool_selfcontained.exe && \
 dotnet publish -r win-x64 -c Release --self-contained true -o publish-tmp2 --force && \
 powershell -Command "Compress-Archive -Path 'publish-tmp2/*' -DestinationPath 'publish-v{N}/publish-folder.zip' -Force"
 ```

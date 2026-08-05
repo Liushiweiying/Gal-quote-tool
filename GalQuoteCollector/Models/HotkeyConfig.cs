@@ -21,6 +21,8 @@ public class HotkeyConfig
     public bool HideUnrecognized { get; set; }
     public string ScreenshotDirectory { get; set; } = "";
     public string ScreenshotFormat { get; set; } = "png";
+    // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
+    public bool EnableTranslucentTbFix { get; set; }
     // Secondary hotkey for adding screenshot to current quote
     public bool AddShotAlt { get; set; } = true;
     public bool AddShotControl { get; set; } = true;
@@ -105,6 +107,7 @@ public class HotkeyConfig
             HideUnrecognized = HideUnrecognized,
             ScreenshotDirectory = ScreenshotDirectory,
             ScreenshotFormat = ScreenshotFormat,
+            EnableTranslucentTbFix = EnableTranslucentTbFix,
             AddShotAlt = AddShotAlt, AddShotControl = AddShotControl,
             AddShotShift = AddShotShift, AddShotWin = AddShotWin,
             AddShotVirtualKey = AddShotVirtualKey,

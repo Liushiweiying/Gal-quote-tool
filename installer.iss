@@ -1,9 +1,9 @@
 ; Gal Quote Collector — Inno Setup Script
 #define MyAppName "Gal Quote Collector"
-#define MyAppVersion "1.1.8"
+#define MyAppVersion "1.1.9"
 #define MyAppPublisher "Liushiweiying"
-#define MyAppURL "https://github.com/Liushiweiying/Galgame-quote-tool"
-#define MyAppExeName "GalQuoteCollector.exe"
+#define MyAppURL "https://github.com/Liushiweiying/Gal-quote-tool"
+#define MyAppExeName "Gal-quote-tool.exe"
 
 [Setup]
 AppId={{B4F8C1A2-3D5E-4F67-9A0B-1C2D3E4F5G6H}
@@ -14,8 +14,8 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=no
 DisableProgramGroupPage=yes
-OutputDir=publish-v141
-OutputBaseFilename=GalQuoteCollector_Setup
+OutputDir=publish-v142
+OutputBaseFilename=Gal-quote-tool_Setup
 Compression=lzma
 SolidCompression=yes
 WizardStyle=modern

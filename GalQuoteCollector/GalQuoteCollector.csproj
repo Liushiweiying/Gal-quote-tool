@@ -3,7 +3,8 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
-    <Version>1.1.8</Version>
+    <AssemblyName>Gal-quote-tool</AssemblyName>
+    <Version>1.1.9</Version>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app_icon.ico</ApplicationIcon>
     <Nullable>enable</Nullable>

@@ -1,7 +1,7 @@
 <Window x:Class="GalQuoteCollector.Views.UsageStatsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="使用记录"
+        Title="时长记录"
         Width="520" Height="480"
         MinWidth="400" MinHeight="350"
         WindowStartupLocation="CenterOwner"

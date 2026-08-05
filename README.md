@@ -30,8 +30,8 @@ From the [Releases](../../releases) page:
 
 | File | Size | Notes |
 |---|---|---|
-| `GalQuoteCollector.exe` | ~27MB | Requires .NET 8 runtime |
-| `GalQuoteCollector_selfcontained.exe` | ~181MB | Self-contained, no runtime needed |
+| `Gal-quote-tool.exe` | ~27MB | Requires .NET 8 runtime |
+| `Gal-quote-tool_selfcontained.exe` | ~181MB | Self-contained, no runtime needed |
 | `publish-folder.zip` | ~74MB | Self-contained ZIP, extract and run |
 
 > Data is stored at `%LOCALAPPDATA%\GalQuoteCollector\` (database, screenshots, settings).

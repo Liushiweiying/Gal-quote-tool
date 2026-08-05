@@ -88,6 +88,12 @@
             <CheckBox x:Name="HideUnrecognizedCheckBox" Content="搜索结果排除「[未识别到文字]」"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"/>
 
+            <CheckBox x:Name="TranslucentTbFixCheckBox"
+                      Content="TranslucentTB修复：开机自动重启一次 TranslucentTB，修复任务栏透明偶尔失效"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,6"
+                      ToolTip="开机时等待 TranslucentTB 启动后，自动再次运行它的程序，触发「已在运行」弹窗并重新应用透明效果"/>
+
+
             <Grid Margin="0,0,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBox Grid.Column="0" x:Name="ScreenshotDirBox" FontSize="12" Foreground="#555"
@@ -111,13 +117,17 @@
             <!-- ═══ Game Name Rules ═══ -->
             <TextBlock Text="游戏名匹配规则" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
             <TextBlock Text="窗口标题包含关键词时，自动映射到指定游戏名。匹配优先级：关键词最长的优先。"
-                       Foreground="#888" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,12"/>
+                       Foreground="#888" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4"/>
+            <TextBlock Text="Ctrl+点击某条规则可直接删除它"
+                       Foreground="#5B6ABF" FontSize="12" Margin="0,0,0,8"/>
 
             <!-- Rules list -->
             <ItemsControl x:Name="RulesList" Margin="0,0,0,6">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
-                        <Border Padding="8,5" Margin="0,0,0,4" BorderBrush="#EEE" BorderThickness="0 0 0 1">
+                        <Border Padding="8,5" Margin="0,0,0,4" BorderBrush="#EEE" BorderThickness="0 0 0 1"
+                                MouseDown="OnRuleMouseDown" Cursor="Hand"
+                                ToolTip="Ctrl+点击删除该规则">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto"/>

@@ -12,7 +12,7 @@ if %errorlevel% neq 0 (
 )
 
 :: kill lingering process
-taskkill /F /IM GalQuoteCollector.exe 2>nul >nul
+taskkill /F /IM Gal-quote-tool.exe 2>nul >nul
 
 :: build and run
 dotnet run --no-build 2>nul

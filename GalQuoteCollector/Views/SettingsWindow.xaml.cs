@@ -53,6 +53,11 @@ public partial class SettingsWindow : Window
         FormatCombo.SelectedIndex = currentConfig.ScreenshotFormat == "jpg" ? 1 : 0;
         SlideshowLoopCheckBox.IsChecked = currentConfig.SlideshowLoop;
 
+        // TranslucentTB fix option is only meaningful (and only shown) while TranslucentTB is running
+        TranslucentTbFixCheckBox.IsChecked = currentConfig.EnableTranslucentTbFix;
+        if (System.Diagnostics.Process.GetProcessesByName("TranslucentTB").Length == 0)
+            TranslucentTbFixCheckBox.Visibility = Visibility.Collapsed;
+
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
 
@@ -104,6 +109,18 @@ public partial class SettingsWindow : Window
         _newConfig.GameNameRules.RemoveAt(_newConfig.GameNameRules.Count - 1);
         RulesList.ItemsSource = null;
         RulesList.ItemsSource = _newConfig.GameNameRules;
+    }
+
+    private void OnRuleMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (Keyboard.Modifiers != ModifierKeys.Control) return;
+        if (sender is not System.Windows.Controls.Border border) return;
+        if (border.DataContext is not GameNameRule rule) return;
+
+        _newConfig.GameNameRules.Remove(rule);
+        RulesList.ItemsSource = null;
+        RulesList.ItemsSource = _newConfig.GameNameRules;
+        e.Handled = true;
     }
 
     private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -189,6 +206,7 @@ public partial class SettingsWindow : Window
         _newConfig.SlideshowEnglishFont = SlideshowEnglishFontCombo.SelectedItem is System.Windows.Media.FontFamily ef ? ef.Source : "Segoe UI";
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
+        _newConfig.EnableTranslucentTbFix = TranslucentTbFixCheckBox.IsChecked == true;
         var dir = ScreenshotDirBox.Text.Trim();
         _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
         _newConfig.ScreenshotFormat = FormatCombo.SelectedIndex == 1 ? "jpg" : "png";
