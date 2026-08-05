@@ -1190,11 +1190,14 @@ public partial class MainViewModel : ObservableObject
                 if (string.IsNullOrEmpty(exePath))
                     return (false, "无法获取程序路径");
 
-                // Clean up old VBS/lnk from previous naming
-                var oldVbs = Path.Combine(startupFolder, "GalgameQuoteCollector.vbs");
-                if (File.Exists(oldVbs)) File.Delete(oldVbs);
-                var oldLnk = Path.Combine(startupFolder, "GalgameQuoteCollector.lnk");
-                if (File.Exists(oldLnk)) File.Delete(oldLnk);
+                // Clean up stale VBS/lnk from ALL previous naming generations
+                // (GalgameQuoteCollector → GalQuoteCollector → Gal-quote-tool)
+                foreach (var name in new[] { "GalQuoteCollector.vbs", "GalgameQuoteCollector.vbs",
+                                             "GalQuoteCollector.lnk", "GalgameQuoteCollector.lnk" })
+                {
+                    var stalePath = Path.Combine(startupFolder, name);
+                    if (File.Exists(stalePath)) File.Delete(stalePath);
+                }
 
                 // Write a VBScript to startup folder — no admin rights needed, no console flash
                 var vbsPath = Path.Combine(startupFolder, "Gal-quote-tool.vbs");
