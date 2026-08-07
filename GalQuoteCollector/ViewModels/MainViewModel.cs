@@ -14,7 +14,7 @@ namespace GalQuoteCollector.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const string AppVersion = "v1.1.9";
+    public const string AppVersion = "v1.2.0";
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -309,7 +309,10 @@ public partial class MainViewModel : ObservableObject
             var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat,
                 forceFullscreen: !string.IsNullOrWhiteSpace(gameName));
 
-            var text = await _ocrService.RecognizeTextAsync(screenshotPath);
+            var ocrConfig = _settingsService.LoadHotkeyConfig();
+            var text = ocrConfig.OcrEngine == "local"
+                ? await _ocrService.RecognizeLocalTextAsync(screenshotPath, ocrConfig.LocalOcrUrl, ocrConfig.LocalOcrModel)
+                : await _ocrService.RecognizeTextAsync(screenshotPath);
 
             if (string.IsNullOrWhiteSpace(text))
                 text = "[未识别到文字]";
@@ -1786,7 +1789,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             using var http = new HttpClient();
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("Gal-quote-tool/1.1.9");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd("Gal-quote-tool/1.2.0");
             http.Timeout = TimeSpan.FromSeconds(5);
             var response = await http.GetStringAsync(
                 "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases/latest");

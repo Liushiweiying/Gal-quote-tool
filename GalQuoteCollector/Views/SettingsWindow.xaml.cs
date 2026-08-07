@@ -58,7 +58,22 @@ public partial class SettingsWindow : Window
         if (System.Diagnostics.Process.GetProcessesByName("TranslucentTB").Length == 0)
             TranslucentTbFixCheckBox.Visibility = Visibility.Collapsed;
 
+        OcrEngineCombo.SelectedIndex = currentConfig.OcrEngine == "local" ? 1 : 0;
+        LocalOcrUrlBox.Text = currentConfig.LocalOcrUrl ?? "";
+        LocalOcrModelBox.Text = currentConfig.LocalOcrModel ?? "";
+        UpdateLocalOcrPanelVisibility();
+
         SaveButton.IsEnabled = _newConfig.IsValid();
+    }
+
+    private void OcrEngineCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        UpdateLocalOcrPanelVisibility();
+    }
+
+    private void UpdateLocalOcrPanelVisibility()
+    {
+        LocalOcrPanel.Visibility = OcrEngineCombo.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private static string FormatDelay(int ms)
@@ -210,6 +225,9 @@ public partial class SettingsWindow : Window
         var dir = ScreenshotDirBox.Text.Trim();
         _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
         _newConfig.ScreenshotFormat = FormatCombo.SelectedIndex == 1 ? "jpg" : "png";
+        _newConfig.OcrEngine = OcrEngineCombo.SelectedIndex == 1 ? "local" : "win";
+        _newConfig.LocalOcrUrl = LocalOcrUrlBox.Text.Trim();
+        _newConfig.LocalOcrModel = LocalOcrModelBox.Text.Trim();
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();

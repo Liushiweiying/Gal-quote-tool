@@ -23,6 +23,10 @@ public class HotkeyConfig
     public string ScreenshotFormat { get; set; } = "png";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
     public bool EnableTranslucentTbFix { get; set; }
+    // OCR 引擎: "win" = Windows 内置 OCR, "local" = 本地模型 (Ollama)
+    public string OcrEngine { get; set; } = "win";
+    public string LocalOcrUrl { get; set; } = "http://localhost:11434";
+    public string LocalOcrModel { get; set; } = "qwen2.5vl:7b";
     // Secondary hotkey for adding screenshot to current quote
     public bool AddShotAlt { get; set; } = true;
     public bool AddShotControl { get; set; } = true;
@@ -108,6 +112,9 @@ public class HotkeyConfig
             ScreenshotDirectory = ScreenshotDirectory,
             ScreenshotFormat = ScreenshotFormat,
             EnableTranslucentTbFix = EnableTranslucentTbFix,
+            OcrEngine = OcrEngine,
+            LocalOcrUrl = LocalOcrUrl,
+            LocalOcrModel = LocalOcrModel,
             AddShotAlt = AddShotAlt, AddShotControl = AddShotControl,
             AddShotShift = AddShotShift, AddShotWin = AddShotWin,
             AddShotVirtualKey = AddShotVirtualKey,

@@ -2,7 +2,10 @@ using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
 using System.IO;
+using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
+using System.Text.Json;
 using Windows.Graphics.Imaging;
 using Windows.Media.Ocr;
 
@@ -86,6 +89,45 @@ public class OcrService
 
             lock (_cache) _cache[imagePath] = (bestText, DateTime.Now);
             return bestText;
+        }
+        catch
+        {
+            return string.Empty;
+        }
+    }
+
+    /// <summary>
+    /// Recognize text via a local vision model served by Ollama (/api/generate).
+    /// Sends the raw image as base64 and returns the model's plain-text answer.
+    /// </summary>
+    public async Task<string> RecognizeLocalTextAsync(string imagePath, string baseUrl, string model)
+    {
+        try
+        {
+            var bytes = await File.ReadAllBytesAsync(imagePath);
+            var b64 = Convert.ToBase64String(bytes);
+
+            var payload = new
+            {
+                model = model,
+                prompt = "识别图片中的所有文字，严格按照原文逐行输出，不要添加任何解释或格式。",
+                images = new[] { b64 },
+                stream = false
+            };
+
+            using var client = new HttpClient();
+            client.Timeout = TimeSpan.FromMinutes(2);
+            var content = new StringContent(
+                JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
+
+            var resp = await client.PostAsync(baseUrl.TrimEnd('/') + "/api/generate", content);
+            if (!resp.IsSuccessStatusCode) return string.Empty;
+
+            var respStr = await resp.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(respStr);
+            return doc.RootElement.TryGetProperty("response", out var r)
+                ? (r.GetString()?.Trim() ?? string.Empty)
+                : string.Empty;
         }
         catch
         {

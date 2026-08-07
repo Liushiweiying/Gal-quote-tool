@@ -114,6 +114,31 @@
 
             <Separator Margin="0,12,0,16"/>
 
+            <!-- ═══ OCR ═══ -->
+            <TextBlock Text="OCR 识别" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
+            <TextBlock Text="采集时用哪个引擎识别截图文字" Foreground="#888" FontSize="12" Margin="0,0,0,8"/>
+
+            <TextBlock Text="识别引擎" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
+            <ComboBox x:Name="OcrEngineCombo" FontSize="13" Margin="0,0,0,6"
+                      Background="White" BorderBrush="#DDD"
+                      SelectionChanged="OcrEngineCombo_SelectionChanged">
+                <ComboBoxItem Content="Win OCR（Windows 内置）"/>
+                <ComboBoxItem Content="本地模型（Qwen · Ollama）"/>
+            </ComboBox>
+
+            <StackPanel x:Name="LocalOcrPanel" Visibility="Collapsed">
+                <TextBlock Text="服务地址" FontSize="12" Foreground="#555" Margin="0,0,0,2"/>
+                <TextBox x:Name="LocalOcrUrlBox" FontSize="12" Padding="6,4" Margin="0,0,0,6"
+                         Background="#F5F5F5" BorderBrush="#E0E0E0"/>
+                <TextBlock Text="模型名" FontSize="12" Foreground="#555" Margin="0,0,0,2"/>
+                <TextBox x:Name="LocalOcrModelBox" FontSize="12" Padding="6,4" Margin="0,0,0,6"
+                         Background="#F5F5F5" BorderBrush="#E0E0E0"/>
+                <TextBlock Text="需本机运行 Ollama 并已拉取模型（默认 http://localhost:11434 · qwen2.5vl:7b）"
+                           Foreground="#BBB" FontSize="11" Margin="0,0,0,6"/>
+            </StackPanel>
+
+            <Separator Margin="0,12,0,16"/>
+
             <!-- ═══ Game Name Rules ═══ -->
             <TextBlock Text="游戏名匹配规则" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
             <TextBlock Text="窗口标题包含关键词时，自动映射到指定游戏名。匹配优先级：关键词最长的优先。"
