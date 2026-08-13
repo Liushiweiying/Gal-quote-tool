@@ -31,11 +31,18 @@ public class CaptureService
 
         // Game windows (especially Magpie-upscaled) may report their internal resolution
         // via GetWindowRect while the actual visible content fills the entire screen.
-        // forceFullscreen is set by the caller when the window is recognized as a game.
+        // forceFullscreen is set by the caller when the window is recognized as a game,
+        // but it is only honored when the window actually occupies most of its monitor —
+        // a windowed game must not capture the whole desktop.
         // Also auto-detect borderless fullscreen windows (WS_POPUP, no caption).
         int screenW = GetSystemMetrics(SM_CXSCREEN);
         int screenH = GetSystemMetrics(SM_CYSCREEN);
-        bool shouldCaptureFullscreen = forceFullscreen;
+        bool shouldCaptureFullscreen = false;
+        if (forceFullscreen)
+        {
+            double cover = (double)(width * height) / (double)(screenW * screenH);
+            shouldCaptureFullscreen = cover >= 0.9;
+        }
         if (!shouldCaptureFullscreen)
         {
             int style = GetWindowLong(hwnd, GWL_STYLE);
@@ -43,10 +50,24 @@ public class CaptureService
         }
         if (shouldCaptureFullscreen)
         {
-            rect.left = 0;
-            rect.top = 0;
-            width = screenW;
-            height = screenH;
+            // Capture the monitor the window is actually on. rcMonitor can carry
+            // negative coordinates on multi-monitor setups (monitor left of primary);
+            // CopyFromScreen accepts virtual-screen coordinates, so this works there too.
+            var mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+            var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+            if (GetMonitorInfo(mon, ref mi))
+            {
+                rect = mi.rcMonitor;
+                width = rect.right - rect.left;
+                height = rect.bottom - rect.top;
+            }
+            else
+            {
+                rect.left = 0;
+                rect.top = 0;
+                width = screenW;
+                height = screenH;
+            }
         }
 
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
@@ -98,6 +119,7 @@ public class CaptureService
     private const int GWL_STYLE = -16;
     private const int WS_POPUP = unchecked((int)0x80000000);
     private const int WS_CAPTION = unchecked((int)0x00C00000);
+    private const uint MONITOR_DEFAULTTONEAREST = 2;
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
@@ -117,6 +139,12 @@ public class CaptureService
     [DllImport("user32.dll")]
     private static extern int GetWindowTextLength(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT
     {
@@ -124,5 +152,14 @@ public class CaptureService
         public int top;
         public int right;
         public int bottom;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MONITORINFO
+    {
+        public int cbSize;
+        public RECT rcMonitor;
+        public RECT rcWork;
+        public int dwFlags;
     }
 }

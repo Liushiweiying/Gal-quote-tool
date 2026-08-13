@@ -191,10 +191,11 @@ public partial class MainWindow : Window
             MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (result != MessageBoxResult.Yes) return;
 
-        foreach (var q in selected.ToList())
-        {
-            vm.DeleteQuoteDirect(q);
-        }
+        // Consistent with single-quote deletion: ask whether screenshot files go too
+        var delSs = MessageBox.Show("是否同时删除这些语录的截图文件？（移入回收站）\n「否」= 保留截图文件", "删除截图？",
+            MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+
+        vm.DeleteQuotes(selected, delSs);
     }
 
     private static T? FindVisualChild<T>(DependencyObject parent) where T : DependencyObject

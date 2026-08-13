@@ -124,6 +124,7 @@
                       SelectionChanged="OcrEngineCombo_SelectionChanged">
                 <ComboBoxItem Content="Win OCR（Windows 内置）"/>
                 <ComboBoxItem Content="本地模型（Qwen · Ollama）"/>
+                <ComboBoxItem Content="RapidOCR（本地离线）"/>
             </ComboBox>
 
             <StackPanel x:Name="LocalOcrPanel" Visibility="Collapsed">
@@ -134,6 +135,26 @@
                 <TextBox x:Name="LocalOcrModelBox" FontSize="12" Padding="6,4" Margin="0,0,0,6"
                          Background="#F5F5F5" BorderBrush="#E0E0E0"/>
                 <TextBlock Text="需本机运行 Ollama 并已拉取模型（默认 http://localhost:11434 · qwen2.5vl:7b）"
+                           Foreground="#BBB" FontSize="11" Margin="0,0,0,6"/>
+            </StackPanel>
+
+            <StackPanel x:Name="RapidOcrPanel" Visibility="Collapsed">
+                <TextBlock Text="Python 路径（装有 RapidOCR 的 python.exe）" FontSize="12" Foreground="#555" Margin="0,0,0,2"/>
+                <Grid Margin="0,0,0,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" x:Name="RapidOcrPythonBox" FontSize="12" Padding="6,4"
+                             VerticalContentAlignment="Center" Background="#F5F5F5" BorderBrush="#E0E0E0"/>
+                    <Button Grid.Column="1" Content="浏览..." Click="OnBrowseRapidPython"
+                            Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
+                    <Button Grid.Column="2" Content="检测" Click="OnCheckRapid"
+                            Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
+                </Grid>
+                <TextBlock x:Name="RapidOcrStatus"
+                           Text="留空自动探测；识别时会在本机搜索已安装的 RapidOCR"
                            Foreground="#BBB" FontSize="11" Margin="0,0,0,6"/>
             </StackPanel>
 

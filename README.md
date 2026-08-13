@@ -13,7 +13,7 @@ A desktop tool for capturing, organizing, and revisiting visual novel quotes. Fe
 
 | Feature | Description |
 |---|---|
-| **One-key capture** | Global hotkey `Ctrl+Win+Z` (customizable), screenshot + OCR + auto-save |
+| **One-key capture** | Global hotkey `Ctrl+Win+Z` (customizable), screenshot + OCR + auto-save; OCR engine selectable: Windows built-in / local Ollama model / RapidOCR |
 | **Game name detection** | Strip engine/date suffixes from window title; custom matching rules supported |
 | **Tags** | Tag quotes (e.g. emotional, funny), filter by tag |
 | **Groups** | Create curated collections, one quote can belong to multiple groups |
@@ -30,9 +30,10 @@ From the [Releases](../../releases) page:
 
 | File | Size | Notes |
 |---|---|---|
-| `Gal-quote-tool.exe` | ~27MB | Requires .NET 8 runtime |
-| `Gal-quote-tool_selfcontained.exe` | ~181MB | Self-contained, no runtime needed |
-| `publish-folder.zip` | ~74MB | Self-contained ZIP, extract and run |
+| `Gal-quote-tool.exe` | ~28MB | Single file, requires .NET 8 runtime |
+| `Gal-quote-tool_selfcontained.exe` | ~190MB | Single file, self-contained, no runtime needed |
+| `Gal-quote-tool_Setup.exe` | ~55MB | Inno Setup installer (self-contained, with uninstaller) |
+| `publish-folder.zip` | ~77MB | Self-contained ZIP, extract and run |
 
 > Data is stored at `%LOCALAPPDATA%\GalQuoteCollector\` (database, screenshots, settings).
 
@@ -88,7 +89,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Tech Stack
 - **.NET 8 + WPF** - Desktop framework
-- **Windows.Media.Ocr** - Native OCR (Chinese support)
+- **Windows.Media.Ocr** - Native OCR (Chinese support; switchable to Ollama / RapidOCR)
 - **SQLite** - Local database
 - **CommunityToolkit.Mvvm** - MVVM architecture
 - **Hardcodet.NotifyIcon.Wpf** - System tray
@@ -101,3 +102,19 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 ├── settings.json      - Hotkey, rules, delay config
 └── screenshots\       - PNG screenshots
 ```
+
+## Changelog
+
+### v1.4.4 (2026-08-13)
+- **New** RapidOCR offline OCR engine (Settings → OCR engine; requires a Python with `rapidocr-onnxruntime`)
+- **Fix** SQLite multi-thread race (background load + hotkey capture could error concurrently)
+- **Fix** hotkey display (e.g. F5 shown as "t")
+- **Fix** capture hotkey colliding with add-screenshot hotkey had no warning
+- **Fix** bundled import could be path-traversed and silently overwrite local settings/usage data (now asks for confirmation)
+- **Fix** fullscreen capture only captured the primary monitor; negative-coordinate (secondary) monitors
+- **Fix** windowed games were force-captured fullscreen (now only when the window covers ≥90% of a monitor)
+- **Fix** tag/group filtering was slow with many quotes (removed per-quote queries)
+- **Fix** batch delete did not ask about screenshot files (now consistent with single delete)
+- **Fix** main window stayed minimized after a failed capture / no window detected
+- **Fix** 0ms capture delay could screenshot our own window (min 100ms enforced)
+- **Tweak** bounded startup log & OCR cache; version read from assembly (single source)

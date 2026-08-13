@@ -23,10 +23,12 @@ public class HotkeyConfig
     public string ScreenshotFormat { get; set; } = "png";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
     public bool EnableTranslucentTbFix { get; set; }
-    // OCR 引擎: "win" = Windows 内置 OCR, "local" = 本地模型 (Ollama)
+    // OCR 引擎: "win" = Windows 内置 OCR, "local" = 本地模型 (Ollama), "rapid" = RapidOCR (本地离线)
     public string OcrEngine { get; set; } = "win";
     public string LocalOcrUrl { get; set; } = "http://localhost:11434";
     public string LocalOcrModel { get; set; } = "qwen2.5vl:7b";
+    // 装有 RapidOCR 的 python.exe 路径；留空则自动探测
+    public string RapidOcrPython { get; set; } = "";
     // Secondary hotkey for adding screenshot to current quote
     public bool AddShotAlt { get; set; } = true;
     public bool AddShotControl { get; set; } = true;
@@ -58,8 +60,31 @@ public class HotkeyConfig
         if (Alt) sb.Append("Alt+");
         if (Shift) sb.Append("Shift+");
         if (Win) sb.Append("Win+");
-        sb.Append((char)VirtualKey);
+        sb.Append(KeyName(VirtualKey));
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Map a virtual-key code to a human-readable name (letters, digits, F-keys,
+    /// arrows, punctuation). Previously the raw VK code was cast to char, which
+    /// rendered e.g. F5 (0x74) as "t".
+    /// </summary>
+    public static string KeyName(uint vk)
+    {
+        if (vk >= 'A' && vk <= 'Z') return ((char)vk).ToString();
+        if (vk >= '0' && vk <= '9') return ((char)vk).ToString();
+        if (vk >= 0x70 && vk <= 0x87) return $"F{vk - 0x6F}";
+        return vk switch
+        {
+            0x08 => "Backspace", 0x09 => "Tab", 0x0D => "Enter", 0x1B => "Esc",
+            0x20 => "Space", 0x21 => "PageUp", 0x22 => "PageDown", 0x23 => "End",
+            0x24 => "Home", 0x25 => "←", 0x26 => "↑", 0x27 => "→", 0x28 => "↓",
+            0x2D => "Insert", 0x2E => "Delete",
+            0xBA => ";", 0xBB => "=", 0xBC => ",", 0xBD => "-", 0xBE => ".",
+            0xBF => "/", 0xC0 => "`", 0xDB => "[", 0xDC => "\\", 0xDD => "]",
+            0xDE => "'",
+            _ => ((char)vk).ToString()
+        };
     }
 
     /// <summary>
@@ -82,7 +107,7 @@ public class HotkeyConfig
         if (AddShotAlt) sb.Append("Alt+");
         if (AddShotShift) sb.Append("Shift+");
         if (AddShotWin) sb.Append("Win+");
-        sb.Append((char)AddShotVirtualKey);
+        sb.Append(KeyName(AddShotVirtualKey));
         return sb.ToString();
     }
 
@@ -115,6 +140,7 @@ public class HotkeyConfig
             OcrEngine = OcrEngine,
             LocalOcrUrl = LocalOcrUrl,
             LocalOcrModel = LocalOcrModel,
+            RapidOcrPython = RapidOcrPython,
             AddShotAlt = AddShotAlt, AddShotControl = AddShotControl,
             AddShotShift = AddShotShift, AddShotWin = AddShotWin,
             AddShotVirtualKey = AddShotVirtualKey,

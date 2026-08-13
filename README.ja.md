@@ -13,7 +13,7 @@
 
 | 機能 | 説明 |
 |---|---|
-| **ワンキー収集** | グローバルホットキー `Ctrl+Win+Z`（カスタマイズ可）、スクショ → OCR → 自動保存 |
+| **ワンキー収集** | グローバルホットキー `Ctrl+Win+Z`（カスタマイズ可）、スクショ → OCR → 自動保存；OCR は Windows 標準 / Ollama ローカル / RapidOCR から選択可 |
 | **ゲーム名認識** | エンジン/日付の接尾辞を自動除去、カスタムルール対応 |
 | **タグ** | セリフにタグ付け、フィルタリング |
 | **グループ** | コレクション作成、1つのセリフが複数グループに所属可 |
@@ -28,9 +28,10 @@
 
 | ファイル | サイズ | 説明 |
 |---|---|---|
-| `Gal-quote-tool.exe` | ~27MB | .NET 8 ランタイムが必要 |
-| `Gal-quote-tool_selfcontained.exe` | ~181MB | 単一ファイル、ランタイム不要 |
-| `publish-folder.zip` | ~74MB | 自己完結 ZIP、解凍して実行 |
+| `Gal-quote-tool.exe` | ~28MB | 単一ファイル、.NET 8 ランタイムが必要 |
+| `Gal-quote-tool_selfcontained.exe` | ~190MB | 単一ファイル、ランタイム不要 |
+| `Gal-quote-tool_Setup.exe` | ~55MB | Inno Setup インストーラ（自己完結、アンインストーラ付き） |
+| `publish-folder.zip` | ~77MB | 自己完結 ZIP、解凍して実行 |
 
 > データ保存先：`%LOCALAPPDATA%\GalQuoteCollector\`
 
@@ -86,7 +87,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## 技術スタック
 - **.NET 8 + WPF** — デスクトップフレームワーク
-- **Windows.Media.Ocr** — ネイティブ OCR
+- **Windows.Media.Ocr** — ネイティブ OCR（Ollama / RapidOCR に切替可）
 - **SQLite** — ローカルデータベース
 - **CommunityToolkit.Mvvm** — MVVM アーキテクチャ
 - **Hardcodet.NotifyIcon.Wpf** — システムトレイ
@@ -99,3 +100,19 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 ├── settings.json      - 設定ファイル
 └── screenshots\       - PNG スクリーンショット
 ```
+
+## 更新履歴
+
+### v1.4.4（2026-08-13）
+- **追加** RapidOCR オフライン OCR エンジン（設定 → OCR エンジン。`rapidocr-onnxruntime` 入りの Python が必要）
+- **修正** SQLite のマルチスレッド競合（バックグラウンド読込とホットキー収集の同時実行時）
+- **修正** ホットキー表示の誤り（例：F5 が "t" と表示）
+- **修正** 収集ホットキーと追加撮影ホットキーが重複しても警告がなかった
+- **修正** バンドル ZIP インポートのパストラバーサル、設定・使用記録の無断上書き（確認を求めるように）
+- **修正** フルスクリーン撮影がプライマリモニタのみ・セカンダリモニタの負座標対応
+- **修正** ウィンドウモードのゲームを強制的に全画面撮影（モニタの 90% 以上を覆う場合のみ全画面に）
+- **修正** 大量のセリフでタグ/グループ絞り込みが遅い（逐次クエリを排除）
+- **修正** 一括削除でスクリーンショットの扱いを確認するように（単一削除と統一）
+- **修正** 収集失敗時・ウィンドウ未検出時にメインウィンドウが最小化されたまま
+- **修正** 収集遅延 0ms で自ウィンドウを撮影し得る問題（最低 100ms に強制）
+- **改善** 起動ログ・OCR キャッシュの上限設定、バージョンをアセンブリから一元取得

@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Input;
 using GalQuoteCollector.Models;
+using GalQuoteCollector.Services;
+using Microsoft.Win32;
 
 namespace GalQuoteCollector.Views;
 
@@ -58,22 +60,55 @@ public partial class SettingsWindow : Window
         if (System.Diagnostics.Process.GetProcessesByName("TranslucentTB").Length == 0)
             TranslucentTbFixCheckBox.Visibility = Visibility.Collapsed;
 
-        OcrEngineCombo.SelectedIndex = currentConfig.OcrEngine == "local" ? 1 : 0;
+        OcrEngineCombo.SelectedIndex = currentConfig.OcrEngine switch { "local" => 1, "rapid" => 2, _ => 0 };
         LocalOcrUrlBox.Text = currentConfig.LocalOcrUrl ?? "";
         LocalOcrModelBox.Text = currentConfig.LocalOcrModel ?? "";
-        UpdateLocalOcrPanelVisibility();
+        RapidOcrPythonBox.Text = currentConfig.RapidOcrPython ?? "";
+        UpdateOcrPanelsVisibility();
 
         SaveButton.IsEnabled = _newConfig.IsValid();
     }
 
     private void OcrEngineCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        UpdateLocalOcrPanelVisibility();
+        UpdateOcrPanelsVisibility();
     }
 
-    private void UpdateLocalOcrPanelVisibility()
+    private void UpdateOcrPanelsVisibility()
     {
         LocalOcrPanel.Visibility = OcrEngineCombo.SelectedIndex == 1 ? Visibility.Visible : Visibility.Collapsed;
+        RapidOcrPanel.Visibility = OcrEngineCombo.SelectedIndex == 2 ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void OnBrowseRapidPython(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "选择装有 RapidOCR 的 python.exe",
+            Filter = "Python|python.exe|所有文件|*.*",
+            CheckFileExists = true
+        };
+        if (dlg.ShowDialog(this) == true)
+            RapidOcrPythonBox.Text = dlg.FileName;
+    }
+
+    private async void OnCheckRapid(object sender, RoutedEventArgs e)
+    {
+        var btn = (System.Windows.Controls.Button)sender;
+        btn.IsEnabled = false;
+        RapidOcrStatus.Text = "检测中…";
+        try
+        {
+            var (ok, detail) = await new OcrService().CheckRapidAsync(RapidOcrPythonBox.Text.Trim());
+            RapidOcrStatus.Text = ok ? ("✓ " + detail) : ("✗ " + detail);
+            RapidOcrStatus.Foreground = ok
+                ? System.Windows.Media.Brushes.SeaGreen
+                : System.Windows.Media.Brushes.Firebrick;
+        }
+        finally
+        {
+            btn.IsEnabled = true;
+        }
     }
 
     private static string FormatDelay(int ms)
@@ -225,9 +260,10 @@ public partial class SettingsWindow : Window
         var dir = ScreenshotDirBox.Text.Trim();
         _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
         _newConfig.ScreenshotFormat = FormatCombo.SelectedIndex == 1 ? "jpg" : "png";
-        _newConfig.OcrEngine = OcrEngineCombo.SelectedIndex == 1 ? "local" : "win";
+        _newConfig.OcrEngine = OcrEngineCombo.SelectedIndex switch { 1 => "local", 2 => "rapid", _ => "win" };
         _newConfig.LocalOcrUrl = LocalOcrUrlBox.Text.Trim();
         _newConfig.LocalOcrModel = LocalOcrModelBox.Text.Trim();
+        _newConfig.RapidOcrPython = RapidOcrPythonBox.Text.Trim();
         Result = _newConfig.Clone();
         DialogResult = true;
         Close();

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.Drawing.Imaging;
@@ -87,7 +88,18 @@ public class OcrService
                 if (text.Length > bestText.Length) bestText = text;
             }
 
-            lock (_cache) _cache[imagePath] = (bestText, DateTime.Now);
+            lock (_cache)
+            {
+                // Bound the cache: evict stale entries once it grows past a sane size,
+                // so a long-running session doesn't accumulate paths forever.
+                if (_cache.Count > 100)
+                {
+                    var cutoff = DateTime.Now - CacheDuration;
+                    foreach (var k in _cache.Where(kv => kv.Value.time < cutoff).Select(kv => kv.Key).ToList())
+                        _cache.Remove(k);
+                }
+                _cache[imagePath] = (bestText, DateTime.Now);
+            }
             return bestText;
         }
         catch
@@ -133,6 +145,168 @@ public class OcrService
         {
             return string.Empty;
         }
+    }
+
+    // ===================== RapidOCR (本地离线, Python) =====================
+    // 通过装有 rapidocr-onnxruntime 的 python 运行内嵌助手脚本，逐行输出识别文字。
+
+    private static readonly string[] RapidCandidatePythons =
+    {
+        // 本机已知装有 RapidOCR 的环境（按概率排序）
+        @"E:\sd-webui-aki\sd-webui-aki-v4.10-cu128\python\python.exe",
+        @"D:\Miniconda3\python.exe",
+        @"C:\Users\未时\AppData\Local\Programs\Python\Python310\python.exe",
+        @"C:\Users\未时\AppData\Local\Programs\Python\Python313\python.exe",
+    };
+
+    // null = 尚未探测；空串 = 已探测但都没装 RapidOCR
+    private static string? _rapidPython;
+
+    private const string RapidHelperScript = """
+        # -*- coding: utf-8 -*-
+        import os
+        import sys
+
+        def main():
+            args = [a for a in sys.argv[1:] if not a.startswith("--")]
+            if not args:
+                sys.exit(2)
+            sys.stdout.reconfigure(encoding="utf-8")
+            sys.stderr.reconfigure(encoding="utf-8")
+            from rapidocr_onnxruntime import RapidOCR
+            ocr = RapidOCR()
+            for img in args:
+                if not os.path.exists(img):
+                    continue
+                result, _elapse = ocr(img)
+                for box, text, score in (result or []):
+                    if text:
+                        print(text)
+            sys.exit(0)
+
+        if __name__ == "__main__":
+            main()
+        """;
+
+    /// <summary>确保助手脚本已写入磁盘，返回其路径。</summary>
+    private static string EnsureRapidHelperScript()
+    {
+        var dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                               "GalQuoteCollector");
+        Directory.CreateDirectory(dir);
+        var script = Path.Combine(dir, "rapid_ocr_helper.py");
+        if (!File.Exists(script))
+            File.WriteAllText(script, RapidHelperScript, Encoding.UTF8);
+        return script;
+    }
+
+    /// <summary>探测指定 python 是否装有 rapidocr-onnxruntime，返回版本号（未装返回 null）。</summary>
+    private static async Task<string?> ProbeRapidVersionAsync(string pythonPath)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = pythonPath,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                StandardOutputEncoding = Encoding.UTF8,
+            };
+            psi.ArgumentList.Add("-c");
+            psi.ArgumentList.Add("import importlib.metadata; print(importlib.metadata.version('rapidocr-onnxruntime'))");
+            using var proc = Process.Start(psi);
+            if (proc == null) return null;
+            var stdout = await proc.StandardOutput.ReadToEndAsync();
+            await proc.WaitForExitAsync();
+            return proc.ExitCode == 0 ? stdout.Trim() : null;
+        }
+        catch { return null; }
+    }
+
+    /// <summary>
+    /// 找到装有 RapidOCR 的 python.exe 并缓存。优先用设置里填的路径，其次探测本机已知环境，最后试 PATH 里的 python。
+    /// </summary>
+    private static async Task<(string? path, string? version)> FindRapidPythonAsync(string configured)
+    {
+        if (_rapidPython != null)
+            return _rapidPython == "" ? (null, null) : (_rapidPython, _rapidPythonVersion);
+
+        async Task<(string?, string?)> TryAsync(string path)
+        {
+            var ver = await ProbeRapidVersionAsync(path);
+            return ver != null ? (path, ver) : (null, null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(configured) && File.Exists(configured))
+        {
+            var r = await TryAsync(configured);
+            if (r.Item1 != null) { _rapidPython = r.Item1; _rapidPythonVersion = r.Item2; return r; }
+        }
+        foreach (var cand in RapidCandidatePythons)
+        {
+            if (!File.Exists(cand)) continue;
+            var r = await TryAsync(cand);
+            if (r.Item1 != null) { _rapidPython = r.Item1; _rapidPythonVersion = r.Item2; return r; }
+        }
+        var pathPy = await TryAsync("python");
+        if (pathPy.Item1 != null) { _rapidPython = pathPy.Item1; _rapidPythonVersion = pathPy.Item2; return pathPy; }
+
+        _rapidPython = "";   // 已探测，全都没装
+        _rapidPythonVersion = null;
+        return (null, null);
+    }
+
+    private static string? _rapidPythonVersion;
+
+    /// <summary>检查当前机器能否用 RapidOCR，返回 (可用?, 说明)。</summary>
+    public async Task<(bool ok, string detail)> CheckRapidAsync(string configuredPython)
+    {
+        var (path, ver) = await FindRapidPythonAsync(configuredPython);
+        if (path == null)
+            return (false, "未找到装有 RapidOCR 的 Python（可尝试在设置中指定 python.exe 路径）");
+        return (true, $"RapidOCR {ver} · {path}");
+    }
+
+    /// <summary>
+    /// 用 RapidOCR 识别截图文字。先做与 Win OCR 相同的底部裁剪+增强，再交给 python 助手脚本。
+    /// </summary>
+    public async Task<string> RecognizeRapidTextAsync(string imagePath, string configuredPython)
+    {
+        try
+        {
+            var (py, _) = await FindRapidPythonAsync(configuredPython);
+            if (py == null) return string.Empty;
+
+            var script = EnsureRapidHelperScript();
+            var processed = PreprocessForOcr(imagePath);
+            if (processed == null) return string.Empty;
+
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = py,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                };
+                psi.ArgumentList.Add(script);
+                psi.ArgumentList.Add(processed);
+                using var proc = Process.Start(psi);
+                if (proc == null) return string.Empty;
+                var stdout = await proc.StandardOutput.ReadToEndAsync();
+                await proc.WaitForExitAsync();
+                var lines = stdout.Trim().Split('\n')
+                    .Select(l => l.Trim()).Where(l => l.Length >= 1);
+                return string.Join(Environment.NewLine, lines);
+            }
+            finally { try { File.Delete(processed); } catch { } }
+        }
+        catch { return string.Empty; }
     }
 
     /// <summary>

@@ -15,8 +15,6 @@ public class UsageTracker : IDisposable
     private readonly object _lock = new();
     private const string ToolKey = "__tool__";
 
-    public event Action<UsageData>? OnDataSaved;
-
     public UsageTracker(string dataDir, GameDetectService gameDetect)
     {
         _filePath = Path.Combine(dataDir, "usage.json");
@@ -46,19 +44,6 @@ public class UsageTracker : IDisposable
     }
 
     public UsageData GetData() { lock (_lock) { return _data; } }
-
-    /// <summary>Today's tool runtime (summed across all sessions).</summary>
-    public int GetTodayRuntimeSeconds()
-    {
-        lock (_lock)
-        {
-            var today = DateTime.Now.ToString("yyyy-MM-dd");
-            var day = _data.GetDay(today);
-            if (day != null && day.TryGetValue(ToolKey, out var rec))
-                return rec.Seconds;
-            return 0;
-        }
-    }
 
     private void Tick(object? state)
     {
@@ -112,7 +97,6 @@ public class UsageTracker : IDisposable
         {
             var json = JsonSerializer.Serialize(_data, new JsonSerializerOptions { WriteIndented = true });
             File.WriteAllText(_filePath, json);
-            OnDataSaved?.Invoke(_data);
         }
     }
 

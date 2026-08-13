@@ -14,7 +14,9 @@ namespace GalQuoteCollector.ViewModels;
 
 public partial class MainViewModel : ObservableObject
 {
-    public const string AppVersion = "v1.2.0";
+    // Single source of truth for the version: read from the assembly (csproj <Version>).
+    public static string AppVersion =>
+        "v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3);
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -288,6 +290,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_isCapturing) return;
         _isCapturing = true;
+        bool restoreWindow = true; // restored on failure; success stays minimized (toast restores)
 
         try
         {
@@ -297,7 +300,8 @@ public partial class MainViewModel : ObservableObject
             var windowTitle = CaptureService.GetWindowTitle(gameHwnd);
 
             _window.WindowState = WindowState.Minimized;
-            await Task.Delay(_captureDelayMs);
+            // Minimum 100ms: anything shorter risks capturing our own window
+            await Task.Delay(Math.Max(100, _captureDelayMs));
 
             if (string.IsNullOrWhiteSpace(windowTitle))
             {
@@ -310,9 +314,14 @@ public partial class MainViewModel : ObservableObject
                 forceFullscreen: !string.IsNullOrWhiteSpace(gameName));
 
             var ocrConfig = _settingsService.LoadHotkeyConfig();
-            var text = ocrConfig.OcrEngine == "local"
-                ? await _ocrService.RecognizeLocalTextAsync(screenshotPath, ocrConfig.LocalOcrUrl, ocrConfig.LocalOcrModel)
-                : await _ocrService.RecognizeTextAsync(screenshotPath);
+            var text = ocrConfig.OcrEngine switch
+            {
+                "local" => await _ocrService.RecognizeLocalTextAsync(
+                    screenshotPath, ocrConfig.LocalOcrUrl, ocrConfig.LocalOcrModel),
+                "rapid" => await _ocrService.RecognizeRapidTextAsync(
+                    screenshotPath, ocrConfig.RapidOcrPython),
+                _ => await _ocrService.RecognizeTextAsync(screenshotPath)
+            };
 
             if (string.IsNullOrWhiteSpace(text))
                 text = "[未识别到文字]";
@@ -344,6 +353,7 @@ public partial class MainViewModel : ObservableObject
             });
             toast.Show();
 
+            restoreWindow = false;
             StatusText = $"已采集: {quote.PreviewText}";
         }
         catch (Exception ex)
@@ -352,6 +362,7 @@ public partial class MainViewModel : ObservableObject
         }
         finally
         {
+            if (restoreWindow) _window.WindowState = WindowState.Normal;
             _isCapturing = false;
         }
     }
@@ -882,8 +893,9 @@ public partial class MainViewModel : ObservableObject
                     : (!string.IsNullOrWhiteSpace(item.Screenshot) ? new List<string> { item.Screenshot } : []);
                 foreach (var relPath in ssSrcs)
                 {
+                    // Reject path traversal / absolute paths that escape the extraction dir
                     var srcPath = Path.Combine(tempDir, relPath);
-                    if (!File.Exists(srcPath)) srcPath = relPath; // absolute path fallback
+                    if (!IsUnderDir(srcPath, tempDir)) continue;
                     if (!File.Exists(srcPath)) continue;
                     var ext = Path.GetExtension(srcPath);
                     var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
@@ -917,13 +929,26 @@ public partial class MainViewModel : ObservableObject
                 imported++;
             }
 
-            // Restore settings and usage data if bundled
-            foreach (var fn in new[] { "settings.json", "usage.json" })
+            // Restore settings and usage data if bundled — only with explicit confirmation,
+            // since silently overwriting the local config would lose data.
+            bool hasExtra = File.Exists(Path.Combine(tempDir, "settings.json"))
+                || File.Exists(Path.Combine(tempDir, "usage.json"));
+            if (hasExtra)
             {
-                var src = Path.Combine(tempDir, fn);
-                var dest = Path.Combine(_dataDir, fn);
-                if (File.Exists(src))
-                    File.Copy(src, dest, true);
+                bool restoreExtra = MessageBox.Show(
+                    "压缩包中还包含 settings.json / usage.json，是否同时恢复这些设置与使用记录？\n" +
+                    "（选择「否」将只导入语录和截图，不覆盖当前配置）",
+                    "恢复设置", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+                if (restoreExtra)
+                {
+                    foreach (var fn in new[] { "settings.json", "usage.json" })
+                    {
+                        var src = Path.Combine(tempDir, fn);
+                        var dest = Path.Combine(_dataDir, fn);
+                        if (File.Exists(src))
+                            File.Copy(src, dest, true);
+                    }
+                }
             }
 
             RefreshQuotes();
@@ -968,42 +993,40 @@ public partial class MainViewModel : ObservableObject
 
             _hotkeyService.UpdateAddHotkey(newConfig.ToAddModifiers(), newConfig.AddShotVirtualKey);
 
-            if (_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey))
+            // UpdateHotkey returns false when the primary collides with the add-screenshot
+            // hotkey — the two must stay distinct so a single press can't fire both actions.
+            bool conflict = !_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey);
+            var (autoOk, autoMsg) = ApplySettings(newConfig);
+
+            if (conflict)
             {
-                _settingsService.SaveHotkeyConfig(newConfig);
-                _gameDetectService.SetRules(newConfig.GameNameRules);
-                ReapplyRulesToAllQuotes();
-                _hideUnrecognized = newConfig.HideUnrecognized;
-                _screenshotFormat = newConfig.ScreenshotFormat;
-                ToggleUsageTracking(newConfig.EnableUsageTracking);
-                if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
-                {
-                    try { _window.FontFamily = new System.Windows.Media.FontFamily(newConfig.FontFamily); }
-                    catch { }
-                }
-                var (autoOk, autoMsg) = TrySetAutoStart(newConfig.AutoStart);
-                StatusText = $"热键已更改为: {_hotkeyService.CurrentHotkeyDisplay}";
-                if (!autoOk) StatusText += $" | 自启失败: {autoMsg}";
+                MessageBox.Show("采集热键与补拍热键冲突，请选择其他组合键", "提示",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
             }
             else
             {
-                _settingsService.SaveHotkeyConfig(newConfig);
-                _gameDetectService.SetRules(newConfig.GameNameRules);
-                ReapplyRulesToAllQuotes();
-                _hideUnrecognized = newConfig.HideUnrecognized;
-                _screenshotFormat = newConfig.ScreenshotFormat;
-                ToggleUsageTracking(newConfig.EnableUsageTracking);
-                if (!string.IsNullOrWhiteSpace(newConfig.FontFamily))
-                {
-                    try { _window.FontFamily = new System.Windows.Media.FontFamily(newConfig.FontFamily); }
-                    catch { }
-                }
-                var (autoOk, autoMsg) = TrySetAutoStart(newConfig.AutoStart);
-                StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
-                MessageBox.Show("热键注册失败，请选择其他组合键", "错误",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                StatusText = $"热键已更改为: {_hotkeyService.CurrentHotkeyDisplay}";
+                if (!autoOk) StatusText += $" | 自启失败: {autoMsg}";
             }
         }
+    }
+
+    /// <summary>Apply a confirmed settings config: persist, re-apply game-name rules and UI-affecting options.</summary>
+    private (bool ok, string msg) ApplySettings(HotkeyConfig cfg)
+    {
+        _settingsService.SaveHotkeyConfig(cfg);
+        _gameDetectService.SetRules(cfg.GameNameRules);
+        ReapplyRulesToAllQuotes();
+        _hideUnrecognized = cfg.HideUnrecognized;
+        _screenshotFormat = cfg.ScreenshotFormat;
+        ToggleUsageTracking(cfg.EnableUsageTracking);
+        if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
+        {
+            try { _window.FontFamily = new System.Windows.Media.FontFamily(cfg.FontFamily); }
+            catch { }
+        }
+        return TrySetAutoStart(cfg.AutoStart);
     }
 
     /// <summary>
@@ -1354,10 +1377,20 @@ public partial class MainViewModel : ObservableObject
 
         foreach (var path in screenshotPaths)
         {
-            // Delete both the recorded path and the same file name inside the screenshot dir
-            var paths = new[] { path, Path.Combine(_screenshotDir, Path.GetFileName(path)) };
-            foreach (var p in paths)
-                if (File.Exists(p)) try { FileSystem.DeleteFile(p, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin); } catch { }
+            // Only delete the exact recorded paths — a file with the same name in the
+            // screenshot dir may belong to a different quote.
+            if (File.Exists(path))
+                try { FileSystem.DeleteFile(path, UIOption.OnlyErrorDialogs, RecycleOption.SendToRecycleBin); } catch { }
+        }
+    }
+
+    /// <summary>Delete several quotes at once (batch delete). Optionally recycles their screenshot files.</summary>
+    public void DeleteQuotes(IEnumerable<Quote> quotes, bool deleteScreenshots)
+    {
+        foreach (var q in quotes.ToList())
+        {
+            if (deleteScreenshots) DeleteScreenshots(q);
+            DeleteQuoteDirect(q);
         }
     }
 
@@ -1549,6 +1582,7 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
+        bool restoreWindow = true;
         try
         {
             StatusText = "补拍截图...";
@@ -1561,7 +1595,7 @@ public partial class MainViewModel : ObservableObject
             }
 
             _window.WindowState = WindowState.Minimized;
-            await Task.Delay(_captureDelayMs);
+            await Task.Delay(Math.Max(100, _captureDelayMs));
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
             var nextOrder = _storageService.GetNextScreenshotOrder(SelectedQuote.Id);
@@ -1572,11 +1606,16 @@ public partial class MainViewModel : ObservableObject
             var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张", 2000);
             toast.Show();
 
+            restoreWindow = false;
             StatusText = $"已为语录补拍第 {nextOrder} 张截图";
         }
         catch (Exception ex)
         {
             StatusText = $"补拍失败: {ex.Message}";
+        }
+        finally
+        {
+            if (restoreWindow) _window.WindowState = WindowState.Normal;
         }
     }
 
@@ -1669,55 +1708,69 @@ public partial class MainViewModel : ObservableObject
 
     private async Task LoadQuotesAsync()
     {
-        await Task.Run(() =>
+        try
         {
-            var quotes = _storageService.GetAllQuotes();
-            int updated = 0;
-            foreach (var q in quotes)
+            await Task.Run(() =>
             {
-                // Populate ScreenshotPath for list thumbnail (first screenshot)
-                var firstSs = _storageService.GetScreenshots(q.Id).FirstOrDefault();
-                q.ScreenshotPath = firstSs?.FilePath ?? q.ScreenshotPath;
-
-                var source = !string.IsNullOrWhiteSpace(q.WindowTitle) ? q.WindowTitle : q.GameName;
-                var detected = _gameDetectService.DetectGameName(source);
-                if (!string.IsNullOrWhiteSpace(detected) && detected != q.GameName)
+                var quotes = _storageService.GetAllQuotes();
+                int updated = 0;
+                foreach (var q in quotes)
                 {
-                    q.GameName = detected;
-                    _storageService.UpdateQuote(q);
-                    updated++;
-                }
-            }
+                    // Populate ScreenshotPath for list thumbnail (first screenshot)
+                    var firstSs = _storageService.GetScreenshots(q.Id).FirstOrDefault();
+                    q.ScreenshotPath = firstSs?.FilePath ?? q.ScreenshotPath;
 
-            // Switch back to UI thread to update bindings
-            System.Windows.Application.Current.Dispatcher.Invoke(() =>
-            {
-                // Merge: don't overwrite quotes captured while loading
-                if (_allQuotes.Count > 0)
-                {
-                    var existingIds = _allQuotes.Select(q => q.Id).ToHashSet();
-                    foreach (var q in quotes)
-                        if (!existingIds.Contains(q.Id))
-                            _allQuotes.Add(q);
+                    var source = !string.IsNullOrWhiteSpace(q.WindowTitle) ? q.WindowTitle : q.GameName;
+                    var detected = _gameDetectService.DetectGameName(source);
+                    if (!string.IsNullOrWhiteSpace(detected) && detected != q.GameName)
+                    {
+                        q.GameName = detected;
+                        _storageService.UpdateQuote(q);
+                        updated++;
+                    }
                 }
-                else
-                {
-                    _allQuotes = quotes;
-                }
-                RefreshQuotes();
-                OcrAvailable = _ocrService.IsAvailable;
-                RefreshAvailableTags();
-                RefreshAvailableGroups();
-                RefreshAvailableTagsForFilter();
-                RefreshAvailableGamesForFilter();
 
-                var autoStart = CheckAutoStart();
-                StatusText = $"{AppVersion} | " + (updated > 0
-                    ? $"已应用规则，更新了 {updated} 条语录的游戏名 | 自启: {autoStart}"
-                    : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录 | 自启: {autoStart}");
-                CheckForUpdate();
+                // Switch back to UI thread to update bindings
+                System.Windows.Application.Current.Dispatcher.Invoke(() =>
+                {
+                    try
+                    {
+                        // Merge: don't overwrite quotes captured while loading
+                        if (_allQuotes.Count > 0)
+                        {
+                            var existingIds = _allQuotes.Select(q => q.Id).ToHashSet();
+                            foreach (var q in quotes)
+                                if (!existingIds.Contains(q.Id))
+                                    _allQuotes.Add(q);
+                        }
+                        else
+                        {
+                            _allQuotes = quotes;
+                        }
+                        RefreshQuotes();
+                        OcrAvailable = _ocrService.IsAvailable;
+                        RefreshAvailableTags();
+                        RefreshAvailableGroups();
+                        RefreshAvailableTagsForFilter();
+                        RefreshAvailableGamesForFilter();
+
+                        var autoStart = CheckAutoStart();
+                        StatusText = $"{AppVersion} | " + (updated > 0
+                            ? $"已应用规则，更新了 {updated} 条语录的游戏名 | 自启: {autoStart}"
+                            : $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   共 {_allQuotes.Count} 条语录 | 自启: {autoStart}");
+                        CheckForUpdate();
+                    }
+                    catch (Exception ex)
+                    {
+                        StatusText = $"加载失败: {ex.Message}";
+                    }
+                });
             });
-        });
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"加载失败: {ex.Message}";
+        }
     }
 
     partial void OnIsTopmostChanged(bool value)
@@ -1789,7 +1842,7 @@ public partial class MainViewModel : ObservableObject
         try
         {
             using var http = new HttpClient();
-            http.DefaultRequestHeaders.UserAgent.ParseAdd("Gal-quote-tool/1.2.0");
+            http.DefaultRequestHeaders.UserAgent.ParseAdd($"Gal-quote-tool/{AppVersion}");
             http.Timeout = TimeSpan.FromSeconds(5);
             var response = await http.GetStringAsync(
                 "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases/latest");
@@ -1825,6 +1878,11 @@ public partial class MainViewModel : ObservableObject
     {
         IEnumerable<Quote> source = _allQuotes;
 
+        // Load tag/group membership once up front (two queries) so filtering below
+        // doesn't run per-quote DB queries on the UI thread (N+1).
+        var tagsByQuote = _storageService.GetTagIdsByQuote();
+        var groupsByQuote = _storageService.GetGroupIdsByQuote();
+
         // Filter by group (multi-select + exclude); Id == -1 means "未分组"
         if (SelectedGroupFilters.Count > 0)
         {
@@ -1835,7 +1893,7 @@ public partial class MainViewModel : ObservableObject
                     groupIds.Add(qid);
             bool MatchGroup(Quote q) =>
                 groupIds.Contains(q.Id)
-                || (includeUngrouped && _storageService.GetGroupsForQuote(q.Id).Count == 0);
+                || (includeUngrouped && (!groupsByQuote.TryGetValue(q.Id, out var gl) || gl.Count == 0));
             source = GroupFilterExclude
                 ? source.Where(q => !MatchGroup(q))
                 : source.Where(q => MatchGroup(q));
@@ -1848,9 +1906,9 @@ public partial class MainViewModel : ObservableObject
             var filterTagIds = SelectedTagFilters.Where(id => id > 0).ToHashSet();
             bool MatchTag(Quote q)
             {
-                var tags = _storageService.GetTagsForQuote(q.Id);
-                if (includeNoTags && tags.Count == 0) return true;
-                return tags.Any(t => filterTagIds.Contains(t.Id));
+                var tagIds = tagsByQuote.TryGetValue(q.Id, out var tl) ? tl : [];
+                if (includeNoTags && tagIds.Count == 0) return true;
+                return tagIds.Any(t => filterTagIds.Contains(t));
             }
             source = TagFilterExclude
                 ? source.Where(q => !MatchTag(q))

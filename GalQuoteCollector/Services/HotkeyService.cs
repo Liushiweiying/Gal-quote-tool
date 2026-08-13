@@ -14,11 +14,9 @@ public class HotkeyService : IDisposable
 
     // Primary hotkey
     private uint _mod1, _vk1;
-    private bool _winKeyDown1;
 
     // Secondary hotkey (add screenshot)
     private uint _mod2, _vk2;
-    private bool _winKeyDown2;
 
     public event EventHandler? HotkeyPressed;
     public event EventHandler? HotkeyPressedAdd;
@@ -43,8 +41,15 @@ public class HotkeyService : IDisposable
             GetModuleHandle(curModule.ModuleName), 0);
     }
 
+    /// <summary>
+    /// Update the primary hotkey. Returns false when the new combo collides with the
+    /// add-screenshot hotkey (the two must stay distinct so a single press can't fire
+    /// both actions).
+    /// </summary>
     public bool UpdateHotkey(uint modifiers, uint virtualKey)
     {
+        if (_vk2 > 0 && modifiers == _mod2 && virtualKey == _vk2)
+            return false; // 与补拍热键冲突
         _mod1 = modifiers; _vk1 = virtualKey;
         CurrentHotkeyDisplay = FormatKeys(modifiers, virtualKey);
         return true;
@@ -55,7 +60,9 @@ public class HotkeyService : IDisposable
         _mod2 = modifiers; _vk2 = virtualKey;
     }
 
-    private bool WinKeyDown => (GetAsyncKeyState(0x5B) & 0x8000) != 0;
+    // Both Windows keys count (left 0x5B / right 0x5C)
+    private bool WinKeyDown =>
+        (GetAsyncKeyState(0x5B) & 0x8000) != 0 || (GetAsyncKeyState(0x5C) & 0x8000) != 0;
 
     private bool ModifiersMatch(uint mods, bool winKey)
     {
@@ -105,7 +112,7 @@ public class HotkeyService : IDisposable
         if ((modifiers & 0x0001) != 0) parts.Add("Alt");
         if ((modifiers & 0x0004) != 0) parts.Add("Shift");
         if ((modifiers & 0x0008) != 0) parts.Add("Win");
-        parts.Add(((char)virtualKey).ToString());
+        parts.Add(Models.HotkeyConfig.KeyName(virtualKey));
         return string.Join("+", parts);
     }
 

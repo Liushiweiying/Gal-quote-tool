@@ -3,6 +3,12 @@ publish-*/
 publish-v*/
 publish/
 
+# Release artifacts (upload to GitHub Releases — do not commit)
+Gal-quote-tool.exe
+Gal-quote-tool_selfcontained.exe
+Gal-quote-tool_Setup.exe
+publish-folder.zip
+
 # Build results
 GalQuoteCollector/bin/
 GalQuoteCollector/obj/

@@ -9,6 +9,11 @@ public class StorageService : IDisposable
     private readonly string _connectionString;
     private SqliteConnection? _connection;
 
+    // Microsoft.Data.Sqlite connections are not thread-safe. The app reads the DB on a
+    // background thread (initial load) while the UI thread captures/filters, so every
+    // operation is serialized through this lock.
+    private readonly object _sync = new();
+
     public StorageService(string dbPath)
     {
         _connectionString = $"Data Source={dbPath}";
@@ -58,7 +63,17 @@ public class StorageService : IDisposable
             """;
         cmd.ExecuteNonQuery();
 
-        // Migrations for older databases
+        // Migrations for older databases: only ADD columns that are actually missing
+        // (checked via PRAGMA table_info instead of blindly ALTERing every launch).
+        var existingCols = new HashSet<string>();
+        using (var pragma = _connection.CreateCommand())
+        {
+            pragma.CommandText = "PRAGMA table_info(Quotes)";
+            using var r = pragma.ExecuteReader();
+            while (r.Read())
+                existingCols.Add(r.GetString(1));
+        }
+
         foreach (var col in new[] {
             "WindowTitle TEXT NOT NULL DEFAULT ''",
             "SlideshowShowGameName INTEGER NOT NULL DEFAULT 1",
@@ -66,7 +81,14 @@ public class StorageService : IDisposable
             "SlideshowShowNotes INTEGER NOT NULL DEFAULT 1"
         })
         {
-            try { using var m = _connection.CreateCommand(); m.CommandText = $"ALTER TABLE Quotes ADD COLUMN {col}"; m.ExecuteNonQuery(); }
+            var colName = col.Split(' ')[0];
+            if (existingCols.Contains(colName)) continue;
+            try
+            {
+                using var m = _connection.CreateCommand();
+                m.CommandText = $"ALTER TABLE Quotes ADD COLUMN {col}";
+                m.ExecuteNonQuery();
+            }
             catch { }
         }
 
@@ -93,347 +115,460 @@ public class StorageService : IDisposable
 
     public void InsertQuote(Quote quote)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            INSERT INTO Quotes (Text, GameName, ScreenshotPath, CapturedAt, Notes, WindowTitle,
-                SlideshowShowGameName, SlideshowShowText, SlideshowShowNotes)
-            VALUES (@Text, @GameName, @ScreenshotPath, @CapturedAt, @Notes, @WindowTitle,
-                @SsGame, @SsText, @SsNotes);
-            SELECT last_insert_rowid();
-            """;
-        cmd.Parameters.AddWithValue("@Text", quote.Text);
-        cmd.Parameters.AddWithValue("@GameName", quote.GameName);
-        cmd.Parameters.AddWithValue("@ScreenshotPath", quote.ScreenshotPath);
-        cmd.Parameters.AddWithValue("@CapturedAt", quote.CapturedAt.ToString("O"));
-        cmd.Parameters.AddWithValue("@Notes", quote.Notes);
-        cmd.Parameters.AddWithValue("@WindowTitle", quote.WindowTitle);
-        cmd.Parameters.AddWithValue("@SsGame", quote.SlideshowShowGameName ? 1 : 0);
-        cmd.Parameters.AddWithValue("@SsText", quote.SlideshowShowText ? 1 : 0);
-        cmd.Parameters.AddWithValue("@SsNotes", quote.SlideshowShowNotes ? 1 : 0);
-
-        var result = cmd.ExecuteScalar();
-        if (result is long id)
+        lock (_sync)
         {
-            quote.Id = (int)id;
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                INSERT INTO Quotes (Text, GameName, ScreenshotPath, CapturedAt, Notes, WindowTitle,
+                    SlideshowShowGameName, SlideshowShowText, SlideshowShowNotes)
+                VALUES (@Text, @GameName, @ScreenshotPath, @CapturedAt, @Notes, @WindowTitle,
+                    @SsGame, @SsText, @SsNotes);
+                SELECT last_insert_rowid();
+                """;
+            cmd.Parameters.AddWithValue("@Text", quote.Text);
+            cmd.Parameters.AddWithValue("@GameName", quote.GameName);
+            cmd.Parameters.AddWithValue("@ScreenshotPath", quote.ScreenshotPath);
+            cmd.Parameters.AddWithValue("@CapturedAt", quote.CapturedAt.ToString("O"));
+            cmd.Parameters.AddWithValue("@Notes", quote.Notes);
+            cmd.Parameters.AddWithValue("@WindowTitle", quote.WindowTitle);
+            cmd.Parameters.AddWithValue("@SsGame", quote.SlideshowShowGameName ? 1 : 0);
+            cmd.Parameters.AddWithValue("@SsText", quote.SlideshowShowText ? 1 : 0);
+            cmd.Parameters.AddWithValue("@SsNotes", quote.SlideshowShowNotes ? 1 : 0);
 
-            // Also add to Screenshots table for multi-screenshot support
-            if (!string.IsNullOrEmpty(quote.ScreenshotPath))
+            var result = cmd.ExecuteScalar();
+            if (result is long id)
             {
-                using var ssCmd = _connection!.CreateCommand();
-                ssCmd.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) VALUES (@Q, @F, 0)";
-                ssCmd.Parameters.AddWithValue("@Q", quote.Id);
-                ssCmd.Parameters.AddWithValue("@F", quote.ScreenshotPath);
-                ssCmd.ExecuteNonQuery();
+                quote.Id = (int)id;
+
+                // Also add to Screenshots table for multi-screenshot support
+                if (!string.IsNullOrEmpty(quote.ScreenshotPath))
+                {
+                    using var ssCmd = _connection!.CreateCommand();
+                    ssCmd.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) VALUES (@Q, @F, 0)";
+                    ssCmd.Parameters.AddWithValue("@Q", quote.Id);
+                    ssCmd.Parameters.AddWithValue("@F", quote.ScreenshotPath);
+                    ssCmd.ExecuteNonQuery();
+                }
             }
         }
     }
 
     public List<Quote> GetAllQuotes()
     {
-        var quotes = new List<Quote>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT Id, Text, GameName, ScreenshotPath, CapturedAt, Notes, WindowTitle, SlideshowShowGameName, SlideshowShowText, SlideshowShowNotes FROM Quotes ORDER BY CapturedAt DESC";
-
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
+        lock (_sync)
         {
-            quotes.Add(new Quote
+            var quotes = new List<Quote>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT Id, Text, GameName, ScreenshotPath, CapturedAt, Notes, WindowTitle, SlideshowShowGameName, SlideshowShowText, SlideshowShowNotes FROM Quotes ORDER BY CapturedAt DESC";
+
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
             {
-                Id = reader.GetInt32(0),
-                Text = reader.GetString(1),
-                GameName = reader.GetString(2),
-                ScreenshotPath = reader.GetString(3),
-                CapturedAt = DateTime.Parse(reader.GetString(4)),
-                Notes = reader.GetString(5),
-                WindowTitle = reader.GetString(6),
-                SlideshowShowGameName = reader.GetInt32(7) == 1,
-                SlideshowShowText = reader.GetInt32(8) == 1,
-                SlideshowShowNotes = reader.GetInt32(9) == 1
-            });
+                quotes.Add(new Quote
+                {
+                    Id = reader.GetInt32(0),
+                    Text = reader.GetString(1),
+                    GameName = reader.GetString(2),
+                    ScreenshotPath = reader.GetString(3),
+                    CapturedAt = DateTime.Parse(reader.GetString(4)),
+                    Notes = reader.GetString(5),
+                    WindowTitle = reader.GetString(6),
+                    SlideshowShowGameName = reader.GetInt32(7) == 1,
+                    SlideshowShowText = reader.GetInt32(8) == 1,
+                    SlideshowShowNotes = reader.GetInt32(9) == 1
+                });
+            }
+            return quotes;
         }
-        return quotes;
     }
 
     public void UpdateQuote(Quote quote)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "UPDATE Quotes SET Text = @Text, GameName = @GameName, CapturedAt = @CapturedAt, Notes = @Notes, WindowTitle = @WindowTitle, SlideshowShowGameName = @SsGame, SlideshowShowText = @SsText, SlideshowShowNotes = @SsNotes WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@Text", quote.Text);
-        cmd.Parameters.AddWithValue("@GameName", quote.GameName);
-        cmd.Parameters.AddWithValue("@CapturedAt", quote.CapturedAt.ToString("O"));
-        cmd.Parameters.AddWithValue("@Notes", quote.Notes);
-        cmd.Parameters.AddWithValue("@WindowTitle", quote.WindowTitle);
-        cmd.Parameters.AddWithValue("@SsGame", quote.SlideshowShowGameName ? 1 : 0);
-        cmd.Parameters.AddWithValue("@SsText", quote.SlideshowShowText ? 1 : 0);
-        cmd.Parameters.AddWithValue("@SsNotes", quote.SlideshowShowNotes ? 1 : 0);
-        cmd.Parameters.AddWithValue("@Id", quote.Id);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "UPDATE Quotes SET Text = @Text, GameName = @GameName, CapturedAt = @CapturedAt, Notes = @Notes, WindowTitle = @WindowTitle, SlideshowShowGameName = @SsGame, SlideshowShowText = @SsText, SlideshowShowNotes = @SsNotes WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@Text", quote.Text);
+            cmd.Parameters.AddWithValue("@GameName", quote.GameName);
+            cmd.Parameters.AddWithValue("@CapturedAt", quote.CapturedAt.ToString("O"));
+            cmd.Parameters.AddWithValue("@Notes", quote.Notes);
+            cmd.Parameters.AddWithValue("@WindowTitle", quote.WindowTitle);
+            cmd.Parameters.AddWithValue("@SsGame", quote.SlideshowShowGameName ? 1 : 0);
+            cmd.Parameters.AddWithValue("@SsText", quote.SlideshowShowText ? 1 : 0);
+            cmd.Parameters.AddWithValue("@SsNotes", quote.SlideshowShowNotes ? 1 : 0);
+            cmd.Parameters.AddWithValue("@Id", quote.Id);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void DeleteQuote(int id)
     {
-        // SQLite foreign keys (ON DELETE CASCADE) are off by default on this
-        // connection, so dependent rows must be removed explicitly.
-        foreach (var sql in new[]
+        lock (_sync)
         {
-            "DELETE FROM Screenshots WHERE QuoteId = @Id",
-            "DELETE FROM QuoteTags WHERE QuoteId = @Id",
-            "DELETE FROM QuoteGroupMaps WHERE QuoteId = @Id"
-        })
-        {
-            using var d = _connection!.CreateCommand();
-            d.CommandText = sql;
-            d.Parameters.AddWithValue("@Id", id);
-            d.ExecuteNonQuery();
-        }
+            // SQLite foreign keys (ON DELETE CASCADE) are off by default on this
+            // connection, so dependent rows must be removed explicitly.
+            foreach (var sql in new[]
+            {
+                "DELETE FROM Screenshots WHERE QuoteId = @Id",
+                "DELETE FROM QuoteTags WHERE QuoteId = @Id",
+                "DELETE FROM QuoteGroupMaps WHERE QuoteId = @Id"
+            })
+            {
+                using var d = _connection!.CreateCommand();
+                d.CommandText = sql;
+                d.Parameters.AddWithValue("@Id", id);
+                d.ExecuteNonQuery();
+            }
 
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM Quotes WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.ExecuteNonQuery();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "DELETE FROM Quotes WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public List<string> GetAllGameNames()
     {
-        var names = new List<string>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT DISTINCT GameName FROM Quotes WHERE GameName != '' ORDER BY GameName";
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            names.Add(reader.GetString(0));
-        return names;
+        lock (_sync)
+        {
+            var names = new List<string>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT DISTINCT GameName FROM Quotes WHERE GameName != '' ORDER BY GameName";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                names.Add(reader.GetString(0));
+            return names;
+        }
     }
 
     // ── Tags ──────────────────────────────────────────
 
     public List<Tag> GetAllTags()
     {
-        var tags = new List<Tag>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT Id, Name FROM Tags ORDER BY Name";
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            tags.Add(new Tag { Id = reader.GetInt32(0), Name = reader.GetString(1) });
-        return tags;
+        lock (_sync)
+        {
+            var tags = new List<Tag>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT Id, Name FROM Tags ORDER BY Name";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                tags.Add(new Tag { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+            return tags;
+        }
     }
 
     public List<Tag> GetTagsForQuote(int quoteId)
     {
-        var tags = new List<Tag>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            SELECT t.Id, t.Name FROM Tags t
-            JOIN QuoteTags qt ON qt.TagId = t.Id
-            WHERE qt.QuoteId = @QuoteId
-            ORDER BY t.Name
-            """;
-        cmd.Parameters.AddWithValue("@QuoteId", quoteId);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            tags.Add(new Tag { Id = reader.GetInt32(0), Name = reader.GetString(1) });
-        return tags;
+        lock (_sync)
+        {
+            var tags = new List<Tag>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                SELECT t.Id, t.Name FROM Tags t
+                JOIN QuoteTags qt ON qt.TagId = t.Id
+                WHERE qt.QuoteId = @QuoteId
+                ORDER BY t.Name
+                """;
+            cmd.Parameters.AddWithValue("@QuoteId", quoteId);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                tags.Add(new Tag { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+            return tags;
+        }
+    }
+
+    /// <summary>QuoteId → tag ids, loaded in a single pass (avoids N+1 queries in filters).</summary>
+    public Dictionary<int, List<int>> GetTagIdsByQuote()
+    {
+        lock (_sync)
+        {
+            var map = new Dictionary<int, List<int>>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT QuoteId, TagId FROM QuoteTags";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                int qid = reader.GetInt32(0), tid = reader.GetInt32(1);
+                if (!map.TryGetValue(qid, out var list)) map[qid] = list = new();
+                list.Add(tid);
+            }
+            return map;
+        }
     }
 
     public Tag AddTag(string name)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "INSERT OR IGNORE INTO Tags (Name) VALUES (@Name); SELECT Id FROM Tags WHERE Name = @Name";
-        cmd.Parameters.AddWithValue("@Name", name.Trim());
-        var result = cmd.ExecuteScalar();
-        return new Tag { Id = Convert.ToInt32(result), Name = name.Trim() };
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "INSERT OR IGNORE INTO Tags (Name) VALUES (@Name); SELECT Id FROM Tags WHERE Name = @Name";
+            cmd.Parameters.AddWithValue("@Name", name.Trim());
+            var result = cmd.ExecuteScalar();
+            return new Tag { Id = Convert.ToInt32(result), Name = name.Trim() };
+        }
     }
 
     public void DeleteTag(int tagId)
     {
-        // Foreign-key cascades are off, so mapping rows must be removed explicitly
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM QuoteTags WHERE TagId = @Id; DELETE FROM Tags WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@Id", tagId);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            // Foreign-key cascades are off, so mapping rows must be removed explicitly
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "DELETE FROM QuoteTags WHERE TagId = @Id; DELETE FROM Tags WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@Id", tagId);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void AddTagToQuote(int quoteId, int tagId)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "INSERT OR IGNORE INTO QuoteTags (QuoteId, TagId) VALUES (@QuoteId, @TagId)";
-        cmd.Parameters.AddWithValue("@QuoteId", quoteId);
-        cmd.Parameters.AddWithValue("@TagId", tagId);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "INSERT OR IGNORE INTO QuoteTags (QuoteId, TagId) VALUES (@QuoteId, @TagId)";
+            cmd.Parameters.AddWithValue("@QuoteId", quoteId);
+            cmd.Parameters.AddWithValue("@TagId", tagId);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void RemoveTagFromQuote(int quoteId, int tagId)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM QuoteTags WHERE QuoteId = @QuoteId AND TagId = @TagId";
-        cmd.Parameters.AddWithValue("@QuoteId", quoteId);
-        cmd.Parameters.AddWithValue("@TagId", tagId);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "DELETE FROM QuoteTags WHERE QuoteId = @QuoteId AND TagId = @TagId";
+            cmd.Parameters.AddWithValue("@QuoteId", quoteId);
+            cmd.Parameters.AddWithValue("@TagId", tagId);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     // ── Groups ────────────────────────────────────────
 
     public List<QuoteGroup> GetAllGroups()
     {
-        var groups = new List<QuoteGroup>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT Id, Name FROM GroupsTable ORDER BY Name";
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            groups.Add(new QuoteGroup { Id = reader.GetInt32(0), Name = reader.GetString(1) });
-        return groups;
+        lock (_sync)
+        {
+            var groups = new List<QuoteGroup>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT Id, Name FROM GroupsTable ORDER BY Name";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                groups.Add(new QuoteGroup { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+            return groups;
+        }
     }
 
     public List<QuoteGroup> GetGroupsForQuote(int quoteId)
     {
-        var groups = new List<QuoteGroup>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = """
-            SELECT g.Id, g.Name FROM GroupsTable g
-            JOIN QuoteGroupMaps qgm ON qgm.GroupId = g.Id
-            WHERE qgm.QuoteId = @QuoteId
-            ORDER BY g.Name
-            """;
-        cmd.Parameters.AddWithValue("@QuoteId", quoteId);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            groups.Add(new QuoteGroup { Id = reader.GetInt32(0), Name = reader.GetString(1) });
-        return groups;
+        lock (_sync)
+        {
+            var groups = new List<QuoteGroup>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = """
+                SELECT g.Id, g.Name FROM GroupsTable g
+                JOIN QuoteGroupMaps qgm ON qgm.GroupId = g.Id
+                WHERE qgm.QuoteId = @QuoteId
+                ORDER BY g.Name
+                """;
+            cmd.Parameters.AddWithValue("@QuoteId", quoteId);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                groups.Add(new QuoteGroup { Id = reader.GetInt32(0), Name = reader.GetString(1) });
+            return groups;
+        }
+    }
+
+    /// <summary>QuoteId → group ids, loaded in a single pass (avoids N+1 queries in filters).</summary>
+    public Dictionary<int, List<int>> GetGroupIdsByQuote()
+    {
+        lock (_sync)
+        {
+            var map = new Dictionary<int, List<int>>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT QuoteId, GroupId FROM QuoteGroupMaps";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+            {
+                int qid = reader.GetInt32(0), gid = reader.GetInt32(1);
+                if (!map.TryGetValue(qid, out var list)) map[qid] = list = new();
+                list.Add(gid);
+            }
+            return map;
+        }
     }
 
     public QuoteGroup AddGroup(string name)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "INSERT OR IGNORE INTO GroupsTable (Name) VALUES (@Name); SELECT Id FROM GroupsTable WHERE Name = @Name";
-        cmd.Parameters.AddWithValue("@Name", name.Trim());
-        var result = cmd.ExecuteScalar();
-        return new QuoteGroup { Id = Convert.ToInt32(result), Name = name.Trim() };
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "INSERT OR IGNORE INTO GroupsTable (Name) VALUES (@Name); SELECT Id FROM GroupsTable WHERE Name = @Name";
+            cmd.Parameters.AddWithValue("@Name", name.Trim());
+            var result = cmd.ExecuteScalar();
+            return new QuoteGroup { Id = Convert.ToInt32(result), Name = name.Trim() };
+        }
     }
 
     public void RenameGroup(int id, string name)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "UPDATE GroupsTable SET Name = @Name WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@Name", name.Trim());
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "UPDATE GroupsTable SET Name = @Name WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@Name", name.Trim());
+            cmd.Parameters.AddWithValue("@Id", id);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void DeleteGroup(int id)
     {
-        // Foreign-key cascades are off, so mapping rows must be removed explicitly
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM QuoteGroupMaps WHERE GroupId = @Id; DELETE FROM GroupsTable WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            // Foreign-key cascades are off, so mapping rows must be removed explicitly
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "DELETE FROM QuoteGroupMaps WHERE GroupId = @Id; DELETE FROM GroupsTable WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void AddQuoteToGroup(int quoteId, int groupId)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "INSERT OR IGNORE INTO QuoteGroupMaps (QuoteId, GroupId) VALUES (@QuoteId, @GroupId)";
-        cmd.Parameters.AddWithValue("@QuoteId", quoteId);
-        cmd.Parameters.AddWithValue("@GroupId", groupId);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "INSERT OR IGNORE INTO QuoteGroupMaps (QuoteId, GroupId) VALUES (@QuoteId, @GroupId)";
+            cmd.Parameters.AddWithValue("@QuoteId", quoteId);
+            cmd.Parameters.AddWithValue("@GroupId", groupId);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void RemoveQuoteFromGroup(int quoteId, int groupId)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM QuoteGroupMaps WHERE QuoteId = @QuoteId AND GroupId = @GroupId";
-        cmd.Parameters.AddWithValue("@QuoteId", quoteId);
-        cmd.Parameters.AddWithValue("@GroupId", groupId);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "DELETE FROM QuoteGroupMaps WHERE QuoteId = @QuoteId AND GroupId = @GroupId";
+            cmd.Parameters.AddWithValue("@QuoteId", quoteId);
+            cmd.Parameters.AddWithValue("@GroupId", groupId);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public List<int> GetQuoteIdsInGroup(int groupId)
     {
-        var ids = new List<int>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT QuoteId FROM QuoteGroupMaps WHERE GroupId = @GroupId";
-        cmd.Parameters.AddWithValue("@GroupId", groupId);
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            ids.Add(reader.GetInt32(0));
-        return ids;
+        lock (_sync)
+        {
+            var ids = new List<int>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT QuoteId FROM QuoteGroupMaps WHERE GroupId = @GroupId";
+            cmd.Parameters.AddWithValue("@GroupId", groupId);
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                ids.Add(reader.GetInt32(0));
+            return ids;
+        }
     }
 
     // ── Screenshots ────────────────────────────────────
 
     public List<string> GetAllScreenshotPaths()
     {
-        var list = new List<string>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT FilePath FROM Screenshots";
-        using var reader = cmd.ExecuteReader();
-        while (reader.Read())
-            list.Add(reader.GetString(0));
-        return list;
+        lock (_sync)
+        {
+            var list = new List<string>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT FilePath FROM Screenshots";
+            using var reader = cmd.ExecuteReader();
+            while (reader.Read())
+                list.Add(reader.GetString(0));
+            return list;
+        }
     }
 
     public List<Screenshot> GetScreenshots(int quoteId)
     {
-        var list = new List<Screenshot>();
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT Id, QuoteId, FilePath, SortOrder FROM Screenshots WHERE QuoteId = @Q ORDER BY SortOrder";
-        cmd.Parameters.AddWithValue("@Q", quoteId);
-        using var r = cmd.ExecuteReader();
-        while (r.Read())
-            list.Add(new Screenshot { Id = r.GetInt32(0), QuoteId = r.GetInt32(1), FilePath = r.GetString(2), SortOrder = r.GetInt32(3) });
-        return list;
+        lock (_sync)
+        {
+            var list = new List<Screenshot>();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT Id, QuoteId, FilePath, SortOrder FROM Screenshots WHERE QuoteId = @Q ORDER BY SortOrder";
+            cmd.Parameters.AddWithValue("@Q", quoteId);
+            using var r = cmd.ExecuteReader();
+            while (r.Read())
+                list.Add(new Screenshot { Id = r.GetInt32(0), QuoteId = r.GetInt32(1), FilePath = r.GetString(2), SortOrder = r.GetInt32(3) });
+            return list;
+        }
     }
 
     public int GetNextScreenshotOrder(int quoteId)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "SELECT COALESCE(MAX(SortOrder), 0) + 1 FROM Screenshots WHERE QuoteId = @Q";
-        cmd.Parameters.AddWithValue("@Q", quoteId);
-        return Convert.ToInt32(cmd.ExecuteScalar());
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "SELECT COALESCE(MAX(SortOrder), 0) + 1 FROM Screenshots WHERE QuoteId = @Q";
+            cmd.Parameters.AddWithValue("@Q", quoteId);
+            return Convert.ToInt32(cmd.ExecuteScalar());
+        }
     }
 
     public void AddScreenshot(int quoteId, string filePath, int sortOrder)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) VALUES (@Q, @F, @S)";
-        cmd.Parameters.AddWithValue("@Q", quoteId);
-        cmd.Parameters.AddWithValue("@F", filePath);
-        cmd.Parameters.AddWithValue("@S", sortOrder);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "INSERT INTO Screenshots (QuoteId, FilePath, SortOrder) VALUES (@Q, @F, @S)";
+            cmd.Parameters.AddWithValue("@Q", quoteId);
+            cmd.Parameters.AddWithValue("@F", filePath);
+            cmd.Parameters.AddWithValue("@S", sortOrder);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void DeleteScreenshot(int id)
     {
-        // Get the QuoteId before deleting
-        int quoteId;
-        using (var get = _connection!.CreateCommand())
+        lock (_sync)
         {
-            get.CommandText = "SELECT QuoteId FROM Screenshots WHERE Id = @Id";
-            get.Parameters.AddWithValue("@Id", id);
-            var result = get.ExecuteScalar();
-            if (result == null) return;
-            quoteId = Convert.ToInt32(result);
-        }
+            // Get the QuoteId before deleting
+            int quoteId;
+            using (var get = _connection!.CreateCommand())
+            {
+                get.CommandText = "SELECT QuoteId FROM Screenshots WHERE Id = @Id";
+                get.Parameters.AddWithValue("@Id", id);
+                var result = get.ExecuteScalar();
+                if (result == null) return;
+                quoteId = Convert.ToInt32(result);
+            }
 
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "DELETE FROM Screenshots WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.ExecuteNonQuery();
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "DELETE FROM Screenshots WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@Id", id);
+            cmd.ExecuteNonQuery();
 
-        // Renumber SortOrder to fill gaps
-        using (var renum = _connection!.CreateCommand())
-        {
-            renum.CommandText = "UPDATE Screenshots SET SortOrder = (SELECT COUNT(*) FROM Screenshots s2 WHERE s2.QuoteId = @Q AND s2.SortOrder <= Screenshots.SortOrder) WHERE QuoteId = @Q";
-            renum.Parameters.AddWithValue("@Q", quoteId);
-            renum.ExecuteNonQuery();
+            // Renumber SortOrder to fill gaps
+            using (var renum = _connection!.CreateCommand())
+            {
+                renum.CommandText = "UPDATE Screenshots SET SortOrder = (SELECT COUNT(*) FROM Screenshots s2 WHERE s2.QuoteId = @Q AND s2.SortOrder <= Screenshots.SortOrder) WHERE QuoteId = @Q";
+                renum.Parameters.AddWithValue("@Q", quoteId);
+                renum.ExecuteNonQuery();
+            }
         }
     }
 
     public void UpdateScreenshotPath(int id, string newPath)
     {
-        using var cmd = _connection!.CreateCommand();
-        cmd.CommandText = "UPDATE Screenshots SET FilePath = @P WHERE Id = @Id";
-        cmd.Parameters.AddWithValue("@P", newPath);
-        cmd.Parameters.AddWithValue("@Id", id);
-        cmd.ExecuteNonQuery();
+        lock (_sync)
+        {
+            using var cmd = _connection!.CreateCommand();
+            cmd.CommandText = "UPDATE Screenshots SET FilePath = @P WHERE Id = @Id";
+            cmd.Parameters.AddWithValue("@P", newPath);
+            cmd.Parameters.AddWithValue("@Id", id);
+            cmd.ExecuteNonQuery();
+        }
     }
 
     public void Dispose()

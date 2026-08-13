@@ -1,3 +1,0 @@
-D:\claude-code\Galgame-quote-tool\publish-v7\GalgameQuoteCollector.pdb
-D:\claude-code\Galgame-quote-tool\publish-v7\e_sqlite3.dll
-D:\claude-code\Galgame-quote-tool\publish-v7\GalgameQuoteCollector.exe

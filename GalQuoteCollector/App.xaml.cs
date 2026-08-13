@@ -17,7 +17,21 @@ public partial class App : Application
 
     private static void Log(string msg)
     {
-        try { File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n"); }
+        try
+        {
+            // Keep the startup log bounded: once it passes 1 MB, trim it to its tail.
+            var fi = new FileInfo(LogPath);
+            if (fi.Exists && fi.Length > 1_000_000)
+            {
+                const int keepBytes = 200_000;
+                var tail = new byte[keepBytes];
+                using var fs = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                fs.Position = Math.Max(0, fs.Length - keepBytes);
+                int read = fs.Read(tail, 0, keepBytes);
+                File.WriteAllBytes(LogPath, tail[..read]);
+            }
+            File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n");
+        }
         catch { }
     }
 

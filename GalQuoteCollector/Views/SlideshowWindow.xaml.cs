@@ -19,8 +19,8 @@ public partial class SlideshowWindow : Window
     private readonly int _mode;
     private bool _loop;
 
-    private List<Quote> _filtered;          // currently filtered quotes
-    private int[] _order;                   // quote order indices into _filtered
+    private List<Quote> _filtered = new();          // currently filtered quotes
+    private int[] _order = Array.Empty<int>();      // quote order indices into _filtered
     private int _pos;                       // current quote index in _order
     private int _ssPos;                     // current screenshot index for the current quote
     private bool _ready;
@@ -268,7 +268,7 @@ public partial class SlideshowWindow : Window
                 break;
             case Key.Home:          _pos = 0; _ssPos = 0; ShowCurrent(); break;
             case Key.End:           _pos = _filtered.Count - 1; _ssPos = 0; ShowCurrent(); break;
-            case Key.R:             _loop = !_loop; break;
+            case Key.R:             _loop = !_loop; LoopText.Text = _loop ? "🔁 循环" : ""; break;
         }
         e.Handled = true;
     }

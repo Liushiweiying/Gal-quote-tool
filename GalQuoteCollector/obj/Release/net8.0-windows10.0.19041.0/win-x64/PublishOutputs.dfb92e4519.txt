@@ -1,2 +1,0 @@
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\GalQuoteCollector.pdb
-D:\claude-code\Galgame-quote-tool\publish-sc-tmp\GalQuoteCollector.exe

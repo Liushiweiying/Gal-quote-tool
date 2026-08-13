@@ -13,7 +13,7 @@
 
 | 功能 | 说明 |
 |---|---|
-| **一键采集** | 全局热键 `Ctrl+Win+Z`（可自定义），截图 → OCR → 自动保存 |
+| **一键采集** | 全局热键 `Ctrl+Win+Z`（可自定义），截图 → OCR → 自动保存；OCR 可选 Windows 内置 / Ollama 本地模型 / RapidOCR 三种引擎 |
 | **游戏名识别** | 自动剥离引擎/日期后缀，支持自定义匹配规则 |
 | **标签** | 给语录打标签，按标签筛选 |
 | **分组** | 创建分组合集，一条语录可属于多个分组 |
@@ -28,9 +28,10 @@
 
 | 文件 | 大小 | 说明 |
 |---|---|---|
-| `Gal-quote-tool.exe` | ~27MB | 需 .NET 8 运行时 |
-| `Gal-quote-tool_selfcontained.exe` | ~181MB | 单文件自包含，无需运行时 |
-| `publish-folder.zip` | ~74MB | 自包含压缩包，解压即用 |
+| `Gal-quote-tool.exe` | ~28MB | 单文件，需 .NET 8 运行时 |
+| `Gal-quote-tool_selfcontained.exe` | ~190MB | 单文件自包含，无需运行时 |
+| `Gal-quote-tool_Setup.exe` | ~55MB | Inno Setup 安装包（自包含，含卸载程序） |
+| `publish-folder.zip` | ~77MB | 自包含压缩包，解压即用 |
 
 > 数据目录：`%LOCALAPPDATA%\GalQuoteCollector\`
 
@@ -86,7 +87,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## 技术栈
 - **.NET 8 + WPF** — 桌面框架
-- **Windows.Media.Ocr** — 原生 OCR
+- **Windows.Media.Ocr** — 原生 OCR（可切换 Ollama 本地模型 / RapidOCR）
 - **SQLite** — 本地数据库
 - **CommunityToolkit.Mvvm** — MVVM
 - **Hardcodet.NotifyIcon.Wpf** — 系统托盘
@@ -99,3 +100,19 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 ├── settings.json
 └── screenshots\
 ```
+
+## 更新日志
+
+### v1.4.4（2026-08-13）
+- **新增** RapidOCR 本地离线 OCR 引擎（设置 → OCR 引擎，需装有 rapidocr-onnxruntime 的 Python）
+- **修复** SQLite 多线程并发访问竞态（后台加载与热键采集同时进行时可能报错）
+- **修复** 热键显示错误（如 F5 显示为 "t"）
+- **修复** 采集热键与补拍热键相同时无提示
+- **修复** 导入压缩包可被路径穿越、静默覆盖本地设置与使用记录（现在会先确认）
+- **修复** 多显示器下全屏截图只截主屏、副屏负坐标截图错误
+- **修复** 窗口化游戏被强制整屏截图（改为窗口覆盖屏幕 ≥90% 才全屏）
+- **修复** 大量语录时标签/分组筛选卡顿（消除逐条查询）
+- **修复** 批量删除不询问截图处理（与单条删除一致）
+- **修复** 采集失败/未检测到窗口时主窗口保持最小化
+- **修复** 采集延迟 0ms 时可能截到自身窗口（强制 ≥100ms）
+- **优化** 启动日志与 OCR 缓存设上限；版本号统一从程序集读取
