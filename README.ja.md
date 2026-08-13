@@ -103,7 +103,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## 更新履歴
 
-### v1.4.4（2026-08-13）
+### v1.2.1（2026-08-13）
 - **追加** RapidOCR オフライン OCR エンジン（設定 → OCR エンジン。`rapidocr-onnxruntime` 入りの Python が必要）
 - **修正** SQLite のマルチスレッド競合（バックグラウンド読込とホットキー収集の同時実行時）
 - **修正** ホットキー表示の誤り（例：F5 が "t" と表示）

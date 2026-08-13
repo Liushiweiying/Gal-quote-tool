@@ -1,6 +1,6 @@
 ; Gal Quote Collector — Inno Setup Script
 #define MyAppName "Gal Quote Collector"
-#define MyAppVersion "1.4.4"
+#define MyAppVersion "1.2.1"
 #define MyAppPublisher "Liushiweiying"
 #define MyAppURL "https://github.com/Liushiweiying/Gal-quote-tool"
 #define MyAppExeName "Gal-quote-tool.exe"
@@ -14,7 +14,7 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=no
 DisableProgramGroupPage=yes
-OutputDir=publish-v144
+OutputDir=publish-v121
 OutputBaseFilename=Gal-quote-tool_Setup
 Compression=lzma
 SolidCompression=yes
@@ -147,10 +147,10 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    DeleteData := MsgBox('是否保留数据？' + #13#10 +
+    DeleteData := MsgBox('是否保留语录和截图？' + #13#10 +
       '' + #13#10 +
-      '「是」= 保留数据库、截图、设置' + #13#10 +
-      '「否」= 删除所有数据',
+      '「是」= 保留语录、截图和设置' + #13#10 +
+      '「否」= 删除所有数据（语录、截图、设置）',
       mbConfirmation, MB_YESNO) = IDNO;
 
     if DeleteData then

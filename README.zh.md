@@ -103,7 +103,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## 更新日志
 
-### v1.4.4（2026-08-13）
+### v1.2.1（2026-08-13）
 - **新增** RapidOCR 本地离线 OCR 引擎（设置 → OCR 引擎，需装有 rapidocr-onnxruntime 的 Python）
 - **修复** SQLite 多线程并发访问竞态（后台加载与热键采集同时进行时可能报错）
 - **修复** 热键显示错误（如 F5 显示为 "t"）

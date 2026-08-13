@@ -105,7 +105,7 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
-### v1.4.4 (2026-08-13)
+### v1.2.1 (2026-08-13)
 - **New** RapidOCR offline OCR engine (Settings → OCR engine; requires a Python with `rapidocr-onnxruntime`)
 - **Fix** SQLite multi-thread race (background load + hotkey capture could error concurrently)
 - **Fix** hotkey display (e.g. F5 shown as "t")
