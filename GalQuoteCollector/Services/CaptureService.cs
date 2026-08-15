@@ -19,7 +19,8 @@ public class CaptureService
     /// Capture the specified window and return the screenshot file path.
     /// Pass a saved handle to capture the game even after our window minimizes.
     /// </summary>
-    public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0, bool forceFullscreen = false)
+    public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0,
+        bool forceFullscreen = false, int jpegQuality = 90)
     {
         GetWindowRect(hwnd, out var rect);
 
@@ -87,7 +88,7 @@ public class CaptureService
         {
             var encoder = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
             using var ep = new EncoderParameters(1);
-            ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, 90L);
+            ep.Param[0] = new EncoderParameter(System.Drawing.Imaging.Encoder.Quality, (long)Math.Clamp(jpegQuality, 50, 100));
             bitmap.Save(filePath, encoder, ep);
         }
         else

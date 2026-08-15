@@ -55,12 +55,16 @@ public class UsageTracker : IDisposable
             // Get process name from the foreground window
             GetWindowThreadProcessId(hwnd, out uint pid);
             string? processName = null;
+            string? processBaseName = null;
             try
             {
                 using var proc = Process.GetProcessById((int)pid);
-                processName = proc.ProcessName + ".exe";
+                processBaseName = proc.ProcessName;
+                processName = processBaseName + ".exe";
             }
             catch { return; }
+
+            if (processName == null) return;
 
             // Check blacklist
             lock (_lock)
@@ -70,20 +74,21 @@ public class UsageTracker : IDisposable
             }
 
             // Skip if process name is mostly non-alphabetic (system processes, special chars)
-            if (!IsValidRecordName(processName!)) return;
+            if (!IsValidRecordName(processName)) return;
 
-            // Get display name via GameDetectService
+            // Display name: games (custom rule match / engine suffix in the title) get the
+            // detected game name; everything else is recorded by its process name — e.g.
+            // browsers keep "msedge" instead of the current tab title.
             var title = CaptureService.GetWindowTitle(hwnd);
-            var displayName = string.IsNullOrWhiteSpace(title)
-                ? processName
-                : _gameDetect.DetectGameName(title);
-            if (string.IsNullOrWhiteSpace(displayName)) displayName = processName;
-            if (!IsValidRecordName(displayName)) displayName = processName!;
+            var detected = string.IsNullOrWhiteSpace(title) ? null : _gameDetect.DetectUsageName(title);
+            var displayName = detected ?? processBaseName!;
+            if (!IsValidRecordName(displayName))
+                displayName = processBaseName!;
 
             var date = DateTime.Now.ToString("yyyy-MM-dd");
             lock (_lock)
             {
-                _data.AddSeconds(date, processName!, displayName!, 60);
+                _data.AddSeconds(date, processName, displayName, 60);
                 _data.AddSeconds(date, ToolKey, "工具运行", 60);
             }
             Save();

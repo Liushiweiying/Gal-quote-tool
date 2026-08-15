@@ -102,6 +102,13 @@
                         Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
             </Grid>
 
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+                <Button Content="打开数据目录" Click="OnOpenDataDir" Padding="10,5" FontSize="12"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"/>
+                <Button Content="打开截图目录" Click="OnOpenScreenshotDir" Padding="10,5" FontSize="12" Margin="6,0,0,0"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"/>
+            </StackPanel>
+
             <Grid Margin="0,6,0,6">
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="截图格式" FontSize="13" Foreground="#555" VerticalAlignment="Center" Margin="0,0,8,0"/>
@@ -111,6 +118,15 @@
                     <ComboBoxItem Content="JPG"/>
                 </ComboBox>
             </Grid>
+
+            <Grid Margin="0,0,0,10">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                <Slider x:Name="JpegQualitySlider" Grid.Column="0" Minimum="50" Maximum="100" TickFrequency="5"
+                        IsSnapToTickEnabled="True" ValueChanged="JpegQualitySlider_ValueChanged" Margin="0,0,10,0"/>
+                <TextBlock x:Name="JpegQualityLabel" Grid.Column="1" Text="90" Width="40" TextAlignment="Right"
+                           FontSize="13" Foreground="#5B6ABF" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            </Grid>
+            <TextBlock Text="JPG 截图质量（仅 JPG 格式生效）" Foreground="#BBB" FontSize="11" Margin="0,-6,0,6"/>
 
             <Separator Margin="0,12,0,16"/>
 
@@ -215,6 +231,14 @@
 
             <!-- ═══ Save / Cancel ═══ -->
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,16,0,0">
+                <Button Content="查看日志" Click="OnViewLog"
+                        Padding="10,7" Margin="0,0,8,0"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"
+                        FontSize="12" Cursor="Hand" ToolTip="打开 %LOCALAPPDATA%\GalQuoteCollector\startup.log"/>
+                <Button Content="恢复默认" Click="OnResetDefaults"
+                        Padding="10,7" Margin="0,0,8,0"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"
+                        FontSize="12" Cursor="Hand"/>
                 <Button x:Name="SaveButton" Content="保存" IsEnabled="False"
                         Padding="18,7" Margin="0,0,8,0"
                         Click="OnSaveClick"

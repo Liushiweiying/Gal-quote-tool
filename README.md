@@ -107,6 +107,16 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ### v1.2.1 (2026-08-13)
 - **New** RapidOCR offline OCR engine (Settings → OCR engine; requires a Python with `rapidocr-onnxruntime`)
+- **New** Undo delete: restore recently deleted quotes (last 20, with tags/groups/screenshots) from the toolbar
+- **New** Newly captured quote is auto-selected
+- **New** Main window position/size is remembered across restarts
+- **New** One-click copy of quote text (detail button / list right-click)
+- **New** Drag & drop .md/.json/.zip files onto the window to import
+- **New** Search debounce + multi-keyword (space-separated, all must match)
+- **New** Toast notifications fade in/out and stack
+- **New** Screenshot right-click → "Open containing folder"
+- **New** Settings: "Reset to defaults" and "View log"
+- **Fix** Uninstaller now moves deleted data to the recycle bin (recoverable)
 - **Fix** SQLite multi-thread race (background load + hotkey capture could error concurrently)
 - **Fix** hotkey display (e.g. F5 shown as "t")
 - **Fix** capture hotkey colliding with add-screenshot hotkey had no warning

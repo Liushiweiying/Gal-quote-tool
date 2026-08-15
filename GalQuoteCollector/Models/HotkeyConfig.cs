@@ -21,6 +21,10 @@ public class HotkeyConfig
     public bool HideUnrecognized { get; set; }
     public string ScreenshotDirectory { get; set; } = "";
     public string ScreenshotFormat { get; set; } = "png";
+    // JPG 截图质量（50-100，仅 JPG 格式生效）
+    public int JpegQuality { get; set; } = 90;
+    // 用户选择跳过的更新版本 tag（自动检查时不再提示）
+    public string SkippedUpdateVersion { get; set; } = "";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
     public bool EnableTranslucentTbFix { get; set; }
     // OCR 引擎: "win" = Windows 内置 OCR, "local" = 本地模型 (Ollama), "rapid" = RapidOCR (本地离线)
@@ -36,6 +40,12 @@ public class HotkeyConfig
     public bool AddShotWin { get; set; }
     public uint AddShotVirtualKey { get; set; } = 0x5A; // Z
     public List<GameNameRule> GameNameRules { get; set; } = new();
+
+    // Persisted main-window bounds (NaN = never saved yet / use default)
+    public double WindowLeft { get; set; } = double.NaN;
+    public double WindowTop { get; set; } = double.NaN;
+    public double WindowWidth { get; set; } = double.NaN;
+    public double WindowHeight { get; set; } = double.NaN;
 
     /// <summary>
     /// Convert to modifier flags for RegisterHotKey.
@@ -136,6 +146,8 @@ public class HotkeyConfig
             HideUnrecognized = HideUnrecognized,
             ScreenshotDirectory = ScreenshotDirectory,
             ScreenshotFormat = ScreenshotFormat,
+            JpegQuality = JpegQuality,
+            SkippedUpdateVersion = SkippedUpdateVersion,
             EnableTranslucentTbFix = EnableTranslucentTbFix,
             OcrEngine = OcrEngine,
             LocalOcrUrl = LocalOcrUrl,
@@ -144,6 +156,8 @@ public class HotkeyConfig
             AddShotAlt = AddShotAlt, AddShotControl = AddShotControl,
             AddShotShift = AddShotShift, AddShotWin = AddShotWin,
             AddShotVirtualKey = AddShotVirtualKey,
+            WindowLeft = WindowLeft, WindowTop = WindowTop,
+            WindowWidth = WindowWidth, WindowHeight = WindowHeight,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

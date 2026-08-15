@@ -139,6 +139,55 @@ begin
   end;
 end;
 
+{ ── Recycle-bin deletion ──────────────────────────────────────────
+  DelTree permanently deletes; deleted data should go to the recycle bin so the
+  user can change their mind. SHFileOperationW with FOF_ALLOWUNDO moves the path
+  to the recycle bin; if that fails we fall back to DelTree so the uninstaller
+  still removes the data. }
+const
+  FO_DELETE = 3;
+  FOF_ALLOWUNDO = $40;
+  FOF_NOCONFIRMATION = $10;
+  FOF_SILENT = $4;
+  FOF_NOERRORUI = $400;
+
+type
+  TSHFileOpStructW = record
+    Wnd: HWND;
+    wFunc: UINT;
+    pFrom: string;
+    pTo: string;
+    fFlags: Word;
+    fAnyOperationsAborted: Integer;   // BOOL in the real struct; same 4-byte layout
+    hNameMappings: Integer;
+    lpszProgressTitle: string;
+  end;
+
+function SHFileOperationW(var FileOp: TSHFileOpStructW): Integer;
+  external 'SHFileOperationW@shell32.dll stdcall';
+
+procedure DeleteWithRecycle(const PathName: string);
+var
+  FileOp: TSHFileOpStructW;
+  Res: Integer;
+  Aborted: Integer;
+begin
+  if PathName = '' then Exit;
+  FileOp.Wnd := 0;
+  FileOp.wFunc := FO_DELETE;
+  FileOp.pFrom := PathName + #0;   // double-null-terminated (implicit + explicit)
+  FileOp.pTo := '';
+  FileOp.fFlags := FOF_ALLOWUNDO or FOF_NOCONFIRMATION or FOF_SILENT or FOF_NOERRORUI;
+  FileOp.fAnyOperationsAborted := 0;
+  FileOp.hNameMappings := 0;
+  FileOp.lpszProgressTitle := '';
+  Res := SHFileOperationW(FileOp);
+  Aborted := FileOp.fAnyOperationsAborted;
+  // Recycle failed/aborted → permanent delete as a fallback
+  if (Res <> 0) or (Aborted <> 0) then
+    DelTree(PathName, True, True, True);
+end;
+
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   DataDir: string;
@@ -156,7 +205,7 @@ begin
     if DeleteData then
       DeleteData := MsgBox('确定要删除所有数据？' + #13#10 +
         '' + #13#10 +
-        '此操作不可撤销！所有语录、截图、设置将永久删除。',
+        '所有语录、截图、设置将移入回收站，可在回收站中恢复。',
         mbConfirmation, MB_YESNO) = IDYES;
   end;
 
@@ -170,15 +219,15 @@ begin
     SettingsPath := DataDir + '\settings.json';
     ScreenDir := ExtractScreenshotDir(SettingsPath);
     if (ScreenDir <> '') and (DirExists(ScreenDir)) then
-      DelTree(ScreenDir, True, True, True);
+      DeleteWithRecycle(ScreenDir);
 
     ScreenDir := ExpandConstant('{userpictures}') + '\GalQuoteCollector';
     if not DirExists(ScreenDir) then
       ScreenDir := ExpandConstant('{userpictures}') + '\GalgameQuoteCollector';
     if DirExists(ScreenDir) then
-      DelTree(ScreenDir, True, True, True);
+      DeleteWithRecycle(ScreenDir);
 
     if DirExists(DataDir) then
-      DelTree(DataDir, True, True, True);
+      DeleteWithRecycle(DataDir);
   end;
 end;

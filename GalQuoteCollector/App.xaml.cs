@@ -47,6 +47,20 @@ public partial class App : Application
         base.OnStartup(e);
         Log("=== Startup begin ===");
 
+        // Log (and survive) UI-thread exceptions instead of dying silently
+        DispatcherUnhandledException += (_, args) =>
+        {
+            Log($"UNHANDLED: {args.Exception}");
+            args.Handled = true;
+        };
+        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
+            Log($"DOMAIN UNHANDLED: {args.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, args) =>
+        {
+            Log($"TASK UNHANDLED: {args.Exception}");
+            args.SetObserved();
+        };
+
         // Single-instance check
         if (!_mutex.WaitOne(TimeSpan.Zero, true))
         {
@@ -101,14 +115,31 @@ public partial class App : Application
             ShowMainWindow();
             Log("Main window initialized");
 
+            // Diagnostic: --open-settings opens the settings dialog right after startup
+            if (e.Args.Contains("--open-settings"))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    Log("--open-settings: opening settings dialog");
+                    try
+                    {
+                        if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
+                            vm.OpenSettingsCommand.Execute(null);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"--open-settings failed: {ex}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+
             Log("=== Startup complete ===");
         }
         catch (Exception ex)
         {
             Log($"FATAL: {ex.GetType().Name}: {ex.Message}");
             if (!_startMinimized)
-                MessageBox.Show($"启动失败: {ex.Message}", "错误",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                Views.InfoDialog.Show(null, "错误", $"启动失败: {ex.Message}", icon: Views.InfoDialogIcon.Error);
             Shutdown();
         }
     }
