@@ -140,7 +140,7 @@ public partial class SlideshowWindow : Window
         else
             ProgressText.Text = $"{_pos + 1} / {_filtered.Count}";
 
-        LoopText.Text = _loop ? "🔁 循环" : "";
+        LoopToggle.IsChecked = _loop; // keep the quick toggle in sync
         PrevOrCloseBtn.Content = _pos == 0 && !_loop ? "← 关闭" : "← 上一条";
         NextOrCloseBtn.Content = _pos == _filtered.Count - 1 && !_loop ? "关闭 →" : "下一条 →";
 
@@ -233,6 +233,17 @@ public partial class SlideshowWindow : Window
         Topmost = _isTopmost;
     }
     private void OnToggleTopmost(object sender, RoutedEventArgs e) => ToggleSlideshowTopmost();
+
+    /// <summary>Quick loop toggle (keyboard R / top-bar button).</summary>
+    private void ToggleLoop()
+    {
+        _loop = !_loop;
+        LoopToggle.IsChecked = _loop;
+    }
+    private void OnToggleLoop(object sender, RoutedEventArgs e)
+    {
+        _loop = LoopToggle.IsChecked == true;
+    }
     private void OnToggleFullscreen(object sender, RoutedEventArgs e) => ToggleFullscreen();
 
     private void ToggleFullscreen()
@@ -268,7 +279,7 @@ public partial class SlideshowWindow : Window
                 break;
             case Key.Home:          _pos = 0; _ssPos = 0; ShowCurrent(); break;
             case Key.End:           _pos = _filtered.Count - 1; _ssPos = 0; ShowCurrent(); break;
-            case Key.R:             _loop = !_loop; LoopText.Text = _loop ? "🔁 循环" : ""; break;
+            case Key.R:             ToggleLoop(); break;
         }
         e.Handled = true;
     }

@@ -8,7 +8,8 @@
         MinWidth="720" MinHeight="500"
         WindowStartupLocation="CenterScreen"
         Background="#F5F5F7"
-        FontFamily="Segoe UI">
+        FontFamily="Segoe UI"
+        AllowDrop="True" DragOver="OnDragOver" Drop="OnDrop">
     <Window.Resources>
         <conv:BoolToVisibilityConverter x:Key="BoolToVis"/>
         <conv:ThumbnailConverter x:Key="ThumbConv"/>
@@ -46,6 +47,7 @@
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
                             <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
                         <TextBlock Grid.Column="0" Text="🔍" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBox Grid.Column="1" x:Name="SearchBox"
@@ -63,14 +65,37 @@
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
+                        <Button Grid.Column="2" Content="✕" Click="OnClearSearch"
+                                Width="20" Height="20" Padding="0" FontSize="10"
+                                Background="Transparent" BorderThickness="0" Foreground="#AAA"
+                                VerticalAlignment="Center" Margin="4,0,0,0"
+                                ToolTip="清空搜索" Cursor="Hand">
+                            <Button.Style>
+                                <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding Text, ElementName=SearchBox}" Value="">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </Button.Style>
+                        </Button>
                     </Grid>
                 </Border>
 
                 <!-- Main buttons -->
-                <Button Grid.Column="1" Content="采集" Command="{Binding CaptureCommand}"
-                        Background="#5B6ABF" Foreground="White" BorderThickness="0"
-                        Padding="14,5" FontSize="13" FontWeight="SemiBold"
-                        Margin="0,0,4,0" Cursor="Hand"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal">
+                    <Button Content="采集" Command="{Binding CaptureCommand}"
+                            Background="#5B6ABF" Foreground="White" BorderThickness="0"
+                            Padding="14,5" FontSize="13" FontWeight="SemiBold"
+                            Margin="0,0,4,0" Cursor="Hand"/>
+                    <Button Content="撤销" Command="{Binding UndoDeleteCommand}"
+                            IsEnabled="{Binding UndoDeleteAvailable}"
+                            Background="#EEE" Foreground="#333" BorderThickness="0"
+                            Padding="10,5" FontSize="12"
+                            Margin="0,0,4,0" Cursor="Hand" ToolTip="撤销最近一次删除"/>
+                </StackPanel>
 
                 <Button Grid.Column="2" Content="回想" Command="{Binding OpenSlideshowCommand}"
                         Background="#EEE" Foreground="#333" BorderThickness="0"
@@ -131,6 +156,12 @@
                             <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                             <Separator/>
+                            <MenuItem Header="教程">
+                                <MenuItem Header="回想" Click="OnShowSlideshowHelp"/>
+                                <MenuItem Header="批量操作" Click="OnShowBatchHelp"/>
+                                <MenuItem Header="导入导出" Click="OnShowImportExportHelp"/>
+                            </MenuItem>
+                            <Separator/>
                             <MenuItem Header="关于" Command="{Binding ShowAboutCommand}"/>
                         </ContextMenu>
                     </Button.ContextMenu>
@@ -151,7 +182,10 @@
 
                 <!-- Left: Quote List -->
                 <Border Grid.Column="0" Background="White"  BorderThickness="0"
-                        Padding="4">
+                        Padding="4" CornerRadius="6">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.10" Color="#889"/>
+                    </Border.Effect>
                     <Grid>
                         <ListBox ItemsSource="{Binding Quotes}" SelectedItem="{Binding SelectedQuote}"
                                  SelectionMode="Extended"
@@ -166,6 +200,9 @@
                                     <Setter Property="BorderThickness" Value="0"/>
                                     <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                                     <Style.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter Property="Background" Value="#F2F4FF"/>
+                                        </Trigger>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter Property="Background" Value="#D0D6FF"/>
                                             <Setter Property="BorderBrush" Value="#5B6ABF"/>
@@ -177,7 +214,14 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <Border Background="#FAFAFA" Padding="8,6"
-                                            BorderBrush="#F0F0F0" BorderThickness="1">
+                                            BorderBrush="#F0F0F0" BorderThickness="1"
+                                            ToolTip="{Binding Text}">
+                                        <Border.ContextMenu>
+                                            <ContextMenu Background="White" Foreground="#333">
+                                                <MenuItem Header="复制文本" Click="OnQuoteMenuCopy"/>
+                                                <MenuItem Header="删除" Click="OnQuoteMenuDelete"/>
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
                                         <Grid>
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="40"/>
@@ -197,6 +241,7 @@
                                                 <Grid.RowDefinitions>
                                                     <RowDefinition Height="Auto"/>
                                                     <RowDefinition Height="Auto"/>
+                                                    <RowDefinition Height="Auto"/>
                                                 </Grid.RowDefinitions>
                                                 <TextBlock Grid.Row="0" Text="{Binding GameName}"
                                                            FontWeight="SemiBold" Foreground="#5B6ABF" FontSize="12"/>
@@ -209,6 +254,8 @@
                                                         </MultiBinding>
                                                     </ContentControl.Content>
                                                 </ContentControl>
+                                                <TextBlock Grid.Row="2" Text="{Binding CapturedAtDisplay}"
+                                                           FontSize="10" Foreground="#AAA" Margin="0,2,0,0"/>
                                             </Grid>
                                         </Grid>
                                     </Border>
@@ -216,10 +263,16 @@
                             </ListBox.ItemTemplate>
                         </ListBox>
 
-                        <TextBlock Text="还没有语录，按 Ctrl+Win+Z 采集"
-                                   Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                                   Foreground="#AAA" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"/>
+                        <StackPanel Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"
+                                    IsHitTestVisible="False" MaxWidth="220">
+                            <TextBlock Text="🗒️" FontSize="34" HorizontalAlignment="Center" Foreground="#CCC"/>
+                            <TextBlock Text="还没有语录" FontSize="16" FontWeight="SemiBold" Foreground="#999"
+                                       HorizontalAlignment="Center" Margin="0,10,0,4"/>
+                            <TextBlock Text="在游戏中按 Ctrl+Win+Z 采集，或把 .md / .json / .zip 拖进窗口导入"
+                                       FontSize="12" Foreground="#BBB" HorizontalAlignment="Center"
+                                       TextWrapping="Wrap" TextAlignment="Center"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 
@@ -229,7 +282,10 @@
 
                 <!-- Right: Detail Panel -->
                 <Border Grid.Column="2" Background="White"  BorderThickness="0"
-                        Padding="16,12">
+                        Padding="16,12" CornerRadius="6">
+                    <Border.Effect>
+                        <DropShadowEffect BlurRadius="10" ShadowDepth="1" Opacity="0.10" Color="#889"/>
+                    </Border.Effect>
                     <Grid>
                         <TextBlock Text="选择一条语录查看详情"
                                    Visibility="{Binding SelectedQuote, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
@@ -280,6 +336,17 @@
                                         <ItemsControl.ItemTemplate>
                                             <DataTemplate>
                                                 <Border Background="#F5F5F5" Padding="4" Margin="0,0,0,6" MinHeight="80">
+                                                    <Border.ContextMenu>
+                                                        <ContextMenu Background="White" Foreground="#333">
+                                                            <MenuItem Header="打开图片" Click="OnScreenshotMenuOpen"/>
+                                                            <MenuItem Header="打开图片位置" Click="OnScreenshotMenuOpenFolder"/>
+                                                            <Separator/>
+                                                            <MenuItem Header="复制文件路径" Click="OnScreenshotMenuCopyPath"/>
+                                                            <MenuItem Header="复制此图片" Click="OnScreenshotMenuCopyImage"/>
+                                                            <Separator/>
+                                                            <MenuItem Header="删除此图片" Click="OnScreenshotMenuDelete"/>
+                                                        </ContextMenu>
+                                                    </Border.ContextMenu>
                                                     <Grid>
                                                         <Image Source="{Binding FilePath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
                                                                MaxHeight="180" Stretch="Uniform" HorizontalAlignment="Center"
@@ -295,6 +362,9 @@
                                             </DataTemplate>
                                         </ItemsControl.ItemTemplate>
                                     </ItemsControl>
+                                    <TextBlock Text="暂无截图" Foreground="#BBB" FontSize="12" Margin="0,0,0,8"
+                                               HorizontalAlignment="Center"
+                                               Visibility="{Binding CurrentScreenshots.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"/>
                                     <Button Content="+ 添加截图" Command="{Binding AddScreenshotFromFileCommand}"
                                             Padding="8,4" Background="#1976D2" Foreground="White" BorderThickness="0"
                                             FontSize="12" Cursor="Hand" HorizontalAlignment="Center"/>
@@ -380,7 +450,7 @@
                                             BorderThickness="0" Cursor="Hand"
                                             Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="game">
                                         <Button.Style>
-                                            <Style TargetType="Button">
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="Background" Value="#E0E0E0"/>
                                                 <Setter Property="Foreground" Value="#666"/>
                                                 <Style.Triggers>
@@ -396,7 +466,7 @@
                                             BorderThickness="0" Cursor="Hand"
                                             Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="text">
                                         <Button.Style>
-                                            <Style TargetType="Button">
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="Background" Value="#E0E0E0"/>
                                                 <Setter Property="Foreground" Value="#666"/>
                                                 <Style.Triggers>
@@ -412,7 +482,7 @@
                                             BorderThickness="0" Cursor="Hand"
                                             Command="{Binding ToggleSlideshowFlagCommand}" CommandParameter="notes">
                                         <Button.Style>
-                                            <Style TargetType="Button">
+                                            <Style TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
                                                 <Setter Property="Background" Value="#E0E0E0"/>
                                                 <Setter Property="Foreground" Value="#666"/>
                                                 <Style.Triggers>
@@ -438,18 +508,17 @@
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
                                     <Button Grid.Column="0" Content="导出" Command="{Binding ExportSelectedCommand}"
                                             Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" Margin="0,0,4,0"/>
-                                    <Button Grid.Column="1" Content="打开截图" Command="{Binding OpenScreenshotCommand}"
-                                            Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" />
-                                    <Button Grid.Column="3" Content="保存" Command="{Binding SaveEditCommand}"
+                                    <Button Grid.Column="1" Content="复制" Command="{Binding CopyQuoteTextCommand}"
+                                            Padding="10,5" FontSize="12" Background="#EEE" Foreground="#333" BorderThickness="0" Margin="0,0,4,0"/>
+                                    <Button Grid.Column="2" Content="保存" Command="{Binding SaveEditCommand}"
                                             Padding="14,5" FontSize="12" Background="#5B6ABF" Foreground="White" BorderThickness="0" Margin="0,0,4,0"/>
-                                    <Button Grid.Column="4" Content="删除" Command="{Binding DeleteQuoteCommand}"
-                                            Padding="14,5" FontSize="12" Background="#E53935" Foreground="White" BorderThickness="0" />
+                                    <Button Grid.Column="3" Content="删除" Command="{Binding DeleteQuoteCommand}"
+                                            Padding="14,5" FontSize="12" Background="#E53935" Foreground="White" BorderThickness="0"/>
                                 </Grid>
                             </StackPanel>
                         </ScrollViewer>
@@ -471,14 +540,14 @@
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <Border Background="#FAFAFA" BorderBrush="#E8E8E8" BorderThickness="1"
-                                    Width="160" Height="145" Margin="6,6,0,0" Padding="6">
+                                    Width="160" Height="145" Margin="6,6,0,0" Padding="6" CornerRadius="6">
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="*"/>
                                         <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
-                                    <Border Grid.Row="0" Height="90" Background="#EEE" ClipToBounds="True">
+                                    <Border Grid.Row="0" Height="90" Background="#EEE" ClipToBounds="True" CornerRadius="6,6,0,0">
                                         <Image Source="{Binding ScreenshotPath, Converter={StaticResource ThumbConv}, ConverterParameter=full}"
                                                Stretch="UniformToFill" MaxHeight="90"/>
                                     </Border>
@@ -494,10 +563,16 @@
                     </ListBox.ItemTemplate>
                 </ListBox>
 
-                <TextBlock Text="还没有语录，按 Ctrl+Win+Z 采集"
-                           Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
-                           HorizontalAlignment="Center" VerticalAlignment="Center"
-                           Foreground="#AAA" FontSize="13" TextWrapping="Wrap" TextAlignment="Center"/>
+                <StackPanel Visibility="{Binding Quotes.Count, Converter={StaticResource BoolToVis}, ConverterParameter=invert}"
+                            HorizontalAlignment="Center" VerticalAlignment="Center"
+                            IsHitTestVisible="False" MaxWidth="260">
+                    <TextBlock Text="🗒️" FontSize="34" HorizontalAlignment="Center" Foreground="#CCC"/>
+                    <TextBlock Text="还没有语录" FontSize="16" FontWeight="SemiBold" Foreground="#999"
+                               HorizontalAlignment="Center" Margin="0,10,0,4"/>
+                    <TextBlock Text="在游戏中按 Ctrl+Win+Z 采集，或把 .md / .json / .zip 拖进窗口导入"
+                               FontSize="12" Foreground="#BBB" HorizontalAlignment="Center"
+                               TextWrapping="Wrap" TextAlignment="Center"/>
+                </StackPanel>
             </Grid>
 
         </Grid>

@@ -107,8 +107,7 @@ public partial class App : Application
         {
             Log($"FATAL: {ex.GetType().Name}: {ex.Message}");
             if (!_startMinimized)
-                MessageBox.Show($"启动失败: {ex.Message}", "错误",
-                    MessageBoxButton.OK, MessageBoxImage.Error);
+                Views.InfoDialog.Show(null, "错误", $"启动失败: {ex.Message}", icon: Views.InfoDialogIcon.Error);
             Shutdown();
         }
     }

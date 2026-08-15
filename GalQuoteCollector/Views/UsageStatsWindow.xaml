@@ -5,7 +5,7 @@
         Width="520" Height="480"
         MinWidth="400" MinHeight="350"
         WindowStartupLocation="CenterOwner"
-        Background="#FFF" FontFamily="Segoe UI">
+        Background="#F5F5F7" FontFamily="Segoe UI">
     <Grid Margin="16">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -14,21 +14,30 @@
         </Grid.RowDefinitions>
 
         <!-- Date navigation -->
-        <Border Grid.Row="0" Background="#F5F5F7" CornerRadius="6" Padding="10,6" Margin="0,0,0,10">
+        <Border Grid.Row="0" Background="White" CornerRadius="8" BorderBrush="#E8E8E8" BorderThickness="1"
+                Padding="8,6" Margin="0,0,0,10">
+            <Border.Effect>
+                <DropShadowEffect BlurRadius="8" ShadowDepth="1" Opacity="0.06" Color="#666"/>
+            </Border.Effect>
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <Button Grid.Column="0" Content="←" Click="OnPrevDay" Padding="8,4" FontSize="14" Background="#EEE" BorderThickness="0" Cursor="Hand"/>
+                <Button Grid.Column="0" Click="OnPrevDay" Width="30" Height="30" Padding="0"
+                        Background="#EEE" Foreground="#555" BorderThickness="0"
+                        FontFamily="Segoe MDL2 Assets" Content="&#xE76B;" ToolTip="前一天"/>
                 <TextBlock Grid.Column="1" x:Name="DateText" Text="选择日期" FontSize="14" FontWeight="SemiBold"
-                           HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="Hand"
-                           MouseDown="OnDateClick"/>
-                <Button Grid.Column="2" Content="→" Click="OnNextDay" Padding="8,4" FontSize="14" Background="#EEE" BorderThickness="0" Cursor="Hand"/>
-                <Button Grid.Column="3" Content="📅" Click="OnDateClick" Padding="8,4" FontSize="14" Background="Transparent" BorderThickness="0" Cursor="Hand" Margin="4,0,0,0"/>
+                           Foreground="#1D1D1F" HorizontalAlignment="Center" VerticalAlignment="Center"
+                           Cursor="Hand" MouseDown="OnDateClick" ToolTip="点击选择日期"/>
+                <Button Grid.Column="2" Click="OnNextDay" Width="30" Height="30" Padding="0" Margin="0,0,6,0"
+                        Background="#EEE" Foreground="#555" BorderThickness="0"
+                        FontFamily="Segoe MDL2 Assets" Content="&#xE76C;" ToolTip="后一天"/>
+                <Button Grid.Column="3" Click="OnDateClick" Width="30" Height="30" Padding="0"
+                        Background="#5B6ABF" Foreground="White" BorderThickness="0"
+                        FontFamily="Segoe MDL2 Assets" Content="&#xE787;" ToolTip="选择日期"/>
             </Grid>
         </Border>
 
@@ -39,11 +48,11 @@
 
         <!-- Buttons -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,8,0,0">
-            <Button Content="管理黑名单" Click="OnManageBlacklist" Padding="10,5" FontSize="12"
+            <Button Content="管理黑名单" Click="OnManageBlacklist" Padding="12,6" FontSize="12"
                     Background="#EEE" Foreground="#333" BorderThickness="0" Cursor="Hand"/>
-            <Button Content="导出" Click="OnExport" Padding="10,5" FontSize="12" Margin="6,0,0,0"
+            <Button Content="导出" Click="OnExport" Padding="12,6" FontSize="12" Margin="6,0,0,0"
                     Background="#EEE" Foreground="#333" BorderThickness="0" Cursor="Hand"/>
-            <Button Content="导入" Click="OnImport" Padding="10,5" FontSize="12" Margin="6,0,0,0"
+            <Button Content="导入" Click="OnImport" Padding="12,6" FontSize="12" Margin="6,0,0,0"
                     Background="#EEE" Foreground="#333" BorderThickness="0" Cursor="Hand"/>
         </StackPanel>
     </Grid>

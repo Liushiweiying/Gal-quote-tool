@@ -37,6 +37,12 @@ public class HotkeyConfig
     public uint AddShotVirtualKey { get; set; } = 0x5A; // Z
     public List<GameNameRule> GameNameRules { get; set; } = new();
 
+    // Persisted main-window bounds (NaN = never saved yet / use default)
+    public double WindowLeft { get; set; } = double.NaN;
+    public double WindowTop { get; set; } = double.NaN;
+    public double WindowWidth { get; set; } = double.NaN;
+    public double WindowHeight { get; set; } = double.NaN;
+
     /// <summary>
     /// Convert to modifier flags for RegisterHotKey.
     /// </summary>
@@ -144,6 +150,8 @@ public class HotkeyConfig
             AddShotAlt = AddShotAlt, AddShotControl = AddShotControl,
             AddShotShift = AddShotShift, AddShotWin = AddShotWin,
             AddShotVirtualKey = AddShotVirtualKey,
+            WindowLeft = WindowLeft, WindowTop = WindowTop,
+            WindowWidth = WindowWidth, WindowHeight = WindowHeight,
             GameNameRules = GameNameRules.Select(r => new GameNameRule { Match = r.Match, Name = r.Name }).ToList()
         };
     }

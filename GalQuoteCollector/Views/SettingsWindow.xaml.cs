@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Input;
 using GalQuoteCollector.Models;
@@ -8,7 +9,7 @@ namespace GalQuoteCollector.Views;
 
 public partial class SettingsWindow : Window
 {
-    private readonly HotkeyConfig _newConfig;
+    private HotkeyConfig _newConfig = new();
     private bool _capturingAddShot;
 
     public HotkeyConfig? Result { get; private set; }
@@ -18,19 +19,25 @@ public partial class SettingsWindow : Window
         InitializeComponent();
         Owner = owner;
 
-        _newConfig = currentConfig.Clone();
+        ApplyControls(currentConfig);
         CurrentHotkeyText.Text = $"当前: {currentDisplay}";
         CurrentAddShotText.Text = $"当前: {currentConfig.ToAddShotDisplay()}";
-        AutoStartCheckBox.IsChecked = currentConfig.AutoStart;
-        DelaySlider.Value = currentConfig.CaptureDelayMs;
-        UpdateDelayLabel(currentConfig.CaptureDelayMs);
-        SlideshowModeCombo.SelectedIndex = currentConfig.SlideshowMode;
+    }
+
+    /// <summary>Apply a config to all controls (used at open and for "恢复默认").</summary>
+    private void ApplyControls(HotkeyConfig cfg)
+    {
+        _newConfig = cfg.Clone();
+        AutoStartCheckBox.IsChecked = cfg.AutoStart;
+        DelaySlider.Value = cfg.CaptureDelayMs;
+        UpdateDelayLabel(cfg.CaptureDelayMs);
+        SlideshowModeCombo.SelectedIndex = cfg.SlideshowMode;
 
         var fonts = System.Windows.Media.Fonts.SystemFontFamilies.OrderBy(f => f.Source).ToList();
         FontCombo.ItemsSource = fonts;
         for (int i = 0; i < fonts.Count; i++)
         {
-            if (fonts[i].Source == currentConfig.FontFamily)
+            if (fonts[i].Source == cfg.FontFamily)
             { FontCombo.SelectedIndex = i; break; }
         }
 
@@ -38,35 +45,61 @@ public partial class SettingsWindow : Window
         SlideshowChineseFontCombo.ItemsSource = fonts;
         for (int i = 0; i < fonts.Count; i++)
         {
-            if (fonts[i].Source == currentConfig.SlideshowChineseFont)
+            if (fonts[i].Source == cfg.SlideshowChineseFont)
             { SlideshowChineseFontCombo.SelectedIndex = i; break; }
         }
         SlideshowEnglishFontCombo.ItemsSource = fonts;
         for (int i = 0; i < fonts.Count; i++)
         {
-            if (fonts[i].Source == currentConfig.SlideshowEnglishFont)
+            if (fonts[i].Source == cfg.SlideshowEnglishFont)
             { SlideshowEnglishFontCombo.SelectedIndex = i; break; }
         }
 
-        RulesList.ItemsSource = currentConfig.GameNameRules;
-        EnableTrackingCheckBox.IsChecked = currentConfig.EnableUsageTracking;
-        HideUnrecognizedCheckBox.IsChecked = currentConfig.HideUnrecognized;
-        ScreenshotDirBox.Text = currentConfig.ScreenshotDirectory ?? "";
-        FormatCombo.SelectedIndex = currentConfig.ScreenshotFormat == "jpg" ? 1 : 0;
-        SlideshowLoopCheckBox.IsChecked = currentConfig.SlideshowLoop;
+        RulesList.ItemsSource = cfg.GameNameRules;
+        EnableTrackingCheckBox.IsChecked = cfg.EnableUsageTracking;
+        HideUnrecognizedCheckBox.IsChecked = cfg.HideUnrecognized;
+        ScreenshotDirBox.Text = cfg.ScreenshotDirectory ?? "";
+        FormatCombo.SelectedIndex = cfg.ScreenshotFormat == "jpg" ? 1 : 0;
+        SlideshowLoopCheckBox.IsChecked = cfg.SlideshowLoop;
 
         // TranslucentTB fix option is only meaningful (and only shown) while TranslucentTB is running
-        TranslucentTbFixCheckBox.IsChecked = currentConfig.EnableTranslucentTbFix;
-        if (System.Diagnostics.Process.GetProcessesByName("TranslucentTB").Length == 0)
-            TranslucentTbFixCheckBox.Visibility = Visibility.Collapsed;
+        TranslucentTbFixCheckBox.IsChecked = cfg.EnableTranslucentTbFix;
+        TranslucentTbFixCheckBox.Visibility = System.Diagnostics.Process.GetProcessesByName("TranslucentTB").Length == 0
+            ? Visibility.Collapsed : Visibility.Visible;
 
-        OcrEngineCombo.SelectedIndex = currentConfig.OcrEngine switch { "local" => 1, "rapid" => 2, _ => 0 };
-        LocalOcrUrlBox.Text = currentConfig.LocalOcrUrl ?? "";
-        LocalOcrModelBox.Text = currentConfig.LocalOcrModel ?? "";
-        RapidOcrPythonBox.Text = currentConfig.RapidOcrPython ?? "";
+        OcrEngineCombo.SelectedIndex = cfg.OcrEngine switch { "local" => 1, "rapid" => 2, _ => 0 };
+        LocalOcrUrlBox.Text = cfg.LocalOcrUrl ?? "";
+        LocalOcrModelBox.Text = cfg.LocalOcrModel ?? "";
+        RapidOcrPythonBox.Text = cfg.RapidOcrPython ?? "";
         UpdateOcrPanelsVisibility();
 
+        HotkeyDisplay.Text = _newConfig.ToDisplayString();
+        AddShotDisplay.Text = _newConfig.ToAddShotDisplay();
         SaveButton.IsEnabled = _newConfig.IsValid();
+    }
+
+    private void OnResetDefaults(object sender, RoutedEventArgs e)
+    {
+        ApplyControls(new HotkeyConfig());
+        CurrentHotkeyText.Text = $"当前: {_newConfig.ToDisplayString()}";
+        CurrentAddShotText.Text = $"当前: {_newConfig.ToAddShotDisplay()}";
+    }
+
+    private void OnViewLog(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var logPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "GalQuoteCollector", "startup.log");
+            if (!File.Exists(logPath)) File.WriteAllText(logPath, "(暂无日志)");
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = logPath,
+                UseShellExecute = true
+            });
+        }
+        catch { }
     }
 
     private void OcrEngineCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)

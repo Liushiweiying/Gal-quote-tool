@@ -30,86 +30,112 @@ public partial class UsageStatsWindow : Window
         StatsPanel.Children.Clear();
         var day = _data.GetDay(dateStr);
         var apps = day?.Where(kv => kv.Key != ToolKey).ToList();
-        int appsMax = apps != null && apps.Count > 0 ? apps.Max(kv => kv.Value.Seconds) : 1;
 
         // Tool runtime from this date's data only — never from today's fallback
         int toolSec = day != null && day.TryGetValue(ToolKey, out var toolRec)
             ? toolRec.Seconds : 0;
 
-        // ── Tool runtime bar (red, always 100%) ──
-        StatsPanel.Children.Add(new TextBlock
-        {
-            Text = $"工具运行  {FormatTime(toolSec)}",
-            FontSize = 14, FontWeight = FontWeights.SemiBold,
-            Foreground = new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)),
-            Margin = new Thickness(0, 0, 0, 2)
-        });
-        StatsPanel.Children.Add(new Border
-        {
-            Height = 20, Width = 300,
-            Background = new SolidColorBrush(Color.FromRgb(0xF4, 0x43, 0x36)),
-            CornerRadius = new CornerRadius(3),
-            HorizontalAlignment = HorizontalAlignment.Left,
-            Margin = new Thickness(0, 2, 0, 4)
-        });
-
-        // Separator
-        StatsPanel.Children.Add(new Border
-        {
-            Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
-            Margin = new Thickness(0, 4, 0, 8)
-        });
+        // ── Tool runtime card (red accent, full width) ──
+        var toolCard = CreateCard();
+        AddToCard(toolCard, CreateLabelRow("工具运行", FormatTime(toolSec), Red));
+        AddToCard(toolCard, CreateBar(1.0, Red, 8));
+        StatsPanel.Children.Add(toolCard);
 
         // ── App records (exclude tool key) ──
         if (apps == null || apps.Count == 0)
         {
-            StatsPanel.Children.Add(new TextBlock
+            var emptyCard = CreateCard();
+            AddToCard(emptyCard, new TextBlock
             {
                 Text = "当天无应用记录",
                 Foreground = Brushes.Gray,
-                HorizontalAlignment = HorizontalAlignment.Center,
-                Margin = new Thickness(0, 8, 0, 0)
+                FontSize = 13,
+                HorizontalAlignment = HorizontalAlignment.Center
             });
+            StatsPanel.Children.Add(emptyCard);
             return;
         }
-
-        int barMaxWidth = 300;
 
         foreach (var (key, record) in apps.OrderByDescending(x => x.Value.Seconds))
         {
             var pct = toolSec > 0 ? (double)record.Seconds / toolSec : 0;
-            var bar = new Border
-            {
-                Height = 20, Width = Math.Max(4, barMaxWidth * pct),
-                Background = new SolidColorBrush(Color.FromRgb(0x4C, 0xAF, 0x50)),
-                CornerRadius = new CornerRadius(3),
-                HorizontalAlignment = HorizontalAlignment.Left,
-                Margin = new Thickness(0, 2, 0, 2)
-            };
-
-            var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 2) };
-            panel.Children.Add(new TextBlock
-            {
-                Text = $"{record.Name}   {FormatTime(record.Seconds)}   ({(int)(pct * 100)}%)",
-                FontSize = 13, Margin = new Thickness(0, 4, 0, 0)
-            });
-            panel.Children.Add(bar);
-            StatsPanel.Children.Add(panel);
+            var card = CreateCard();
+            AddToCard(card, CreateLabelRow(record.Name, $"{FormatTime(record.Seconds)}  ({(int)(pct * 100)}%)", Green));
+            AddToCard(card, CreateBar(pct, Green, 8));
+            StatsPanel.Children.Add(card);
         }
 
-        // ── Total at bottom ──
+        // ── Total card ──
         int totalSec = apps.Sum(kv => kv.Value.Seconds);
-        StatsPanel.Children.Add(new Border
+        var totalCard = CreateCard();
+        AddToCard(totalCard, CreateLabelRow("应用合计", FormatTime(totalSec), GrayText));
+        StatsPanel.Children.Add(totalCard);
+    }
+
+    private static readonly Color Red = Color.FromRgb(0xE5, 0x39, 0x35);
+    private static readonly Color Green = Color.FromRgb(0x4C, 0xAF, 0x50);
+    private static readonly Color GrayText = Color.FromRgb(0x88, 0x88, 0x88);
+
+    private static Border CreateCard()
+    {
+        return new Border
         {
-            Height = 1, Background = new SolidColorBrush(Color.FromRgb(0xE0, 0xE0, 0xE0)),
-            Margin = new Thickness(0, 8, 0, 8)
-        });
-        StatsPanel.Children.Add(new TextBlock
+            Background = Brushes.White,
+            BorderBrush = new SolidColorBrush(Color.FromRgb(0xE8, 0xE8, 0xE8)),
+            BorderThickness = new Thickness(1),
+            CornerRadius = new CornerRadius(8),
+            Padding = new Thickness(14, 10, 14, 10),
+            Margin = new Thickness(0, 0, 0, 8),
+            Child = new StackPanel()
+        };
+    }
+
+    private static void AddToCard(Border card, UIElement el)
+        => ((StackPanel)card.Child).Children.Add(el);
+
+    private static Grid CreateLabelRow(string name, string detail, Color accent)
+    {
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+        grid.Children.Add(new TextBlock
         {
-            Text = $"应用合计  {FormatTime(totalSec)}",
-            FontSize = 14, FontWeight = FontWeights.SemiBold,
-            Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 8)
+            Text = name,
+            FontSize = 13,
+            FontWeight = FontWeights.SemiBold,
+            Foreground = new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33)),
+            VerticalAlignment = VerticalAlignment.Center
         });
+        grid.Children.Add(new TextBlock
+        {
+            Text = detail,
+            FontSize = 12,
+            Foreground = new SolidColorBrush(accent),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0)
+        });
+        Grid.SetColumn(grid.Children[1], 1);
+        return grid;
+    }
+
+    private static Border CreateBar(double fraction, Color color, double height)
+    {
+        var track = new Border
+        {
+            Height = height,
+            Background = new SolidColorBrush(Color.FromRgb(0xF0, 0xF0, 0xF0)),
+            CornerRadius = new CornerRadius(height / 2),
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        track.Child = new Border
+        {
+            Height = height,
+            Width = Math.Max(6, 300 * Math.Min(1.0, fraction)),
+            Background = new SolidColorBrush(color),
+            CornerRadius = new CornerRadius(height / 2),
+            HorizontalAlignment = HorizontalAlignment.Left
+        };
+        return track;
     }
 
     private static string FormatTime(int seconds)
@@ -129,6 +155,7 @@ public partial class UsageStatsWindow : Window
         {
             SelectedDate = _currentDate,
             VerticalAlignment = VerticalAlignment.Center,
+            FontSize = 13,
             DisplayDateStart = _data.Records.Keys.MinBy(k => k) is string min ? DateTime.Parse(min) : _currentDate.AddMonths(-1),
             DisplayDateEnd = DateTime.Today
         };
@@ -144,11 +171,20 @@ public partial class UsageStatsWindow : Window
         var win = new Window
         {
             Title = "选择日期",
-            Content = picker,
-            Width = 280, Height = 200,
+            Content = new Border
+            {
+                Background = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF7)),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(16),
+                Child = picker
+            },
+            Width = 300, Height = 230,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             Owner = this,
-            ShowInTaskbar = false
+            ShowInTaskbar = false,
+            ResizeMode = ResizeMode.NoResize,
+            Background = new SolidColorBrush(Color.FromRgb(0xF5, 0xF5, 0xF7)),
+            FontFamily = new FontFamily("Segoe UI")
         };
         win.ShowDialog();
     }
@@ -170,7 +206,7 @@ public partial class UsageStatsWindow : Window
         if (dialog.ShowDialog() != true) return;
         var json = JsonSerializer.Serialize(_data, new JsonSerializerOptions { WriteIndented = true });
         File.WriteAllText(dialog.FileName, json);
-        MessageBox.Show("已导出", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+        InfoDialog.Show(this, "提示", "已导出");
     }
 
     private void OnImport(object s, RoutedEventArgs e)
@@ -185,18 +221,18 @@ public partial class UsageStatsWindow : Window
         {
             var json = File.ReadAllText(dialog.FileName);
             var imported = JsonSerializer.Deserialize<UsageData>(json);
-            if (imported == null) { MessageBox.Show("文件格式错误"); return; }
+            if (imported == null) { InfoDialog.Show(this, "提示", "文件格式错误"); return; }
 
             foreach (var (date, apps) in imported.Records)
                 foreach (var (key, rec) in apps)
                     _data.AddSeconds(date, key, rec.Name, rec.Seconds);
 
             RefreshView();
-            MessageBox.Show("导入完成", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(this, "提示", "导入完成");
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            InfoDialog.Show(this, "错误", $"导入失败: {ex.Message}", icon: InfoDialogIcon.Error);
         }
     }
 }

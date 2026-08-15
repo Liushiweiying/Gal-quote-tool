@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Input;
@@ -10,6 +11,12 @@ public partial class ToastWindow : Window
 {
     private readonly Action? _onClick;
     private readonly System.Timers.Timer _timer;
+    private bool _closing;
+
+    // Stacking: multiple toasts stack downward from the top-right corner
+    private static readonly List<ToastWindow> _openToasts = new();
+    private const double ToastHeight = 80;
+    private const double ToastGap = 10;
 
     public ToastWindow(string title, string body, int durationMs = 3000, Action? onClick = null)
     {
@@ -18,16 +25,44 @@ public partial class ToastWindow : Window
         BodyText.Text = body;
         _onClick = onClick;
 
-        // Position at top-right
-        var workArea = SystemParameters.WorkArea;
-        Left = workArea.Right - Width - 12;
-        Top = workArea.Top + 12;
-
-        // Auto-close timer
+        // Auto-close timer (started once the window is visible)
         _timer = new System.Timers.Timer(durationMs);
-        _timer.Elapsed += (_, _) => Dispatcher.Invoke(Close);
+        _timer.Elapsed += (_, _) => Dispatcher.Invoke(BeginClose);
         _timer.AutoReset = false;
-        _timer.Start();
+
+        Loaded += (_, _) =>
+        {
+            _openToasts.Add(this);
+            Reposition();
+            FadeIn();
+            _timer.Start();
+        };
+    }
+
+    private void FadeIn()
+    {
+        Opacity = 0;
+        BeginAnimation(OpacityProperty, new DoubleAnimation(0, 1, TimeSpan.FromMilliseconds(150)));
+    }
+
+    private void BeginClose()
+    {
+        if (_closing) return;
+        _closing = true;
+        var fade = new DoubleAnimation(Opacity, 0, TimeSpan.FromMilliseconds(300));
+        fade.Completed += (_, _) => Close();
+        BeginAnimation(OpacityProperty, fade);
+    }
+
+    private void Reposition()
+    {
+        var workArea = SystemParameters.WorkArea;
+        for (int i = 0; i < _openToasts.Count; i++)
+        {
+            var t = _openToasts[i];
+            t.Left = workArea.Right - t.Width - 12;
+            t.Top = workArea.Top + 12 + i * (ToastHeight + ToastGap);
+        }
     }
 
     private void OnToastClick(object sender, MouseButtonEventArgs e)
@@ -50,6 +85,8 @@ public partial class ToastWindow : Window
     {
         _timer.Stop();
         _timer.Dispose();
+        _openToasts.Remove(this);
+        Reposition();
         base.OnClosed(e);
     }
 

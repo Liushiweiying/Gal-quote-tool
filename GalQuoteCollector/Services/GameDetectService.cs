@@ -35,16 +35,7 @@ public class GameDetectService
             return string.Empty;
 
         // 1. Custom rules — longest match wins
-        GameNameRule? best = null;
-        foreach (var rule in _rules)
-        {
-            if (!string.IsNullOrWhiteSpace(rule.Match) &&
-                windowTitle.Contains(rule.Match, StringComparison.OrdinalIgnoreCase) &&
-                (best == null || rule.Match.Length > best.Match.Length))
-            {
-                best = rule;
-            }
-        }
+        var best = MatchCustomRule(windowTitle);
         if (best != null)
             return best.Name;
 
@@ -59,22 +50,73 @@ public class GameDetectService
         if (cleaned.Length < 2)
             return string.Empty;
 
-        // 3. Skip non-game window patterns
-        var nonGamePatterns = new[]
-        {
-            @"^Program\s+Manager$", @"^Task\s+Manager$",
-            @"^Settings?$", @"^Control\s+Panel$",
-            @"^File\s+Explorer$", @"^Microsoft\s+",
-            @"^Google\s+", @"^Mozilla\s+",
-            @"^Visual\s+Studio", @"^Code\s+",
-        };
-
-        foreach (var pattern in nonGamePatterns)
-        {
-            if (Regex.IsMatch(cleaned, pattern, RegexOptions.IgnoreCase))
-                return string.Empty;
-        }
+        if (MatchesNonGamePattern(cleaned))
+            return string.Empty;
 
         return cleaned;
+    }
+
+    /// <summary>
+    /// Usage tracking: only returns a name when the window clearly looks like a game —
+    /// a custom rule matched, or a known game-engine suffix was actually stripped.
+    /// Otherwise returns null so the caller records the app's product/process name
+    /// instead of e.g. a browser tab title or a file name in a code editor.
+    /// </summary>
+    public string? DetectUsageName(string windowTitle)
+    {
+        if (string.IsNullOrWhiteSpace(windowTitle))
+            return null;
+
+        var best = MatchCustomRule(windowTitle);
+        if (best != null)
+            return best.Name;
+
+        // Only trust auto-cleaning when a known engine suffix was actually present
+        var cleaned = windowTitle.Trim();
+        var stripped = EngineSuffixRegex.Replace(cleaned, "").Trim();
+        if (stripped == cleaned)
+            return null;
+
+        cleaned = TrailingSuffixRegex.Replace(stripped, "").Trim();
+        if (string.IsNullOrWhiteSpace(cleaned) || cleaned.Length < 2)
+            return null;
+        if (MatchesNonGamePattern(cleaned))
+            return null;
+        return cleaned;
+    }
+
+    private GameNameRule? MatchCustomRule(string windowTitle)
+    {
+        GameNameRule? best = null;
+        foreach (var rule in _rules)
+        {
+            if (!string.IsNullOrWhiteSpace(rule.Match) &&
+                windowTitle.Contains(rule.Match, StringComparison.OrdinalIgnoreCase) &&
+                (best == null || rule.Match.Length > best.Match.Length))
+            {
+                best = rule;
+            }
+        }
+        return best;
+    }
+
+    // 3. Skip non-game window patterns
+    private static readonly string[] NonGamePatterns =
+    {
+        @"^Program\s+Manager$", @"^Task\s+Manager$",
+        @"^Settings?$", @"^Control\s+Panel$",
+        @"^File\s+Explorer$", @"^Microsoft\s+",
+        @"^Google\s+", @"^Mozilla\s+",
+        @"^Visual\s+Studio", @"^Code\s+",
+    };
+
+    private static bool MatchesNonGamePattern(string cleaned)
+    {
+        foreach (var pattern in NonGamePatterns)
+        {
+            if (Regex.IsMatch(cleaned, pattern, RegexOptions.IgnoreCase))
+                return true;
+        }
+        return false;
     }
 }

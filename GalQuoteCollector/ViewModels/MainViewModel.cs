@@ -3,6 +3,7 @@ using System.IO;
 using System.Net.Http;
 using System.Windows;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Microsoft.VisualBasic.FileIO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -33,6 +34,10 @@ public partial class MainViewModel : ObservableObject
     private int _captureDelayMs = 200;
     private bool _hideUnrecognized;
     private string _screenshotFormat = "png";
+
+    // Undo-delete support: snapshot of the last N deleted quotes (record + tag/group/screenshot rows)
+    private readonly Stack<DeletedQuoteBackup> _undoDeleteStack = new();
+    private readonly DispatcherTimer _searchDebounceTimer;
 
     public MainViewModel(Window window)
     {
@@ -118,6 +123,14 @@ public partial class MainViewModel : ObservableObject
 
         StatusText = $"热键: {_hotkeyService.CurrentHotkeyDisplay}   |   正在加载...";
         _ = LoadQuotesAsync();
+
+        // Search debounce: don't re-filter the list on every keystroke
+        _searchDebounceTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(250) };
+        _searchDebounceTimer.Tick += (_, _) => { _searchDebounceTimer.Stop(); RefreshQuotes(); };
+
+        // Restore last window bounds; persist them whenever the window closes
+        ApplyWindowBounds(hotkeyConfig);
+        _window.Closing += (_, _) => SaveWindowBounds();
 
         RunTranslucentTbFixIfNeeded();
     }
@@ -275,7 +288,9 @@ public partial class MainViewModel : ObservableObject
 
     partial void OnSearchTextChanged(string value)
     {
-        RefreshQuotes();
+        // Debounce: wait for a pause in typing before re-filtering
+        _searchDebounceTimer.Stop();
+        _searchDebounceTimer.Start();
     }
 
     partial void OnSortModeChanged(int value)
@@ -342,6 +357,7 @@ public partial class MainViewModel : ObservableObject
             _storageService.InsertQuote(quote);
             _allQuotes.Insert(0, quote);
             RefreshQuotes();
+            SelectedQuote = quote; // auto-select the newly captured quote
 
             // Toast notification (top-right corner)
             var toastGame = string.IsNullOrWhiteSpace(quote.GameName) ? "未分类" : quote.GameName;
@@ -403,9 +419,9 @@ public partial class MainViewModel : ObservableObject
         // Ctrl+click → delete tag itself
         if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
         {
-            var res = MessageBox.Show($"确定删除标签「{tag.Name}」？（不影响语录）", "删除标签",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (res != MessageBoxResult.Yes) return;
+            var res = InfoDialog.Show(_window, "删除标签", $"确定删除标签「{tag.Name}」？（不影响语录）",
+                InfoDialogButtons.YesNo, InfoDialogIcon.Question, dangerConfirm: true);
+            if (res != InfoDialogResult.Yes) return;
             _storageService.DeleteTag(tag.Id);
             RefreshAvailableTags();
             if (SelectedQuote != null) RefreshCurrentTags();
@@ -500,9 +516,9 @@ public partial class MainViewModel : ObservableObject
     private void DeleteGroup(QuoteGroup group)
     {
         if (group.Id == 0) return; // skip "全部"
-        var result = MessageBox.Show($"确定删除分组「{group.Name}」？（不影响其中的语录）", "确认删除",
-            MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (result != MessageBoxResult.Yes) return;
+        var result = InfoDialog.Show(_window, "确认删除", $"确定删除分组「{group.Name}」？（不影响其中的语录）",
+            InfoDialogButtons.YesNo, InfoDialogIcon.Question, dangerConfirm: true);
+        if (result != InfoDialogResult.Yes) return;
 
         _storageService.DeleteGroup(group.Id);
         SelectedGroupFilters.Remove(group.Id);
@@ -519,9 +535,9 @@ public partial class MainViewModel : ObservableObject
         // Ctrl+click → delete group itself
         if (Keyboard.IsKeyDown(Key.LeftCtrl) || Keyboard.IsKeyDown(Key.RightCtrl))
         {
-            var res = MessageBox.Show($"确定删除分组「{group.Name}」？（不影响语录）", "删除分组",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (res != MessageBoxResult.Yes) return;
+            var res = InfoDialog.Show(_window, "删除分组", $"确定删除分组「{group.Name}」？（不影响语录）",
+                InfoDialogButtons.YesNo, InfoDialogIcon.Question, dangerConfirm: true);
+            if (res != InfoDialogResult.Yes) return;
             _storageService.DeleteGroup(group.Id);
             SelectedGroupFilters.Remove(group.Id);
             RefreshAvailableGroups();
@@ -547,7 +563,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedGroupFilters.Count == 0)
         {
-            MessageBox.Show("请先在···菜单的分组筛选中选择至少一个分组", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "请先在···菜单的分组筛选中选择至少一个分组");
             return;
         }
 
@@ -567,7 +583,7 @@ public partial class MainViewModel : ObservableObject
 
         if (filtered.Count == 0)
         {
-            MessageBox.Show("该分组下没有语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "该分组下没有语录");
             return;
         }
 
@@ -582,7 +598,7 @@ public partial class MainViewModel : ObservableObject
         var quotes = Quotes.ToList();
         if (quotes.Count == 0)
         {
-            MessageBox.Show("没有语录可回想", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "没有语录可回想");
             return;
         }
 
@@ -615,7 +631,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_allQuotes.Count == 0)
         {
-            MessageBox.Show("没有可导出的语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "没有可导出的语录");
             return;
         }
         DoExport(_allQuotes);
@@ -626,7 +642,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (SelectedQuote == null)
         {
-            MessageBox.Show("请先选择一条语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "请先选择一条语录");
             return;
         }
         DoExport([SelectedQuote]);
@@ -680,7 +696,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            InfoDialog.Show(_window, "错误", $"导出失败: {ex.Message}", icon: InfoDialogIcon.Error);
         }
     }
 
@@ -696,58 +712,74 @@ public partial class MainViewModel : ObservableObject
         };
 
         if (dialog.ShowDialog() != true) return;
+        ImportFile(dialog.FileName);
+    }
 
+    /// <summary>Import a .md/.json/.zip file (menu commands and drag &amp; drop both use this).</summary>
+    public void ImportFile(string path)
+    {
         try
         {
-            var content = File.ReadAllText(dialog.FileName);
-            var items = dialog.FileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase)
-                ? _exportService.ParseJson(content)
-                : _exportService.ParseMarkdown(content);
-
-            if (items.Count == 0)
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            if (ext == ".zip")
             {
-                MessageBox.Show("未找到可导入的语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                ImportBundledFrom(path);
                 return;
             }
 
-            int imported = 0;
-            foreach (var item in items)
-            {
-                var quote = new Quote
-                {
-                    Text = item.Text,
-                    GameName = item.GameName,
-                    CapturedAt = item.CapturedAt,
-                    Notes = item.Notes
-                };
-
-                _storageService.InsertQuote(quote);
-
-                foreach (var tagName in item.Tags)
-                {
-                    var tag = _storageService.AddTag(tagName);
-                    _storageService.AddTagToQuote(quote.Id, tag.Id);
-                }
-
-                foreach (var groupName in item.Groups)
-                {
-                    var group = _storageService.AddGroup(groupName);
-                    _storageService.AddQuoteToGroup(quote.Id, group.Id);
-                }
-
-                _allQuotes.Insert(0, quote);
-                imported++;
-            }
-
-            RefreshQuotes();
-            RefreshAvailableTags();
-            RefreshAvailableGroups();
-            StatusText = $"已导入 {imported} 条语录";
+            var content = File.ReadAllText(path);
+            var items = ext == ".json"
+                ? _exportService.ParseJson(content)
+                : _exportService.ParseMarkdown(content);
+            ImportItems(items);
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            InfoDialog.Show(_window, "错误", $"导入失败: {ex.Message}", icon: InfoDialogIcon.Error);
         }
+    }
+
+    private void ImportItems(List<ImportItem> items)
+    {
+        if (items.Count == 0)
+        {
+            InfoDialog.Show(_window, "提示", "未找到可导入的语录");
+            return;
+        }
+
+        int imported = 0;
+        foreach (var item in items)
+        {
+            var quote = new Quote
+            {
+                Text = item.Text,
+                GameName = item.GameName,
+                CapturedAt = item.CapturedAt,
+                Notes = item.Notes
+            };
+
+            _storageService.InsertQuote(quote);
+
+            foreach (var tagName in item.Tags)
+            {
+                var tag = _storageService.AddTag(tagName);
+                _storageService.AddTagToQuote(quote.Id, tag.Id);
+            }
+
+            foreach (var groupName in item.Groups)
+            {
+                var group = _storageService.AddGroup(groupName);
+                _storageService.AddQuoteToGroup(quote.Id, group.Id);
+            }
+
+            _allQuotes.Insert(0, quote);
+            imported++;
+        }
+
+        RefreshQuotes();
+        RefreshAvailableTags();
+        RefreshAvailableGroups();
+        StatusText = $"已导入 {imported} 条语录";
     }
 
     // ── Bundled export/import (quotes + screenshots in a ZIP) ──
@@ -757,7 +789,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_allQuotes.Count == 0)
         {
-            MessageBox.Show("没有可导出的语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "没有可导出的语录");
             return;
         }
 
@@ -838,7 +870,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"导出失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            InfoDialog.Show(_window, "错误", $"导出失败: {ex.Message}", icon: InfoDialogIcon.Error);
         }
     }
 
@@ -851,18 +883,22 @@ public partial class MainViewModel : ObservableObject
             Title = "导入语录压缩包"
         };
         if (dialog.ShowDialog() != true) return;
+        ImportBundledFrom(dialog.FileName);
+    }
 
+    private void ImportBundledFrom(string zipPath)
+    {
         string? tempDir = null;
         try
         {
             tempDir = Path.Combine(Path.GetTempPath(), $"galimport_{Guid.NewGuid():N}");
             Directory.CreateDirectory(tempDir);
-            System.IO.Compression.ZipFile.ExtractToDirectory(dialog.FileName, tempDir);
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, tempDir);
 
             var jsonPath = Path.Combine(tempDir, "quotes.json");
             if (!File.Exists(jsonPath))
             {
-                MessageBox.Show("压缩包中未找到 quotes.json", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+                InfoDialog.Show(_window, "错误", "压缩包中未找到 quotes.json", icon: InfoDialogIcon.Error);
                 return;
             }
 
@@ -871,7 +907,7 @@ public partial class MainViewModel : ObservableObject
 
             if (items.Count == 0)
             {
-                MessageBox.Show("未找到可导入的语录", "提示", MessageBoxButton.OK, MessageBoxImage.Information);
+                InfoDialog.Show(_window, "提示", "未找到可导入的语录");
                 return;
             }
 
@@ -935,10 +971,10 @@ public partial class MainViewModel : ObservableObject
                 || File.Exists(Path.Combine(tempDir, "usage.json"));
             if (hasExtra)
             {
-                bool restoreExtra = MessageBox.Show(
+                bool restoreExtra = InfoDialog.Show(_window, "恢复设置",
                     "压缩包中还包含 settings.json / usage.json，是否同时恢复这些设置与使用记录？\n" +
                     "（选择「否」将只导入语录和截图，不覆盖当前配置）",
-                    "恢复设置", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes;
+                    InfoDialogButtons.YesNo, InfoDialogIcon.Question) == InfoDialogResult.Yes;
                 if (restoreExtra)
                 {
                     foreach (var fn in new[] { "settings.json", "usage.json" })
@@ -958,7 +994,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"导入失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            InfoDialog.Show(_window, "错误", $"导入失败: {ex.Message}", icon: InfoDialogIcon.Error);
         }
         finally
         {
@@ -1000,8 +1036,8 @@ public partial class MainViewModel : ObservableObject
 
             if (conflict)
             {
-                MessageBox.Show("采集热键与补拍热键冲突，请选择其他组合键", "提示",
-                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                InfoDialog.Show(_window, "提示", "采集热键与补拍热键冲突，请选择其他组合键",
+                    icon: InfoDialogIcon.Warning);
                 StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
             }
             else
@@ -1015,6 +1051,15 @@ public partial class MainViewModel : ObservableObject
     /// <summary>Apply a confirmed settings config: persist, re-apply game-name rules and UI-affecting options.</summary>
     private (bool ok, string msg) ApplySettings(HotkeyConfig cfg)
     {
+        // The settings dialog doesn't edit window bounds — keep the persisted values.
+        if (double.IsNaN(cfg.WindowLeft) || double.IsNaN(cfg.WindowWidth))
+        {
+            var cur = _settingsService.LoadHotkeyConfig();
+            cfg.WindowLeft = cur.WindowLeft;
+            cfg.WindowTop = cur.WindowTop;
+            cfg.WindowWidth = cur.WindowWidth;
+            cfg.WindowHeight = cur.WindowHeight;
+        }
         _settingsService.SaveHotkeyConfig(cfg);
         _gameDetectService.SetRules(cfg.GameNameRules);
         ReapplyRulesToAllQuotes();
@@ -1116,8 +1161,8 @@ public partial class MainViewModel : ObservableObject
         var msg = $"已迁移 {migrated.Count} 张截图到新目录";
         if (skipped > 0) msg += $"，{skipped} 张本就在新目录";
         if (failed.Count > 0) msg += $"\n{failed.Count} 张失败：\n{string.Join("\n", failed.Take(5))}";
-        MessageBox.Show(msg, "截图迁移", MessageBoxButton.OK,
-            failed.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+        InfoDialog.Show(_window, "截图迁移", msg,
+            icon: failed.Count > 0 ? InfoDialogIcon.Warning : InfoDialogIcon.Information);
     }
 
     /// <summary>
@@ -1181,6 +1226,51 @@ public partial class MainViewModel : ObservableObject
             Path.GetFullPath(a).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             Path.GetFullPath(b).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar),
             StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>Restore persisted main-window bounds, keeping the window on-screen.</summary>
+    private void ApplyWindowBounds(HotkeyConfig cfg)
+    {
+        if (double.IsNaN(cfg.WindowWidth) || double.IsNaN(cfg.WindowHeight)) return;
+        if (cfg.WindowWidth < 600 || cfg.WindowHeight < 400) return;
+
+        var wa = SystemParameters.WorkArea;
+        double left = double.IsNaN(cfg.WindowLeft)
+            ? wa.Left + (wa.Width - cfg.WindowWidth) / 2
+            : cfg.WindowLeft;
+        double top = double.IsNaN(cfg.WindowTop)
+            ? wa.Top + (wa.Height - cfg.WindowHeight) / 2
+            : cfg.WindowTop;
+
+        var rect = new Rect(left, top, cfg.WindowWidth, cfg.WindowHeight);
+        var visible = Rect.Intersect(rect, new Rect(wa.Left, wa.Top, wa.Width, wa.Height));
+        if (visible.IsEmpty || visible.Width < 60 || visible.Height < 60)
+        {
+            // Window ended up off-screen (monitor removed etc.) — bring it back
+            left = wa.Left + 40;
+            top = wa.Top + 40;
+        }
+
+        _window.Left = left;
+        _window.Top = top;
+        _window.Width = cfg.WindowWidth;
+        _window.Height = cfg.WindowHeight;
+    }
+
+    /// <summary>Persist current main-window bounds (skipped while minimized/maximized).</summary>
+    private void SaveWindowBounds()
+    {
+        if (_window.WindowState != WindowState.Normal) return;
+        try
+        {
+            var cfg = _settingsService.LoadHotkeyConfig();
+            cfg.WindowLeft = _window.Left;
+            cfg.WindowTop = _window.Top;
+            cfg.WindowWidth = _window.Width;
+            cfg.WindowHeight = _window.Height;
+            _settingsService.SaveHotkeyConfig(cfg);
+        }
+        catch { }
     }
 
     private void ReapplyRulesToAllQuotes()
@@ -1353,15 +1443,149 @@ public partial class MainViewModel : ObservableObject
     }
 
     [RelayCommand]
-    /// <summary>Delete without confirmation. Keeps screenshots.</summary>
+    /// <summary>Delete without confirmation. Keeps screenshots. Undoable via UndoDeleteCommand.</summary>
     public void DeleteQuoteDirect(Quote quote)
     {
         if (quote == null) return;
+        PushUndoDelete(quote);
         _storageService.DeleteQuote(quote.Id);
         _allQuotes.Remove(quote);
         if (SelectedQuote == quote) SelectedQuote = null;
         RefreshQuotes();
-        StatusText = "已删除";
+        StatusText = "已删除（可撤销）";
+    }
+
+    // ── Undo delete ──
+
+    private sealed class DeletedQuoteBackup
+    {
+        public Quote Quote = null!;
+        public List<Tag> Tags = new();
+        public List<QuoteGroup> Groups = new();
+        public List<Screenshot> Screenshots = new();
+    }
+
+    [ObservableProperty]
+    private bool _undoDeleteAvailable;
+
+    private void PushUndoDelete(Quote quote)
+    {
+        if (_undoDeleteStack.Count >= 20) _undoDeleteStack.Pop();
+        _undoDeleteStack.Push(new DeletedQuoteBackup
+        {
+            Quote = quote,
+            Tags = _storageService.GetTagsForQuote(quote.Id),
+            Groups = _storageService.GetGroupsForQuote(quote.Id),
+            Screenshots = _storageService.GetScreenshots(quote.Id)
+        });
+        UndoDeleteAvailable = true;
+    }
+
+    [RelayCommand]
+    private void UndoDelete()
+    {
+        if (_undoDeleteStack.Count == 0) return;
+        var b = _undoDeleteStack.Pop();
+        UndoDeleteAvailable = _undoDeleteStack.Count > 0;
+
+        var quote = b.Quote;
+        var savedPath = quote.ScreenshotPath;
+        quote.ScreenshotPath = ""; // skip InsertQuote's auto-created Screenshots row
+        _storageService.InsertQuote(quote);
+        quote.ScreenshotPath = savedPath;
+
+        foreach (var ss in b.Screenshots)
+            _storageService.AddScreenshot(quote.Id, ss.FilePath, ss.SortOrder);
+        foreach (var t in b.Tags)
+            _storageService.AddTagToQuote(quote.Id, t.Id);
+        foreach (var g in b.Groups)
+            _storageService.AddQuoteToGroup(quote.Id, g.Id);
+
+        _allQuotes.Insert(0, quote);
+        RefreshQuotes();
+        SelectedQuote = quote;
+        StatusText = "已撤销删除（截图文件如需恢复请从回收站找回）";
+    }
+
+    [RelayCommand]
+    private void CopyQuoteText()
+    {
+        if (SelectedQuote == null) return;
+        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetText(SelectedQuote.Text))
+            ? "已复制语录文本"
+            : "复制失败（剪贴板被占用，请重试）";
+    }
+
+    /// <summary>Clipboard access throws while another app holds it — retry briefly before giving up.</summary>
+    private static bool SetClipboardWithRetry(Action set)
+    {
+        for (int i = 0; i < 5; i++)
+        {
+            try { set(); return true; }
+            catch { System.Threading.Thread.Sleep(80); }
+        }
+        return false;
+    }
+
+    [RelayCommand]
+    private void CopyScreenshotPath(Screenshot screenshot)
+    {
+        if (screenshot == null) return;
+        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetText(screenshot.FilePath))
+            ? "已复制文件路径"
+            : "复制失败（剪贴板被占用，请重试）";
+    }
+
+    [RelayCommand]
+    private void CopyScreenshotImage(Screenshot screenshot)
+    {
+        if (screenshot == null) return;
+        if (!File.Exists(screenshot.FilePath))
+        {
+            StatusText = "图片文件不存在";
+            return;
+        }
+
+        // Put BOTH the image data and the file path on the clipboard, so pasting
+        // works in image editors and in Explorer (as a file).
+        var data = new System.Windows.DataObject();
+        data.SetFileDropList(new System.Collections.Specialized.StringCollection { screenshot.FilePath });
+        try
+        {
+            var bmp = new System.Windows.Media.Imaging.BitmapImage();
+            bmp.BeginInit();
+            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.UriSource = new Uri(screenshot.FilePath);
+            bmp.EndInit();
+            data.SetImage(bmp);
+        }
+        catch { /* undecodable file — the FileDrop entry still allows path-based paste */ }
+
+        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetDataObject(data, true))
+            ? "已复制图片"
+            : "复制失败（剪贴板被占用，请重试）";
+    }
+
+    [RelayCommand]
+    private void OpenScreenshotFolder(Screenshot screenshot)
+    {
+        if (screenshot == null) return;
+        try
+        {
+            if (File.Exists(screenshot.FilePath))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{screenshot.FilePath}\""
+                });
+            else if (Directory.Exists(_screenshotDir))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"\"{_screenshotDir}\""
+                });
+        }
+        catch { }
     }
 
     private void DeleteScreenshots(Quote quote)
@@ -1398,9 +1622,9 @@ public partial class MainViewModel : ObservableObject
     private void DeleteQuote()
     {
         if (SelectedQuote == null) return;
-        var result = MessageBox.Show("确定要删除这条语录吗？", "确认删除",
-            MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (result != MessageBoxResult.Yes) return;
+        var result = InfoDialog.Show(_window, "确认删除", "确定要删除这条语录吗？",
+            InfoDialogButtons.YesNo, InfoDialogIcon.Question, dangerConfirm: true);
+        if (result != InfoDialogResult.Yes) return;
 
         // Ask about screenshots (check the Screenshots table first, fall back to legacy field)
         var hasScreenshots = _storageService.GetScreenshots(SelectedQuote.Id).Any();
@@ -1413,9 +1637,10 @@ public partial class MainViewModel : ObservableObject
 
         if (hasScreenshots)
         {
-            var sr = MessageBox.Show("截图文件怎么处理？\n\n「是」= 删除截图文件\n「否」= 保留截图文件", "删除截图？",
-                MessageBoxButton.YesNo, MessageBoxImage.Question);
-            if (sr == MessageBoxResult.Yes)
+            var sr = InfoDialog.Show(_window, "删除截图？",
+                "截图文件怎么处理？\n\n「是」= 删除截图文件\n「否」= 保留截图文件",
+                InfoDialogButtons.YesNo, InfoDialogIcon.Question);
+            if (sr == InfoDialogResult.Yes)
                 DeleteScreenshots(SelectedQuote);
         }
 
@@ -1541,15 +1766,14 @@ public partial class MainViewModel : ObservableObject
 
         if (orphans.Count == 0)
         {
-            MessageBox.Show("没有未关联的截图文件", "删除未关联截图",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "删除未关联截图", "没有未关联的截图文件");
             return;
         }
 
-        var res = MessageBox.Show(
+        var res = InfoDialog.Show(_window, "删除未关联截图",
             $"发现 {orphans.Count} 个未被任何语录引用的截图文件，确认删除？\n\n删除后将移入回收站，可恢复。",
-            "删除未关联截图", MessageBoxButton.YesNo, MessageBoxImage.Warning);
-        if (res != MessageBoxResult.Yes) return;
+            InfoDialogButtons.YesNo, InfoDialogIcon.Warning, dangerConfirm: true);
+        if (res != InfoDialogResult.Yes) return;
 
         int deleted = 0;
         foreach (var f in orphans)
@@ -1623,9 +1847,9 @@ public partial class MainViewModel : ObservableObject
     private void DeleteScreenshot(Screenshot screenshot)
     {
         if (screenshot == null) return;
-        var result = MessageBox.Show("确定删除这张截图？（不影响语录）", "删除截图",
-            MessageBoxButton.YesNo, MessageBoxImage.Question);
-        if (result != MessageBoxResult.Yes) return;
+        var result = InfoDialog.Show(_window, "删除截图", "确定删除这张截图？（不影响语录）",
+            InfoDialogButtons.YesNo, InfoDialogIcon.Question, dangerConfirm: true);
+        if (result != InfoDialogResult.Yes) return;
 
         if (File.Exists(screenshot.FilePath))
             try { Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(screenshot.FilePath, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin); } catch { }
@@ -1680,7 +1904,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"添加截图失败: {ex.Message}", "错误", MessageBoxButton.OK, MessageBoxImage.Error);
+            InfoDialog.Show(_window, "错误", $"添加截图失败: {ex.Message}", icon: InfoDialogIcon.Error);
         }
     }
 
@@ -1790,8 +2014,7 @@ public partial class MainViewModel : ObservableObject
     {
         if (_usageTracker == null)
         {
-            MessageBox.Show("使用时长记录已关闭\n请在 设置 → 常规 中开启", "提示",
-                MessageBoxButton.OK, MessageBoxImage.Information);
+            InfoDialog.Show(_window, "提示", "使用时长记录已关闭\n请在 设置 → 常规 中开启");
             return;
         }
         var data = _usageTracker.GetData();
@@ -1828,13 +2051,12 @@ public partial class MainViewModel : ObservableObject
     private void ShowAbout()
     {
         var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
-        MessageBox.Show(
+        InfoDialog.Show(_window, "关于",
             $"Gal 语录收藏工具 {AppVersion}\n\n" +
             $"作者: 未时\n" +
             $"Bilibili: @重构时间\n" +
             $"QQ: 3302164450\n\n" +
-            $"项目地址:\n{updateUrl}",
-            "关于", MessageBoxButton.OK, MessageBoxImage.Information);
+            $"项目地址:\n{updateUrl}");
     }
 
     private async void CheckForUpdate()
@@ -1858,9 +2080,9 @@ public partial class MainViewModel : ObservableObject
 
             StatusText = $"发现新版本 {latest} → {StatusText}";
             var updateUrl = "https://github.com/Liushiweiying/Gal-quote-tool/releases";
-            MessageBox.Show(
+            InfoDialog.Show(_window, "版本更新",
                 $"发现新版本: {latest}\n当前版本: {AppVersion}\n\n前往下载:\n{updateUrl}",
-                "版本更新", MessageBoxButton.OK, MessageBoxImage.Information);
+                icon: InfoDialogIcon.Information);
         }
         catch
         {
@@ -1932,16 +2154,20 @@ public partial class MainViewModel : ObservableObject
                 : source.Where(q => MatchGame(q));
         }
 
-        // Filter by text
-        if (!string.IsNullOrWhiteSpace(SearchText))
+        // Filter by text — whitespace-separated keywords, ALL must match (AND)
+        var keywords = string.IsNullOrWhiteSpace(SearchText)
+            ? Array.Empty<string>()
+            : SearchText.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        if (keywords.Length > 0)
         {
             source = source.Where(q =>
-                q.Text.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
-                || q.GameName.Contains(SearchText, StringComparison.OrdinalIgnoreCase));
+                keywords.All(k =>
+                    q.Text.Contains(k, StringComparison.OrdinalIgnoreCase)
+                    || q.GameName.Contains(k, StringComparison.OrdinalIgnoreCase)));
         }
 
         // Exclude unrecognized from search results only
-        if (_hideUnrecognized && !string.IsNullOrWhiteSpace(SearchText))
+        if (_hideUnrecognized && keywords.Length > 0)
         {
             source = source.Where(q => !q.Text.Contains("[未识别到文字]"));
         }
