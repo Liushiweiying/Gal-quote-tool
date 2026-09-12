@@ -104,6 +104,16 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 用法：`InfoDialog.Show(owner, 标题, 正文, InfoDialogButtons.OK/OKCancel/YesNo, InfoDialogIcon.Information/Question/Warning/Error, dangerConfirm: true)` 返回 `InfoDialogResult.OK/Yes/No/Cancel`。删除类确认传 `dangerConfirm: true`（红色"是"）。按钮顺序约定：**左是右否**（是/确定在左，否/取消在右）。
 - 后续可选项：教程/关于窗口做成"分节排版 + 图标 + 版本号 + 仓库链接"的专属窗口（当前已统一为 InfoDialog，够用）。
 
+### 下次要做（用户指定，2026-09-12；本轮不发布）
+1. **默认截图方式改为「当前显示器」**
+   - 原因（用户实测）：**Magpie 超分不会让游戏窗口的标题栏消失**，按窗口区域/窗口内容截取会把顶栏一起截进去，效果不好；按显示器整体截图才是 Magpie 场景下的正确默认。
+   - 改法：`HotkeyConfig.CaptureMode` 默认值 `"auto"` → `"monitor"`；`CaptureService.ParseMode` 里**空字符串也要落到 monitor**（旧 settings.json 里 CaptureMode 可能是空串，需迁移）。
+   - 需要一并理顺 `MainViewModel.EffectiveCaptureMode()` 与 v1.2.3 的「检测到 Magpie 优先原生截图」选项的交互：默认已是 monitor 时，该开关应决定「monitor（含超分）/ window content（原生）」的取舍，而不是只在 auto 下生效。设置界面文案要同步。
+2. **Magpie 回想超分设置项**（此前 Phase 2 计划）
+   - 设置项：「回想时用 Magpie 超分」开关 + 触发热键（默认 Magpie 的 `Win+Shift+A`，可改）+ Magpie 路径（自动探测 `Magpie.exe`）。
+   - 实现：回想窗口显示/置顶后，用 `SendInput` 合成缩放热键让 Magpie 超分该窗口；关闭回想时再发一次解除；Magpie 未运行时提示或回退**内置高质量放大**（`RenderOptions.BitmapScalingMode=HighQuality` + 轻量锐化）。
+   - 注意：Magpie 需正在运行；热键在 Magpie 内可自定义，所以必须可配置；要测 F11 全屏与多显示器下的行为。
+
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
 - 代码签名：自签名证书 `CN=Gal Quote Collector`（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。
