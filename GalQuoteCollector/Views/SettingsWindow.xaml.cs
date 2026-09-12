@@ -62,6 +62,14 @@ public partial class SettingsWindow : Window
         FormatCombo.SelectedIndex = cfg.ScreenshotFormat == "jpg" ? 1 : 0;
         JpegQualitySlider.Value = cfg.JpegQuality;
         JpegQualityLabel.Text = cfg.JpegQuality.ToString();
+        CaptureModeCombo.SelectedIndex = cfg.CaptureMode switch
+        {
+            "window" => 1,
+            "region" => 2,
+            "monitor" => 3,
+            "screen" => 4,
+            _ => 0
+        };
         SlideshowLoopCheckBox.IsChecked = cfg.SlideshowLoop;
 
         // TranslucentTB fix option is only meaningful (and only shown) while TranslucentTB is running
@@ -341,6 +349,14 @@ public partial class SettingsWindow : Window
         _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
         _newConfig.ScreenshotFormat = FormatCombo.SelectedIndex == 1 ? "jpg" : "png";
         _newConfig.JpegQuality = (int)JpegQualitySlider.Value;
+        _newConfig.CaptureMode = CaptureModeCombo.SelectedIndex switch
+        {
+            1 => "window",
+            2 => "region",
+            3 => "monitor",
+            4 => "screen",
+            _ => "auto"
+        };
         _newConfig.OcrEngine = OcrEngineCombo.SelectedIndex switch { 1 => "local", 2 => "rapid", _ => "win" };
         _newConfig.LocalOcrUrl = LocalOcrUrlBox.Text.Trim();
         _newConfig.LocalOcrModel = LocalOcrModelBox.Text.Trim();

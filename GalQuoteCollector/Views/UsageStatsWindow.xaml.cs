@@ -52,7 +52,6 @@ public partial class UsageStatsWindow : Window
 
         var dateStr = _currentDate.ToString("yyyy-MM-dd");
         DateText.Text = dateStr;
-        StatsPanel.Children.Add(CreateHeader("当日使用时长"));
         var day = _data.GetDay(dateStr);
         var apps = day?.Where(kv => kv.Key != ToolKey).ToList();
 
@@ -60,10 +59,17 @@ public partial class UsageStatsWindow : Window
         int toolSec = day != null && day.TryGetValue(ToolKey, out var toolRec)
             ? toolRec.Seconds : 0;
 
-        // ── Tool runtime card (red accent, full width) ──
+        // Bars are scaled against an absolute, human-readable reference so a short day
+        // draws a short bar instead of always filling the width.
+        int maxSec = Math.Max(toolSec, apps != null && apps.Count > 0 ? apps.Max(x => x.Value.Seconds) : 0);
+        double scale = NiceScaleMax(maxSec);
+
+        StatsPanel.Children.Add(CreateHeader($"当日使用时长 · 满格 = {FormatScale(scale)}"));
+
+        // ── Tool runtime card ──
         var toolCard = CreateCard();
         AddToCard(toolCard, CreateLabelRow("工具运行", FormatTime(toolSec), Red));
-        AddToCard(toolCard, CreateBar(1.0, Red, 8));
+        AddToCard(toolCard, CreateBar(toolSec / scale, Red, 8));
         StatsPanel.Children.Add(toolCard);
 
         // ── App records (exclude tool key) ──
@@ -86,7 +92,7 @@ public partial class UsageStatsWindow : Window
             var pct = toolSec > 0 ? (double)record.Seconds / toolSec : 0;
             var card = CreateCard();
             AddToCard(card, CreateLabelRow(record.Name, $"{FormatTime(record.Seconds)}  ({(int)(pct * 100)}%)", Green));
-            AddToCard(card, CreateBar(pct, Green, 8));
+            AddToCard(card, CreateBar(record.Seconds / scale, Green, 8));
             StatsPanel.Children.Add(card);
         }
 
@@ -97,11 +103,26 @@ public partial class UsageStatsWindow : Window
         StatsPanel.Children.Add(totalCard);
     }
 
+    /// <summary>下一个"整齐"的满格刻度（30 分钟起，最多 7 天）。</summary>
+    private static double NiceScaleMax(double maxSeconds)
+    {
+        double[] steps =
+        {
+            1800, 3600, 2 * 3600, 4 * 3600, 6 * 3600, 8 * 3600, 12 * 3600, 16 * 3600,
+            24 * 3600, 48 * 3600, 72 * 3600, 96 * 3600, 120 * 3600, 168 * 3600
+        };
+        foreach (var s in steps)
+            if (maxSeconds <= s) return s;
+        return steps[^1];
+    }
+
+    private static string FormatScale(double seconds)
+        => seconds >= 3600 ? $"{seconds / 3600:0.#} 小时" : $"{seconds / 60:0} 分钟";
+
     /// <summary>近 7 天聚合视图（截至 _currentDate）。</summary>
     private void RefreshWeek()
     {
         DateText.Text = $"最近 7 天（截至 {_currentDate:MM-dd}）";
-        StatsPanel.Children.Add(CreateHeader("近 7 天使用时长"));
 
         int toolTotal = 0;
         var apps = new Dictionary<string, (int secs, string name)>(StringComparer.OrdinalIgnoreCase);
@@ -119,9 +140,14 @@ public partial class UsageStatsWindow : Window
             }
         }
 
+        // Absolute scale for the week view as well
+        int weekMax = Math.Max(toolTotal, apps.Count > 0 ? apps.Max(x => x.Value.secs) : 0);
+        double scale = NiceScaleMax(weekMax);
+        StatsPanel.Children.Add(CreateHeader($"近 7 天使用时长 · 满格 = {FormatScale(scale)}"));
+
         var toolCard = CreateCard();
         AddToCard(toolCard, CreateLabelRow("工具运行", FormatTime(toolTotal), Red));
-        AddToCard(toolCard, CreateBar(1.0, Red, 8));
+        AddToCard(toolCard, CreateBar(toolTotal / scale, Red, 8));
         StatsPanel.Children.Add(toolCard);
 
         if (apps.Count == 0)
@@ -145,7 +171,7 @@ public partial class UsageStatsWindow : Window
             var pct = toolTotal > 0 ? (double)kv.Value.secs / toolTotal : 0;
             var card = CreateCard();
             AddToCard(card, CreateLabelRow($"{rank}. {kv.Value.name}", $"{FormatTime(kv.Value.secs)}  ({(int)(pct * 100)}%)", Green));
-            AddToCard(card, CreateBar(pct, Green, 8));
+            AddToCard(card, CreateBar(kv.Value.secs / scale, Green, 8));
             StatsPanel.Children.Add(card);
         }
 
@@ -250,6 +276,12 @@ public partial class UsageStatsWindow : Window
             DisplayDateStart = _data.Records.Keys.MinBy(k => k) is string min ? DateTime.Parse(min) : _currentDate.AddMonths(-1),
             DisplayDateEnd = DateTime.Today
         };
+
+        // Highlight days that actually have usage records
+        Converters.UsageDateHighlightConverter.SetDates(_data.Records.Keys);
+        if (FindResource("CalendarWithData") is Style calStyle)
+            picker.CalendarStyle = calStyle;
+
         picker.SelectedDateChanged += (_, _) =>
         {
             if (picker.SelectedDate.HasValue)

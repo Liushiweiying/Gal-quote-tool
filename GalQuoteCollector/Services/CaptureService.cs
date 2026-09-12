@@ -5,6 +5,17 @@ using System.Runtime.InteropServices;
 
 namespace GalQuoteCollector.Services;
 
+/// <summary>
+/// 截图方式：
+///   auto   — 自动（无边框全屏 / 占据显示器 ≥90% 时抓该显示器，否则抓窗口可见区域）
+///   window — 抓窗口自身渲染内容（PrintWindow + PW_RENDERFULLCONTENT）
+///            —— 得到游戏原生分辨率的画面，串流窗口、minori 等特殊引擎更可靠
+///   region — 抓窗口在屏幕上的可见区域（DWM 真实边框）
+///   monitor— 抓窗口所在显示器的完整画面
+///   screen — 抓整个虚拟屏幕（所有显示器）
+/// </summary>
+public enum CaptureMode { Auto, WindowContent, WindowRegion, Monitor, VirtualScreen }
+
 public class CaptureService
 {
     public string ScreenshotDir { get; }
@@ -15,61 +26,81 @@ public class CaptureService
         Directory.CreateDirectory(screenshotDir);
     }
 
+    public static CaptureMode ParseMode(string? mode) => (mode ?? "auto").Trim().ToLowerInvariant() switch
+    {
+        "window" => CaptureMode.WindowContent,
+        "region" => CaptureMode.WindowRegion,
+        "monitor" => CaptureMode.Monitor,
+        "screen" => CaptureMode.VirtualScreen,
+        _ => CaptureMode.Auto
+    };
+
     /// <summary>
     /// Capture the specified window and return the screenshot file path.
     /// Pass a saved handle to capture the game even after our window minimizes.
     /// </summary>
     public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0,
-        bool forceFullscreen = false, int jpegQuality = 90)
+        bool forceFullscreen = false, int jpegQuality = 90, string? captureMode = "auto")
     {
-        GetWindowRect(hwnd, out var rect);
+        if (hwnd == IntPtr.Zero)
+            throw new InvalidOperationException("无效的窗口句柄");
 
-        var width = rect.right - rect.left;
-        var height = rect.bottom - rect.top;
+        if (IsIconic(hwnd))
+            throw new InvalidOperationException("目标窗口已最小化，无法截图");
 
+        var mode = ParseMode(captureMode);
+        RECT rect;
+        bool usePrintWindow = false;
+
+        switch (mode)
+        {
+            case CaptureMode.WindowContent:
+                GetWindowRect(hwnd, out rect);
+                usePrintWindow = true;
+                break;
+
+            case CaptureMode.WindowRegion:
+                rect = GetVisibleBounds(hwnd);
+                break;
+
+            case CaptureMode.Monitor:
+                rect = GetMonitorRect(hwnd);
+                break;
+
+            case CaptureMode.VirtualScreen:
+                rect = GetVirtualScreenRect();
+                break;
+
+            default: // Auto
+                var winRect = GetVisibleBounds(hwnd);
+                var monRect = GetMonitorRect(hwnd);
+                int winW = winRect.right - winRect.left;
+                int winH = winRect.bottom - winRect.top;
+                int monW = monRect.right - monRect.left;
+                int monH = monRect.bottom - monRect.top;
+
+                // A borderless window, or one that covers nearly the whole monitor
+                // (fullscreen games, Magpie-upscaled windows) → grab that monitor.
+                int style = GetWindowLong(hwnd, GWL_STYLE);
+                bool borderless = (style & WS_POPUP) != 0 && (style & WS_CAPTION) != WS_CAPTION;
+                double cover = monW > 0 && monH > 0 ? (double)(winW * winH) / (monW * monH) : 0;
+
+                // A window that is far larger than the monitor (streaming clients reporting
+                // an inflated rect, engines that lie about their size) is also grabbed from
+                // the monitor so we never capture a partially off-screen region.
+                bool oversized = winW > monW * 1.05 || winH > monH * 1.05;
+
+                if (borderless || oversized || (forceFullscreen && cover >= 0.9))
+                    rect = monRect;
+                else
+                    rect = winRect;
+                break;
+        }
+
+        int width = rect.right - rect.left;
+        int height = rect.bottom - rect.top;
         if (width <= 0 || height <= 0)
-            throw new InvalidOperationException("Invalid window dimensions");
-
-        // Game windows (especially Magpie-upscaled) may report their internal resolution
-        // via GetWindowRect while the actual visible content fills the entire screen.
-        // forceFullscreen is set by the caller when the window is recognized as a game,
-        // but it is only honored when the window actually occupies most of its monitor —
-        // a windowed game must not capture the whole desktop.
-        // Also auto-detect borderless fullscreen windows (WS_POPUP, no caption).
-        int screenW = GetSystemMetrics(SM_CXSCREEN);
-        int screenH = GetSystemMetrics(SM_CYSCREEN);
-        bool shouldCaptureFullscreen = false;
-        if (forceFullscreen)
-        {
-            double cover = (double)(width * height) / (double)(screenW * screenH);
-            shouldCaptureFullscreen = cover >= 0.9;
-        }
-        if (!shouldCaptureFullscreen)
-        {
-            int style = GetWindowLong(hwnd, GWL_STYLE);
-            shouldCaptureFullscreen = (style & WS_POPUP) != 0 && (style & WS_CAPTION) != WS_CAPTION;
-        }
-        if (shouldCaptureFullscreen)
-        {
-            // Capture the monitor the window is actually on. rcMonitor can carry
-            // negative coordinates on multi-monitor setups (monitor left of primary);
-            // CopyFromScreen accepts virtual-screen coordinates, so this works there too.
-            var mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
-            var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-            if (GetMonitorInfo(mon, ref mi))
-            {
-                rect = mi.rcMonitor;
-                width = rect.right - rect.left;
-                height = rect.bottom - rect.top;
-            }
-            else
-            {
-                rect.left = 0;
-                rect.top = 0;
-                width = screenW;
-                height = screenH;
-            }
-        }
+            throw new InvalidOperationException("窗口尺寸无效（可能已关闭或最小化）");
 
         var timestamp = DateTime.Now.ToString("yyyy-MM-dd_HHmmss_fff");
         var suffix = sequence > 1 ? $"_{sequence}" : "";
@@ -77,13 +108,45 @@ public class CaptureService
         var ext = isJpg ? ".jpg" : ".png";
         var filePath = Path.Combine(ScreenshotDir, $"{timestamp}{suffix}{ext}");
 
-        using var bitmap = new Bitmap(width, height);
+        using var bitmap = new Bitmap(width, height, PixelFormat.Format32bppArgb);
 
-        using (var g = Graphics.FromImage(bitmap))
+        bool captured = false;
+        if (usePrintWindow)
+            captured = TryPrintWindow(hwnd, bitmap);
+
+        if (!captured)
         {
+            // Screen copy fallback (also the normal path for the other modes).
+            // If PrintWindow produced nothing usable we may be off-rect: re-grab the
+            // window's on-screen region so the user still gets a picture.
+            if (usePrintWindow)
+            {
+                var visible = GetVisibleBounds(hwnd);
+                int vw = visible.right - visible.left;
+                int vh = visible.bottom - visible.top;
+                if (vw > 0 && vh > 0 && (vw != width || vh != height))
+                {
+                    bitmap.Dispose();
+                    width = vw;
+                    height = vh;
+                    using var resized = new Bitmap(width, height, PixelFormat.Format32bppArgb);
+                    using (var sg = Graphics.FromImage(resized))
+                        sg.CopyFromScreen(visible.left, visible.top, 0, 0, new Size(width, height));
+                    SaveBitmap(resized, filePath, isJpg, jpegQuality);
+                    return filePath;
+                }
+            }
+
+            using var g = Graphics.FromImage(bitmap);
             g.CopyFromScreen(rect.left, rect.top, 0, 0, new Size(width, height));
         }
 
+        SaveBitmap(bitmap, filePath, isJpg, jpegQuality);
+        return filePath;
+    }
+
+    private static void SaveBitmap(Bitmap bitmap, string filePath, bool isJpg, int jpegQuality)
+    {
         if (isJpg)
         {
             var encoder = ImageCodecInfo.GetImageEncoders().First(c => c.FormatID == ImageFormat.Jpeg.Guid);
@@ -95,8 +158,115 @@ public class CaptureService
         {
             bitmap.Save(filePath, ImageFormat.Png);
         }
-        return filePath;
     }
+
+    /// <summary>
+    /// PrintWindow with PW_RENDERFULLCONTENT renders the window's own content (DWM
+    /// composition included) — native resolution even when the window is scaled,
+    /// covered or upscaled by an external tool. Returns false when the result looks
+    /// blank so the caller can fall back to a screen grab.
+    /// </summary>
+    private static bool TryPrintWindow(IntPtr hwnd, Bitmap bitmap)
+    {
+        try
+        {
+            using var g = Graphics.FromImage(bitmap);
+            var hdc = g.GetHdc();
+            bool ok;
+            try
+            {
+                ok = PrintWindow(hwnd, hdc, PW_RENDERFULLCONTENT);
+                if (!ok) ok = PrintWindow(hwnd, hdc, 0);
+            }
+            finally
+            {
+                g.ReleaseHdc(hdc);
+            }
+            if (!ok) return false;
+            return !LooksBlank(bitmap);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Cheap blank check: sample a grid of pixels and see whether they are all equal.</summary>
+    private static bool LooksBlank(Bitmap bmp)
+    {
+        try
+        {
+            int first = 0;
+            bool firstSet = false;
+            for (int y = 0; y < 5; y++)
+            {
+                for (int x = 0; x < 5; x++)
+                {
+                    int px = Math.Min(bmp.Width - 1, bmp.Width * x / 4);
+                    int py = Math.Min(bmp.Height - 1, bmp.Height * y / 4);
+                    int argb = bmp.GetPixel(px, py).ToArgb();
+                    if (!firstSet) { first = argb; firstSet = true; }
+                    else if (argb != first) return false;
+                }
+            }
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>Window bounds as actually drawn (DWM extended frame), falling back to GetWindowRect.</summary>
+    private static RECT GetVisibleBounds(IntPtr hwnd)
+    {
+        try
+        {
+            int size = Marshal.SizeOf<RECT>();
+            var ptr = Marshal.AllocHGlobal(size);
+            try
+            {
+                int hr = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, ptr, size);
+                if (hr == 0)
+                {
+                    var r = Marshal.PtrToStructure<RECT>(ptr);
+                    if (r.right > r.left && r.bottom > r.top) return r;
+                }
+            }
+            finally
+            {
+                Marshal.FreeHGlobal(ptr);
+            }
+        }
+        catch { }
+
+        GetWindowRect(hwnd, out var fallback);
+        return fallback;
+    }
+
+    private static RECT GetMonitorRect(IntPtr hwnd)
+    {
+        var mon = MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST);
+        var mi = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
+        if (mon != IntPtr.Zero && GetMonitorInfo(mon, ref mi))
+            return mi.rcMonitor;
+
+        return new RECT
+        {
+            left = 0,
+            top = 0,
+            right = GetSystemMetrics(SM_CXSCREEN),
+            bottom = GetSystemMetrics(SM_CYSCREEN)
+        };
+    }
+
+    private static RECT GetVirtualScreenRect() => new()
+    {
+        left = GetSystemMetrics(SM_XVIRTUALSCREEN),
+        top = GetSystemMetrics(SM_YVIRTUALSCREEN),
+        right = GetSystemMetrics(SM_XVIRTUALSCREEN) + GetSystemMetrics(SM_CXVIRTUALSCREEN),
+        bottom = GetSystemMetrics(SM_YVIRTUALSCREEN) + GetSystemMetrics(SM_CYVIRTUALSCREEN)
+    };
 
     /// <summary>Get the foreground window handle. Save this before minimizing.</summary>
     public static IntPtr GetForegroundWindowHandle() => GetForegroundWindow();
@@ -117,10 +287,16 @@ public class CaptureService
 
     private const int SM_CXSCREEN = 0;
     private const int SM_CYSCREEN = 1;
+    private const int SM_XVIRTUALSCREEN = 76;
+    private const int SM_YVIRTUALSCREEN = 77;
+    private const int SM_CXVIRTUALSCREEN = 78;
+    private const int SM_CYVIRTUALSCREEN = 79;
     private const int GWL_STYLE = -16;
     private const int WS_POPUP = unchecked((int)0x80000000);
     private const int WS_CAPTION = unchecked((int)0x00C00000);
     private const uint MONITOR_DEFAULTTONEAREST = 2;
+    private const int DWMWA_EXTENDED_FRAME_BOUNDS = 9;
+    private const int PW_RENDERFULLCONTENT = 0x00000002;
 
     [DllImport("user32.dll")]
     private static extern int GetSystemMetrics(int nIndex);
@@ -145,6 +321,15 @@ public class CaptureService
 
     [DllImport("user32.dll")]
     private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFO lpmi);
+
+    [DllImport("user32.dll")]
+    private static extern bool PrintWindow(IntPtr hwnd, IntPtr hdcBlt, int nFlags);
+
+    [DllImport("user32.dll")]
+    private static extern bool IsIconic(IntPtr hWnd);
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(IntPtr hwnd, int dwAttribute, IntPtr pvAttribute, int cbAttribute);
 
     [StructLayout(LayoutKind.Sequential)]
     private struct RECT

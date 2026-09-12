@@ -128,6 +128,21 @@
             </Grid>
             <TextBlock Text="JPG 截图质量（仅 JPG 格式生效）" Foreground="#BBB" FontSize="11" Margin="0,-6,0,6"/>
 
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions><ColumnDefinition Width="Auto"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="截图方式" FontSize="13" Foreground="#555" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <ComboBox Grid.Column="1" x:Name="CaptureModeCombo" FontSize="12" HorizontalAlignment="Left" Width="220"
+                          Background="White" BorderBrush="#DDD">
+                    <ComboBoxItem Content="自动（推荐）"/>
+                    <ComboBoxItem Content="窗口内容（原生分辨率）"/>
+                    <ComboBoxItem Content="窗口可见区域"/>
+                    <ComboBoxItem Content="当前显示器"/>
+                    <ComboBoxItem Content="整个屏幕（所有显示器）"/>
+                </ComboBox>
+            </Grid>
+            <TextBlock Text="串流窗口 / 特殊引擎（如 minori）截图不全时，改用「窗口内容」"
+                       Foreground="#BBB" FontSize="11" Margin="0,-4,0,6" TextWrapping="Wrap"/>
+
             <Separator Margin="0,12,0,16"/>
 
             <!-- ═══ OCR ═══ -->

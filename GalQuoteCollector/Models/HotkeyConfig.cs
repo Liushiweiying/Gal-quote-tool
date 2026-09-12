@@ -23,6 +23,8 @@ public class HotkeyConfig
     public string ScreenshotFormat { get; set; } = "png";
     // JPG 截图质量（50-100，仅 JPG 格式生效）
     public int JpegQuality { get; set; } = 90;
+    // 截图方式: auto / window / region / monitor / screen
+    public string CaptureMode { get; set; } = "auto";
     // 用户选择跳过的更新版本 tag（自动检查时不再提示）
     public string SkippedUpdateVersion { get; set; } = "";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
@@ -147,6 +149,7 @@ public class HotkeyConfig
             ScreenshotDirectory = ScreenshotDirectory,
             ScreenshotFormat = ScreenshotFormat,
             JpegQuality = JpegQuality,
+            CaptureMode = CaptureMode,
             SkippedUpdateVersion = SkippedUpdateVersion,
             EnableTranslucentTbFix = EnableTranslucentTbFix,
             OcrEngine = OcrEngine,

@@ -1,12 +1,29 @@
 <Window x:Class="GalQuoteCollector.Views.UsageStatsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:conv="clr-namespace:GalQuoteCollector.Converters"
         Title="时长记录"
         Width="520" Height="480"
         MinWidth="400" MinHeight="350"
         WindowStartupLocation="CenterOwner"
         Background="#F5F5F7" FontFamily="Segoe UI">
     <Window.Resources>
+        <conv:UsageDateHighlightConverter x:Key="HasUsageDate"/>
+
+        <!-- Days that have usage records are highlighted in the calendar -->
+        <Style x:Key="DayButtonWithData" TargetType="CalendarDayButton">
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding Converter={StaticResource HasUsageDate}}" Value="True">
+                    <Setter Property="Background" Value="#E3E8FF"/>
+                    <Setter Property="Foreground" Value="#3B4BA8"/>
+                    <Setter Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+        <Style x:Key="CalendarWithData" TargetType="Calendar">
+            <Setter Property="CalendarDayButtonStyle" Value="{StaticResource DayButtonWithData}"/>
+        </Style>
+
         <Style x:Key="ModeToggle" TargetType="ToggleButton">
             <Setter Property="Background" Value="#EEE"/>
             <Setter Property="Foreground" Value="#555"/>

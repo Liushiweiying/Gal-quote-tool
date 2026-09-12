@@ -35,6 +35,7 @@ public partial class MainViewModel : ObservableObject
     private bool _hideUnrecognized;
     private string _screenshotFormat = "png";
     private int _jpegQuality = 90;
+    private string _captureMode = "auto";
     private readonly UpdateService _updateService = new();
 
     // Undo-delete support: snapshot of the last N deleted quotes (record + tag/group/screenshot rows)
@@ -88,6 +89,7 @@ public partial class MainViewModel : ObservableObject
         _hideUnrecognized = hotkeyConfig.HideUnrecognized;
         _screenshotFormat = hotkeyConfig.ScreenshotFormat;
         _jpegQuality = hotkeyConfig.JpegQuality;
+        _captureMode = hotkeyConfig.CaptureMode;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
 
         // Custom screenshot directory
@@ -329,7 +331,8 @@ public partial class MainViewModel : ObservableObject
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
             var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat,
-                forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality);
+                forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality,
+                captureMode: _captureMode);
 
             var ocrConfig = _settingsService.LoadHotkeyConfig();
             var text = ocrConfig.OcrEngine switch
@@ -1089,6 +1092,7 @@ public partial class MainViewModel : ObservableObject
         _hideUnrecognized = cfg.HideUnrecognized;
         _screenshotFormat = cfg.ScreenshotFormat;
         _jpegQuality = cfg.JpegQuality;
+        _captureMode = cfg.CaptureMode;
         ToggleUsageTracking(cfg.EnableUsageTracking);
         if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
         {
@@ -1535,9 +1539,9 @@ public partial class MainViewModel : ObservableObject
     private void CopyQuoteText()
     {
         if (SelectedQuote == null) return;
-        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetText(SelectedQuote.Text))
+        StatusText = SetClipboardText(SelectedQuote.Text)
             ? "已复制语录文本"
-            : "复制失败（剪贴板被占用，请重试）";
+            : "复制失败：剪贴板被其他程序占用，请稍后重试";
     }
 
     [RelayCommand]
@@ -1551,29 +1555,57 @@ public partial class MainViewModel : ObservableObject
         sb.AppendLine($"> {q.Text}");
         if (!string.IsNullOrWhiteSpace(q.Notes))
             sb.AppendLine($"备注: {q.Notes}");
-        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetText(sb.ToString().Trim()))
+        StatusText = SetClipboardText(sb.ToString().Trim())
             ? "已复制为 Markdown"
-            : "复制失败（剪贴板被占用，请重试）";
+            : "复制失败：剪贴板被其他程序占用，请稍后重试";
     }
 
-    /// <summary>Clipboard access throws while another app holds it — retry briefly before giving up.</summary>
-    private static bool SetClipboardWithRetry(Action set)
+    /// <summary>
+    /// Clipboard access fails while another process holds it (CLIPBRD_E_CANT_OPEN).
+    /// WPF offers no built-in retry overload, so retry manually with a short backoff.
+    /// </summary>
+    private static bool SetClipboardData(System.Windows.IDataObject data)
     {
-        for (int i = 0; i < 5; i++)
+        for (int attempt = 0; attempt < 10; attempt++)
         {
-            try { set(); return true; }
-            catch { System.Threading.Thread.Sleep(80); }
+            try
+            {
+                System.Windows.Clipboard.SetDataObject(data, true);
+                return true;
+            }
+            catch
+            {
+                System.Threading.Thread.Sleep(40 + attempt * 30); // ≈ 1.5 s total
+            }
         }
-        return false;
+
+        // Last resort: clear the clipboard (releases stale locks) and try once more
+        try
+        {
+            System.Windows.Clipboard.Clear();
+            System.Windows.Clipboard.SetDataObject(data, true);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static bool SetClipboardText(string text)
+    {
+        var data = new System.Windows.DataObject();
+        data.SetText(text);
+        return SetClipboardData(data);
     }
 
     [RelayCommand]
     private void CopyScreenshotPath(Screenshot screenshot)
     {
         if (screenshot == null) return;
-        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetText(screenshot.FilePath))
+        StatusText = SetClipboardText(screenshot.FilePath)
             ? "已复制文件路径"
-            : "复制失败（剪贴板被占用，请重试）";
+            : "复制失败：剪贴板被其他程序占用，请稍后重试";
     }
 
     [RelayCommand]
@@ -1601,9 +1633,9 @@ public partial class MainViewModel : ObservableObject
         }
         catch { /* undecodable file — the FileDrop entry still allows path-based paste */ }
 
-        StatusText = SetClipboardWithRetry(() => System.Windows.Clipboard.SetDataObject(data, true))
+        StatusText = SetClipboardData(data)
             ? "已复制图片"
-            : "复制失败（剪贴板被占用，请重试）";
+            : "复制失败：剪贴板被其他程序占用，请稍后重试";
     }
 
     [RelayCommand]
@@ -1864,7 +1896,8 @@ public partial class MainViewModel : ObservableObject
             var gameName = _gameDetectService.DetectGameName(windowTitle);
             var nextOrder = _storageService.GetNextScreenshotOrder(SelectedQuote.Id);
             var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat, nextOrder,
-                forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality);
+                forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality,
+                captureMode: _captureMode);
             _storageService.AddScreenshot(SelectedQuote.Id, screenshotPath, nextOrder);
 
             var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张", 2000);

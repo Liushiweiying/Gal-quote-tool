@@ -105,6 +105,13 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.2.2 (2026-09-12)
+- **New** selectable capture method: Auto / Window content (native resolution) / Window visible region / Current monitor / Entire screen — use "Window content" when streaming clients or engines like minori capture only part of the picture
+- **Fix** capture now uses the DWM extended frame bounds, so scaled / partially off-screen / oversized windows are no longer cropped or offset
+- **Fix** "copy failed" (clipboard held by another app) — clipboard writes now retry
+- **Fix** usage chart bars now use an absolute scale (adaptive full-scale label) instead of always filling the width
+- **New** calendar highlights days that have usage records
+
 ### v1.2.1 (2026-08-13)
 - **New** RapidOCR offline OCR engine (Settings → OCR engine; requires a Python with `rapidocr-onnxruntime`)
 - **New** Undo delete: restore recently deleted quotes (last 20, with tags/groups/screenshots) from the toolbar

@@ -133,6 +133,24 @@ public partial class App : Application
                 }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
 
+            // Diagnostic: --open-usage opens the usage stats window right after startup
+            if (e.Args.Contains("--open-usage"))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    Log("--open-usage: opening usage stats window");
+                    try
+                    {
+                        if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
+                            vm.OpenUsageStatsCommand.Execute(null);
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"--open-usage failed: {ex}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+
             Log("=== Startup complete ===");
         }
         catch (Exception ex)
