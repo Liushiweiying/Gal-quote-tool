@@ -11,29 +11,7 @@ public partial class App : Application
     private static readonly Mutex _mutex = new(true, "GalQuoteCollector-SingleInstance");
     private TaskbarIcon? _trayIcon;
     private bool _startMinimized;
-    private static readonly string LogPath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "GalQuoteCollector", "startup.log");
-
-    private static void Log(string msg)
-    {
-        try
-        {
-            // Keep the startup log bounded: once it passes 1 MB, trim it to its tail.
-            var fi = new FileInfo(LogPath);
-            if (fi.Exists && fi.Length > 1_000_000)
-            {
-                const int keepBytes = 200_000;
-                var tail = new byte[keepBytes];
-                using var fs = new FileStream(LogPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
-                fs.Position = Math.Max(0, fs.Length - keepBytes);
-                int read = fs.Read(tail, 0, keepBytes);
-                File.WriteAllBytes(LogPath, tail[..read]);
-            }
-            File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n");
-        }
-        catch { }
-    }
+    private static void Log(string msg) => Services.AppLog.Write(msg);
 
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
@@ -149,6 +127,17 @@ public partial class App : Application
                         Log($"--open-usage failed: {ex}");
                     }
                 }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+
+            // Diagnostic: --fix-ttb restarts TranslucentTB (repair) and logs the result
+            if (e.Args.Contains("--fix-ttb"))
+            {
+                _ = Task.Run(async () =>
+                {
+                    Log("--fix-ttb: restarting TranslucentTB");
+                    var (ok, detail) = await Services.TranslucentTbService.RestartAsync();
+                    Log($"--fix-ttb: ok={ok} detail={detail}");
+                });
             }
 
             Log("=== Startup complete ===");

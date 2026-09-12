@@ -25,6 +25,8 @@ public class HotkeyConfig
     public int JpegQuality { get; set; } = 90;
     // 截图方式: auto / window / region / monitor / screen
     public string CaptureMode { get; set; } = "auto";
+    // 检测到 Magpie 运行时，自动模式改用「窗口内容」抓游戏原生分辨率画面
+    public bool PreferNativeCaptureWhenMagpie { get; set; } = true;
     // 用户选择跳过的更新版本 tag（自动检查时不再提示）
     public string SkippedUpdateVersion { get; set; } = "";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
@@ -150,6 +152,7 @@ public class HotkeyConfig
             ScreenshotFormat = ScreenshotFormat,
             JpegQuality = JpegQuality,
             CaptureMode = CaptureMode,
+            PreferNativeCaptureWhenMagpie = PreferNativeCaptureWhenMagpie,
             SkippedUpdateVersion = SkippedUpdateVersion,
             EnableTranslucentTbFix = EnableTranslucentTbFix,
             OcrEngine = OcrEngine,

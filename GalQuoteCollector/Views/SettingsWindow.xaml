@@ -90,8 +90,15 @@
 
             <CheckBox x:Name="TranslucentTbFixCheckBox"
                       Content="TranslucentTB修复：开机自动重启一次 TranslucentTB，修复任务栏透明偶尔失效"
-                      FontSize="13" Foreground="#333" Margin="0,0,0,6"
-                      ToolTip="开机时等待 TranslucentTB 启动后，自动再次运行它的程序，触发「已在运行」弹窗并重新应用透明效果"/>
+                      FontSize="13" Foreground="#333" Margin="0,0,0,4"
+                      ToolTip="开机时等待 TranslucentTB 启动后，重启它一次，让它重新应用任务栏透明效果"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                <Button Content="立即修复一次" Click="OnFixTranslucentTbNow" Padding="10,5" FontSize="12"
+                        Background="#EEE" Foreground="#333" BorderThickness="0"/>
+                <TextBlock x:Name="TranslucentTbStatus"
+                           Text="TranslucentTB 需正在运行（Store 版会自动用 AUMID 启动）"
+                           Foreground="#BBB" FontSize="11" VerticalAlignment="Center" Margin="8,0,0,0"/>
+            </StackPanel>
 
 
             <Grid Margin="0,0,0,6">
@@ -142,6 +149,11 @@
             </Grid>
             <TextBlock Text="串流窗口 / 特殊引擎（如 minori）截图不全时，改用「窗口内容」"
                        Foreground="#BBB" FontSize="11" Margin="0,-4,0,6" TextWrapping="Wrap"/>
+
+            <CheckBox x:Name="MagpieNativeCheckBox"
+                      Content="检测到 Magpie 时优先抓取游戏原生分辨率（自动模式下生效）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,6"
+                      ToolTip="Magpie 会在屏幕上放大画面；开启后用 PrintWindow 抓窗口自身的渲染内容，得到游戏原生分辨率的截图"/>
 
             <Separator Margin="0,12,0,16"/>
 

@@ -16,6 +16,17 @@ namespace GalQuoteCollector.Services;
 /// </summary>
 public enum CaptureMode { Auto, WindowContent, WindowRegion, Monitor, VirtualScreen }
 
+/// <summary>Result of a capture: where it was saved and what was actually grabbed.</summary>
+public class CaptureResult
+{
+    public string FilePath { get; set; } = "";
+    public int Width { get; set; }
+    public int Height { get; set; }
+    /// <summary>True when the window's own render buffer was used (native resolution).</summary>
+    public bool FromWindowContent { get; set; }
+    public string ModeLabel { get; set; } = "";
+}
+
 public class CaptureService
 {
     public string ScreenshotDir { get; }
@@ -36,10 +47,11 @@ public class CaptureService
     };
 
     /// <summary>
-    /// Capture the specified window and return the screenshot file path.
-    /// Pass a saved handle to capture the game even after our window minimizes.
+    /// Capture the specified window. Pass a saved handle to capture the game even after
+    /// our window minimizes. The result reports the actual pixel size and whether the
+    /// window's own render buffer (native resolution) was used.
     /// </summary>
-    public string CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0,
+    public CaptureResult CaptureWindow(IntPtr hwnd, string format = "png", int sequence = 0,
         bool forceFullscreen = false, int jpegQuality = 90, string? captureMode = "auto")
     {
         if (hwnd == IntPtr.Zero)
@@ -133,7 +145,14 @@ public class CaptureService
                     using (var sg = Graphics.FromImage(resized))
                         sg.CopyFromScreen(visible.left, visible.top, 0, 0, new Size(width, height));
                     SaveBitmap(resized, filePath, isJpg, jpegQuality);
-                    return filePath;
+                    return new CaptureResult
+                    {
+                        FilePath = filePath,
+                        Width = width,
+                        Height = height,
+                        FromWindowContent = false,
+                        ModeLabel = "窗口区域"
+                    };
                 }
             }
 
@@ -142,7 +161,24 @@ public class CaptureService
         }
 
         SaveBitmap(bitmap, filePath, isJpg, jpegQuality);
-        return filePath;
+
+        string label = captured ? "窗口内容（原生）"
+            : mode switch
+            {
+                CaptureMode.WindowRegion => "窗口区域",
+                CaptureMode.Monitor => "显示器",
+                CaptureMode.VirtualScreen => "整屏",
+                _ => "屏幕"
+            };
+
+        return new CaptureResult
+        {
+            FilePath = filePath,
+            Width = width,
+            Height = height,
+            FromWindowContent = captured,
+            ModeLabel = label
+        };
     }
 
     private static void SaveBitmap(Bitmap bitmap, string filePath, bool isJpg, int jpegQuality)

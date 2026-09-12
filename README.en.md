@@ -105,6 +105,13 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.2.3 (2026-09-12)
+- **Fix** the TranslucentTB repair never worked: the Store build cannot be started by its exe path — it now performs a real restart (AUMID activation, classic installs supported) and verifies the process came back
+- **New** "Repair now" button in Settings (test it without rebooting)
+- **New** the TranslucentTB option is always visible (it used to be hidden unless TTB was running); every step is logged to startup.log
+- **New** when Magpie is running, Auto mode now grabs the game's native resolution (PrintWindow); can be disabled in Settings
+- **New** status/toast after capture shows the actual resolution and capture method (e.g. `1280×720 窗口内容（原生）`)
+
 ### v1.2.2 (2026-09-12)
 - **New** selectable capture method: Auto / Window content (native resolution) / Window visible region / Current monitor / Entire screen — use "Window content" when streaming clients or engines like minori capture only part of the picture
 - **Fix** capture now uses the DWM extended frame bounds, so scaled / partially off-screen / oversized windows are no longer cropped or offset

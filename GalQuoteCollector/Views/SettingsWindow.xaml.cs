@@ -72,10 +72,9 @@ public partial class SettingsWindow : Window
         };
         SlideshowLoopCheckBox.IsChecked = cfg.SlideshowLoop;
 
-        // TranslucentTB fix option is only meaningful (and only shown) while TranslucentTB is running
+        // TranslucentTB fix: always visible so it can be enabled before TTB runs at boot
         TranslucentTbFixCheckBox.IsChecked = cfg.EnableTranslucentTbFix;
-        TranslucentTbFixCheckBox.Visibility = System.Diagnostics.Process.GetProcessesByName("TranslucentTB").Length == 0
-            ? Visibility.Collapsed : Visibility.Visible;
+        MagpieNativeCheckBox.IsChecked = cfg.PreferNativeCaptureWhenMagpie;
 
         OcrEngineCombo.SelectedIndex = cfg.OcrEngine switch { "local" => 1, "rapid" => 2, _ => 0 };
         LocalOcrUrlBox.Text = cfg.LocalOcrUrl ?? "";
@@ -309,6 +308,25 @@ public partial class SettingsWindow : Window
         catch { }
     }
 
+    /// <summary>Run the TranslucentTB repair immediately (no reboot needed) and report the result.</summary>
+    private async void OnFixTranslucentTbNow(object sender, RoutedEventArgs e)
+    {
+        var btn = sender as System.Windows.Controls.Button;
+        if (btn != null) btn.IsEnabled = false;
+        try
+        {
+            TranslucentTbStatus.Text = "正在修复…";
+            var (ok, detail) = await TranslucentTbService.RestartAsync();
+            TranslucentTbStatus.Text = ok ? $"✓ {detail}" : $"✗ {detail}";
+            InfoDialog.Show(this, "TranslucentTB 修复", ok ? $"修复完成：{detail}" : $"修复失败：{detail}",
+                icon: ok ? InfoDialogIcon.Information : InfoDialogIcon.Warning);
+        }
+        finally
+        {
+            if (btn != null) btn.IsEnabled = true;
+        }
+    }
+
     private void OnBrowseScreenshotDir(object sender, RoutedEventArgs e)
     {
         try
@@ -345,6 +363,7 @@ public partial class SettingsWindow : Window
         _newConfig.EnableUsageTracking = EnableTrackingCheckBox.IsChecked == true;
         _newConfig.HideUnrecognized = HideUnrecognizedCheckBox.IsChecked == true;
         _newConfig.EnableTranslucentTbFix = TranslucentTbFixCheckBox.IsChecked == true;
+        _newConfig.PreferNativeCaptureWhenMagpie = MagpieNativeCheckBox.IsChecked == true;
         var dir = ScreenshotDirBox.Text.Trim();
         _newConfig.ScreenshotDirectory = string.IsNullOrWhiteSpace(dir) ? "" : dir;
         _newConfig.ScreenshotFormat = FormatCombo.SelectedIndex == 1 ? "jpg" : "png";

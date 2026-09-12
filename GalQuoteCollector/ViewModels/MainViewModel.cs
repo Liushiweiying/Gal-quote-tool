@@ -36,6 +36,7 @@ public partial class MainViewModel : ObservableObject
     private string _screenshotFormat = "png";
     private int _jpegQuality = 90;
     private string _captureMode = "auto";
+    private bool _preferNativeWhenMagpie = true;
     private readonly UpdateService _updateService = new();
 
     // Undo-delete support: snapshot of the last N deleted quotes (record + tag/group/screenshot rows)
@@ -90,6 +91,7 @@ public partial class MainViewModel : ObservableObject
         _screenshotFormat = hotkeyConfig.ScreenshotFormat;
         _jpegQuality = hotkeyConfig.JpegQuality;
         _captureMode = hotkeyConfig.CaptureMode;
+        _preferNativeWhenMagpie = hotkeyConfig.PreferNativeCaptureWhenMagpie;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
 
         // Custom screenshot directory
@@ -141,10 +143,29 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Auto mode + Magpie running → grab the window's own render buffer (the game's
+    /// native resolution) instead of Magpie's upscaled screen output.
+    /// </summary>
+    private string EffectiveCaptureMode()
+    {
+        if (_captureMode == "auto" && _preferNativeWhenMagpie && IsMagpieRunning())
+        {
+            AppLog.Write("capture: Magpie detected → window content (native resolution)");
+            return "window";
+        }
+        return _captureMode;
+    }
+
+    private static bool IsMagpieRunning()
+    {
+        try { return System.Diagnostics.Process.GetProcessesByName("Magpie").Length > 0; }
+        catch { return false; }
+    }
+
+    /// <summary>
     /// When the option is enabled and we were launched by the auto-start path (--minimized),
-    /// wait for TranslucentTB to be running, then relaunch its exe once. A second launch makes
-    /// TranslucentTB show its "已在运行" dialog and re-apply the taskbar transparency, repairing
-    /// the case where it sometimes fails to take effect at boot.
+    /// wait for TranslucentTB to be running, then restart it once so it re-applies the
+    /// taskbar transparency (a fresh start always applies its config).
     /// </summary>
     private async void RunTranslucentTbFixIfNeeded()
     {
@@ -153,25 +174,17 @@ public partial class MainViewModel : ObservableObject
         if (!_settingsService.LoadHotkeyConfig().EnableTranslucentTbFix)
             return;
 
-        System.Diagnostics.Process? proc = null;
-        for (int i = 0; i < 60 && proc == null; i++)
-        {
-            var list = System.Diagnostics.Process.GetProcessesByName("TranslucentTB");
-            if (list.Length > 0) proc = list[0];
-            else await Task.Delay(1000);
-        }
-        if (proc == null) return;
+        for (int i = 0; i < 60 && !TranslucentTbService.IsRunning(); i++)
+            await Task.Delay(1000);
 
-        try
+        if (!TranslucentTbService.IsRunning())
         {
-            var exePath = proc.MainModule?.FileName;
-            if (!string.IsNullOrWhiteSpace(exePath))
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(exePath));
+            AppLog.Write("TTB boot fix: not running within 60s, skipped");
+            return;
         }
-        catch
-        {
-            // Non-fatal: if TranslucentTB is gone or inaccessible, nothing to repair
-        }
+
+        var (ok, detail) = await TranslucentTbService.RestartAsync();
+        AppLog.Write($"TTB boot fix: ok={ok} detail={detail}");
     }
 
     [ObservableProperty]
@@ -330,9 +343,10 @@ public partial class MainViewModel : ObservableObject
             }
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
-            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat,
+            var shot = _captureService.CaptureWindow(gameHwnd, _screenshotFormat,
                 forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality,
-                captureMode: _captureMode);
+                captureMode: EffectiveCaptureMode());
+            var screenshotPath = shot.FilePath;
 
             var ocrConfig = _settingsService.LoadHotkeyConfig();
             var text = ocrConfig.OcrEngine switch
@@ -376,7 +390,7 @@ public partial class MainViewModel : ObservableObject
             toast.Show();
 
             restoreWindow = false;
-            StatusText = $"已采集: {quote.PreviewText}";
+            StatusText = $"已采集: {quote.PreviewText}   ·   {shot.Width}×{shot.Height} {shot.ModeLabel}";
         }
         catch (Exception ex)
         {
@@ -1093,6 +1107,7 @@ public partial class MainViewModel : ObservableObject
         _screenshotFormat = cfg.ScreenshotFormat;
         _jpegQuality = cfg.JpegQuality;
         _captureMode = cfg.CaptureMode;
+        _preferNativeWhenMagpie = cfg.PreferNativeCaptureWhenMagpie;
         ToggleUsageTracking(cfg.EnableUsageTracking);
         if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
         {
@@ -1895,16 +1910,17 @@ public partial class MainViewModel : ObservableObject
 
             var gameName = _gameDetectService.DetectGameName(windowTitle);
             var nextOrder = _storageService.GetNextScreenshotOrder(SelectedQuote.Id);
-            var screenshotPath = _captureService.CaptureWindow(gameHwnd, _screenshotFormat, nextOrder,
+            var shot = _captureService.CaptureWindow(gameHwnd, _screenshotFormat, nextOrder,
                 forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality,
-                captureMode: _captureMode);
+                captureMode: EffectiveCaptureMode());
+            var screenshotPath = shot.FilePath;
             _storageService.AddScreenshot(SelectedQuote.Id, screenshotPath, nextOrder);
 
-            var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张", 2000);
+            var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张 · {shot.Width}×{shot.Height}", 2000);
             toast.Show();
 
             restoreWindow = false;
-            StatusText = $"已为语录补拍第 {nextOrder} 张截图";
+            StatusText = $"已为语录补拍第 {nextOrder} 张截图   ·   {shot.Width}×{shot.Height} {shot.ModeLabel}";
         }
         catch (Exception ex)
         {
