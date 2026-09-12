@@ -140,6 +140,15 @@ public partial class App : Application
                 });
             }
 
+            // Diagnostic: --update-info logs the detected install form and the asset it would use
+            if (e.Args.Contains("--update-info"))
+            {
+                var form = Services.UpdateService.DetectInstallForm();
+                var asset = Services.UpdateService.PreferredAssetName(form);
+                Log($"--update-info: form={form} preferredAsset={asset} " +
+                    $"exe={Environment.ProcessPath} dir={AppContext.BaseDirectory}");
+            }
+
             Log("=== Startup complete ===");
         }
         catch (Exception ex)

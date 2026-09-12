@@ -105,6 +105,14 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.2.4 (2026-09-12)
+- **New** the updater now upgrades in the **same form as the current install**:
+  - Installer build → downloads Setup and upgrades in place (same directory; quotes/screenshots/settings untouched)
+  - Single-file build → downloads that exe, then replaces itself and restarts
+  - Folder build → downloads publish-folder.zip, then overwrites the folder and restarts
+  - The dialog shows the detected upgrade style and the file that will be downloaded
+- **Fix** a helper script now waits for this process to fully exit before acting, avoiding file-in-use failures
+
 ### v1.2.3 (2026-09-12)
 - **Fix** the TranslucentTB repair never worked: the Store build cannot be started by its exe path — it now performs a real restart (AUMID activation, classic installs supported) and verifies the process came back
 - **New** "Repair now" button in Settings (test it without rebooting)

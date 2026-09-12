@@ -30,19 +30,26 @@ public partial class UpdateDialog : Window
         _onSkipped = onSkipped;
 
         TitleText.Text = $"发现新版本 {info.Tag}";
-        VersionText.Text = $"当前版本: {currentVersion}";
+        VersionText.Text = $"当前版本: {currentVersion}　·　升级方式: {UpdateService.FormLabel(info.Form)}";
         BodyBox.Text = string.IsNullOrWhiteSpace(info.Body) ? "（无更新说明）" : info.Body;
+        DownloadBtn.Content = info.Form == InstallForm.Installer ? "下载并安装" : "下载并更新";
 
         if (string.IsNullOrWhiteSpace(info.AssetUrl))
         {
             DownloadBtn.IsEnabled = false;
-            StatusText.Text = "未找到可下载的安装包";
+            StatusText.Text = "未找到可下载的更新包";
+        }
+        else
+        {
+            StatusText.Text = info.FellBackToSetup
+                ? $"将下载 {info.AssetName}（未找到与当前部署形态匹配的包，改用安装包）"
+                : $"将下载 {info.AssetName}";
         }
     }
 
     private async void OnDownload(object sender, RoutedEventArgs e)
     {
-        // Second click = install the already-downloaded installer
+        // Second click = apply the already-downloaded package
         if (_downloadedPath != null)
         {
             InstallRequested = true;
@@ -71,8 +78,14 @@ public partial class UpdateDialog : Window
             _downloadedPath = await Task.Run(() => _updateService.DownloadAsync(_info, destDir, progress));
 
             ProgressBar.Value = 100;
-            StatusText.Text = "下载完成（已通过 SHA256 校验）。点击「立即安装」将退出本程序并启动安装器。";
-            DownloadBtn.Content = "立即安装";
+            var how = _info.Form switch
+            {
+                InstallForm.Installer => "将退出本程序并启动安装器（原地升级，沿用原目录）",
+                InstallForm.SingleFile => "将退出本程序、替换自身并重新启动",
+                _ => "将退出本程序、覆盖当前目录并重新启动"
+            };
+            StatusText.Text = $"下载完成（已通过 SHA256 校验）。点击「立即更新」后{how}。";
+            DownloadBtn.Content = "立即更新";
             DownloadBtn.IsEnabled = true;
             CancelBtn.Content = "稍后";
         }

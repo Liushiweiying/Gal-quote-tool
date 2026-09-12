@@ -2208,18 +2208,18 @@ public partial class MainViewModel : ObservableObject
 
         if (dlg.InstallRequested && dlg.DownloadedPath != null)
         {
-            try
+            // 按当前部署形态升级：安装版→Setup 原地升级；单文件版→替换自身；文件夹版→覆盖目录
+            if (UpdateService.StartApply(info.Form, dlg.DownloadedPath))
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(dlg.DownloadedPath)
-                {
-                    UseShellExecute = true
-                });
+                if (System.Windows.Application.Current.MainWindow is MainWindow w) w.ForceClose = true;
+                System.Windows.Application.Current.Shutdown();
             }
-            catch { }
-
-            // 安装器需要程序退出才能覆盖文件
-            if (System.Windows.Application.Current.MainWindow is MainWindow w) w.ForceClose = true;
-            System.Windows.Application.Current.Shutdown();
+            else
+            {
+                InfoDialog.Show(_window, "更新失败",
+                    "无法启动更新程序，请手动运行下载的文件：\n" + dlg.DownloadedPath,
+                    icon: InfoDialogIcon.Warning);
+            }
         }
     }
 
