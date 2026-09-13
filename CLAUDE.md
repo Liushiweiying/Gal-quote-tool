@@ -94,7 +94,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 应用侧（C#）的用户内容文件删除**均已**走 `FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin)`（MainViewModel.cs 的 DeleteScreenshots/DeleteScreenshot/DeleteUnassociatedScreenshots/MigrateScreenshots），无需改动；自启 VBS/lnk、临时文件、日志截断为永久删除属合理范围。
 
 ### 发布约定（用户要求，2026-08-13）
-- 版本号走 **1.2.x**（当前 v1.2.5；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v125` 形式（去掉小数点）。
+- 版本号走 **1.2.x**（当前 v1.2.6；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v126` 形式（去掉小数点）。
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
@@ -109,11 +109,14 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
    - 原因（用户实测）：**Magpie 超分不会让游戏窗口的标题栏消失**，按窗口区域/窗口内容截取会把顶栏一起截进去；按显示器整体截图才是 Magpie 场景下的正确默认。
    - 已改：`HotkeyConfig.CaptureMode` 默认 `"monitor"`；`CaptureService.ParseMode` 空串/未知 → `Monitor`；`SettingsService.MigrateCaptureDefaults()` 一次性迁移（`CaptureDefaultsMigratedV125` 标记）把旧的 `auto`/空值 → `monitor`，并把旧的 `PreferNativeCaptureWhenMagpie=true`（旧默认值，会带上标题栏）改为 false。
    - `MainViewModel.EffectiveCaptureMode()`：monitor/auto + 勾选「优先原生分辨率」+ Magpie 在跑 → 返回 `window`（原生分辨率，含标题栏）。设置里截图方式下拉顺序改为：当前显示器（推荐）/ 窗口内容 / 窗口可见区域 / 自动 / 整个屏幕。
-2. **Magpie 回想超分设置项**（✅ v1.2.5 已完成）
-   - 实现：`Services/MagpieService.cs` + 回想窗口 `Loaded`/`Closing` 钩子；配置项 `MagpieUpscaleSlideshow` / `MagpieScaleHotkey`（留空自动读）/ `MagpiePath`（留空自动探测）。
+2. **Magpie 回想超分设置项**（✅ v1.2.5 起，v1.2.6 修正目标窗口）
+   - 实现：`Services/MagpieService.cs` + 回想窗口 `ToggleFullscreen()` 钩子（**只有全屏才超分**）；配置项 `MagpieUpscaleSlideshow` / `MagpieScaleHotkey`（留空自动读）/ `MagpiePath`（留空自动探测）。
    - 关键情报（都实测过）：Magpie 热键存在 `%LOCALAPPDATA%\Magpie\config\v4\config.json` 的 `shortcuts.scale`，是 **uint32**：低 8 位 = 虚拟键码，`0x100/0x200/0x400/0x800` = Win/Ctrl/Alt/Shift（Magpie 源码 `AppSettings.cpp` 的 `EncodeShortcut`）。用户本机 = `1111` = **Alt+W**（不是默认的 Alt+Shift+A）。Magpie 默认值：Scale=Alt+Shift+A、窗口化缩放=Alt+Shift+Q、工具栏=Alt+Shift+D、截图=Alt+Shift+S。
-   - Magpie 热键窗口类名 `Magpie_Hotkey`（消息窗口），`ShortcutAction` 枚举 Scale=0/WindowedModeScale=1/Toolbar=2/TakeScreenshot=3；日志在 `<Magpie.exe 所在目录>\logs\magpie.log`（UTF-8，轮转 500KB），热键激活会写「热键 Scale 激活（Keyboard Hook）」——可用来验证是否真的触发。
-   - **坑**：Magpie 开了「总是以管理员身份运行」（本机 `alwaysRunAsAdmin: true`）时，普通权限进程 **PostMessage 到它的窗口会被 UIPI 拒绝**（实测 `PostMessage` 返回 False），`SendInput` 合成热键也大概率被拦（日志里「管理员: 是」可确认）。设置界面因此会检测 `MagpieService.IsProbablyElevated()`（读不到 MainModule 即视为管理员）并给出提示；回想窗口失败时回退内置高质量放大。**未实测**：在非管理员 Magpie 上热键注入是否真的生效（本机 Magpie 是管理员权限）。
+   - 热键窗口类名 `Magpie_Hotkey`（消息窗口），`ShortcutAction` 枚举 Scale=0/WindowedModeScale=1/Toolbar=2/TakeScreenshot=3；日志在 `<Magpie.exe 所在目录>\logs\magpie.log`（UTF-8、约 500KB 轮转，写得很及时），热键激活会写「热键 Scale 激活（Keyboard Hook）」，缩放会话写「缩放开始 / 缩放结束 / 源矩形 / 源窗口已销毁 / 源窗口状态改变」——**这就是我们判断状态的唯一手段**。
+   - **Magpie 热键是开关语义，不是「切换目标」**（实测）：`State()==Scaling` 时按下只会 **ToggleScaling → 停掉当前会话**。所以「游戏正在超分 + 打开全屏回想」的场景下第一下只是把游戏停了，必须再按一次才会超分我们的窗口 → `EnableMagpieUpscaleAsync()` 用日志确认（`LogHasScalingStartedSince`）后自动补发一次。
+   - **Magpie 会在源窗口状态改变或销毁时自己结束缩放**（实测：全屏→窗口化触发「源窗口状态改变 → 缩放结束」；窗口销毁触发「源窗口已销毁 → 缩放结束」）。所以退出全屏时**不能盲目补发热键**（会把刚结束的会话又开到小窗口上）——`ReleaseMagpieUpscaleAsync()` 先 `IsScalingActive()` 查日志，它自己停了就不动。
+   - **管理员权限不是问题**：v1.2.5 曾写「Magpie 以管理员运行时热键注入会被拦」，实测**是错的**——用户本机 Magpie 是管理员权限（日志「管理员: 是」），热键照样触发（日志有「热键 Scale 激活（Keyboard Hook）」）。被 UIPI 拦的只有 `PostMessage`（实测返回 False）。`IsProbablyElevated()` 现在只用在失败提示里。
+   - 诊断开关：`--open-slideshow` = 打开回想（强制开超分）+ 自动进全屏→等 12s→退全屏→关闭，用于验证整条链路（**会真的发 Magpie 热键，会打断用户正在进行的游戏超分，慎用**）。
 3. **（仍未做）窗口内容截图裁掉标题栏**：`CaptureMode.WindowContent` 走 `PrintWindow(PW_RENDERFULLCONTENT)`，会把非客户区（顶栏）一起截进去。可用 `GetWindowRect` 与 `ClientToScreen`/`GetClientRect` 的偏移量在位图上裁掉标题栏（注意 DPI 感知：进程若为 DPI-unaware，虚拟化坐标会与物理像素不一致，需先确认）。
 
 ### 自动更新与代码签名（2026-08-21 起）

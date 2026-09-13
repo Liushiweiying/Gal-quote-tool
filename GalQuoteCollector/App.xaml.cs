@@ -129,6 +129,25 @@ public partial class App : Application
                 }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
 
+            // Diagnostic: --open-slideshow opens the slideshow (回想) with Magpie upscaling
+            // forced on, so the F11 → Magpie hotkey path can be checked without touching settings.
+            if (e.Args.Contains("--open-slideshow"))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    Log("--open-slideshow: opening slideshow (Magpie upscale forced on)");
+                    try
+                    {
+                        if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
+                            vm.OpenSlideshowForDiagnostics();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"--open-slideshow failed: {ex}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+
             // Diagnostic: --fix-ttb runs the full boot repair path (shell wait → settle →
             // restart → pixel verification → one retry) and logs the result. Takes ~10-20s.
             if (e.Args.Contains("--fix-ttb"))

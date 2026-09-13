@@ -606,7 +606,12 @@ public partial class MainViewModel : ObservableObject
     // ── Slideshow ──
 
     [RelayCommand]
-    private void OpenSlideshow()
+    private void OpenSlideshow() => OpenSlideshowCore(false);
+
+    /// <summary>诊断用（--open-slideshow）：打开回想并强制开启 Magpie 超分，便于验证 F11 全屏那条链路。</summary>
+    public void OpenSlideshowForDiagnostics() => OpenSlideshowCore(true);
+
+    private void OpenSlideshowCore(bool forceMagpieUpscale)
     {
         var quotes = Quotes.ToList();
         if (quotes.Count == 0)
@@ -634,7 +639,8 @@ public partial class MainViewModel : ObservableObject
         var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote,
             groupsByQuote, screenshotsByQuote, allGroups, allTags, slideshowMode, slideshowLoop,
             cfg.SlideshowChineseFont, cfg.SlideshowEnglishFont,
-            cfg.MagpieUpscaleSlideshow, cfg.MagpieScaleHotkey, cfg.MagpiePath);
+            forceMagpieUpscale || cfg.MagpieUpscaleSlideshow, cfg.MagpieScaleHotkey, cfg.MagpiePath,
+            forceMagpieUpscale);
         win.ShowDialog();
     }
 

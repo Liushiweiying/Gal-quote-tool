@@ -44,7 +44,8 @@ public partial class SlideshowWindow : Window
         List<Tag> availableTags,
         int slideshowMode, bool slideshowLoop,
         string chineseFont = "Microsoft YaHei", string englishFont = "Segoe UI",
-        bool magpieUpscale = false, string magpieHotkey = "", string magpiePath = "")
+        bool magpieUpscale = false, string magpieHotkey = "", string magpiePath = "",
+        bool diagnosticsAutoFullscreen = false)
     {
         InitializeComponent();
         Owner = owner;
@@ -76,40 +77,59 @@ public partial class SlideshowWindow : Window
 
         if (_magpieUpscale)
         {
-            Loaded += OnSlideshowLoaded;
             Closing += OnSlideshowClosing;
+            MagpieStatusText.Text = "按 F11 全屏后由 Magpie 超分";
+        }
+
+        // 诊断用：自动进全屏 → 触发超分 → 若干秒后退出全屏（解除超分）→ 关闭
+        if (diagnosticsAutoFullscreen)
+        {
+            Loaded += async (_, _) =>
+            {
+                await Task.Delay(1200);
+                AppLog.Write("slideshow diagnostics: entering fullscreen");
+                if (!_isFullscreen) ToggleFullscreen();
+                await Task.Delay(12000);
+                AppLog.Write("slideshow diagnostics: leaving fullscreen");
+                if (_isFullscreen) ToggleFullscreen();
+                await Task.Delay(1200);
+                AppLog.Write("slideshow diagnostics: closing");
+                if (!_closed) Close();
+            };
         }
     }
 
-    // ── 回想时用 Magpie 超分 ──
+    // ── 全屏回想时用 Magpie 超分 ──
 
     /// <summary>
-    /// 回想窗口显示后触发一次 Magpie 的「缩放窗口」热键，让 Magpie 接管并超分本窗口。
-    /// Magpie 的钩子按前台窗口判断目标，所以必须等本窗口真正激活后再发。
+    /// 进入全屏（F11 / 右上角按钮）后才触发 Magpie 的「缩放窗口」热键：超分的目标就是
+    /// 全屏的那个回想窗口。Magpie 的钩子按前台窗口决定缩放对象，所以要等本窗口真正激活后再发。
+    ///
+    /// 热键是开关语义：如果 Magpie 正在缩放别的窗口（比如玩家正在超分游戏），按下去只会
+    /// **停掉**那个会话，不会切换过来。所以发完要用日志确认是否真的开始了缩放，没有就再按一次。
     /// </summary>
-    private async void OnSlideshowLoaded(object sender, RoutedEventArgs e)
+    private async Task EnableMagpieUpscaleAsync()
     {
-        Loaded -= OnSlideshowLoaded;
+        if (!_magpieUpscale || _closed || _magpieActive) return;
 
-        // 窗口显示后稍微等一会儿再激活，避免和 Owner 的关闭动画抢焦点
-        await Task.Delay(350);
+        // 等全屏切换完成、窗口拿到前台
+        await Task.Delay(500);
+        if (_closed || !_isFullscreen || _magpieActive) return;
 
         if (!MagpieService.IsRunning())
         {
-            MagpieStatusText.Text = "Magpie 未运行，未超分";
-            var (started, detail) = await Task.Run(() =>
+            MagpieStatusText.Text = "Magpie 未运行，正在尝试启动…";
+            var started = await Task.Run(() => MagpieService.TryStart(_magpiePath, out var d) ? (ok: true, detail: d) : (ok: false, detail: d));
+            if (!started.ok)
             {
-                var ok = MagpieService.TryStart(_magpiePath, out var d);
-                return (ok, d);
-            });
-            if (!started)
-            {
-                MagpieStatusText.Text = "Magpie 未运行，已使用内置高质量放大";
-                AppLog.Write($"slideshow magpie: {detail}");
+                MagpieStatusText.Text = "Magpie 未运行，已用内置高质量放大";
+                AppLog.Write($"slideshow magpie: {started.detail}");
                 return;
             }
             await Task.Delay(700);
         }
+
+        if (_closed || !_isFullscreen) return;
 
         var hotkey = MagpieService.ResolveScaleHotkey(_magpieHotkey, out var source);
         if (!MagpieService.IsValidHotkey(hotkey))
@@ -118,30 +138,92 @@ public partial class SlideshowWindow : Window
             return;
         }
 
-        if (WindowState == WindowState.Minimized) return;
-        if (_closed) return; // 已经关掉了就别再发热键，否则 Magpie 会缩放别的窗口
         Activate();
-        await Task.Delay(180);
-        if (_closed) return;
+        WindowState = WindowState.Maximized;
+        await Task.Delay(250);
+        if (_closed || !_isFullscreen) return;
 
-        if (await MagpieService.SendHotkeyAsync(hotkey))
+        var logPath = MagpieService.TryFindLogPath(_magpiePath);
+        bool othersWereScaling = MagpieService.IsScalingActive(logPath);
+        long sendOffset = MagpieService.LogSize(logPath); // 发送前的日志长度
+
+        if (!await MagpieService.SendHotkeyAsync(hotkey))
         {
-            _magpieActive = true;
-            MagpieStatusText.Text = MagpieService.IsProbablyElevated()
-                ? $"Magpie 超分：{hotkey}（Magpie 为管理员权限，可能被系统拦截）"
-                : $"Magpie 超分：{hotkey}（{source}）";
-            AppLog.Write($"slideshow magpie: sent {hotkey} ({source})");
+            MagpieStatusText.Text = "Magpie 超分热键发送失败";
+            return;
+        }
+
+        // 用日志确认是否真的开始了缩放：正在缩放别的窗口时，这一下只是把它停掉
+        bool scaled;
+        if (logPath != null)
+        {
+            await Task.Delay(1300);
+            scaled = MagpieService.LogHasScalingStartedSince(logPath, sendOffset, out _);
+            if (!scaled && !_closed && _isFullscreen)
+            {
+                AppLog.Write(othersWereScaling
+                    ? "slideshow magpie: stopped the other window's scaling, sending again for this window"
+                    : "slideshow magpie: no scaling start seen, retrying once");
+                sendOffset = MagpieService.LogSize(logPath);
+                await MagpieService.SendHotkeyAsync(hotkey);
+                await Task.Delay(1300);
+                scaled = MagpieService.LogHasScalingStartedSince(logPath, sendOffset, out _);
+            }
         }
         else
         {
-            MagpieStatusText.Text = "Magpie 超分热键发送失败";
+            scaled = true; // 没日志可查时不妄下结论，按成功处理
+        }
+
+        _magpieActive = scaled;
+        if (scaled)
+        {
+            MagpieStatusText.Text = othersWereScaling
+                ? $"Magpie 超分已切到全屏回想：{hotkey}（原窗口的超分已停止）"
+                : $"Magpie 超分：{hotkey}（{source}）";
+            AppLog.Write($"slideshow magpie: scaling fullscreen window with {hotkey} ({source}), othersWereScaling={othersWereScaling}");
+        }
+        else
+        {
+            MagpieStatusText.Text = $"Magpie 未响应热键 {hotkey}（可在设置里点「测试」排查）";
+            AppLog.Write($"slideshow magpie: no scaling detected after sending {hotkey}");
         }
     }
 
     /// <summary>
-    /// 关闭前先解除 Magpie 超分：Magpie 对「缩放窗口」热键是开关语义，正在缩放时再按一次
-    /// 就会结束缩放。这里先取消关闭，等解除动作发完再真正关闭（否则窗口一销毁就来不及了）。
+    /// 退出全屏时解除超分。Magpie 在源窗口状态改变/销毁时会**自己**结束缩放
+    /// （实测：全屏 → 窗口化就会触发「源窗口状态改变 → 缩放结束」），所以先等一下看日志，
+    /// 只有它没自己停才补发一次热键——盲目补发会把已经结束的会话又开起来。
     /// </summary>
+    private async Task ReleaseMagpieUpscaleAsync()
+    {
+        if (!_magpieActive) return;
+        _magpieActive = false;
+
+        var logPath = MagpieService.TryFindLogPath(_magpiePath);
+        if (logPath != null)
+        {
+            await Task.Delay(800);
+            if (!MagpieService.IsScalingActive(logPath))
+            {
+                AppLog.Write("slideshow magpie: scaling already ended by Magpie itself");
+                return;
+            }
+        }
+
+        try
+        {
+            var hotkey = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
+            await MagpieService.SendHotkeyAsync(hotkey);
+            AppLog.Write($"slideshow magpie: release {hotkey}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"slideshow magpie: release failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>关闭前解除超分（同样是先看日志，避免多按一次把会话重新开起来）。</summary>
     private async void OnSlideshowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         _closed = true;
@@ -151,17 +233,7 @@ public partial class SlideshowWindow : Window
 
         e.Cancel = true;
         _magpieClosing = true;
-        _magpieActive = false;
-        try
-        {
-            var hotkey = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
-            await MagpieService.SendHotkeyAsync(hotkey);
-            await Task.Delay(300);
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"slideshow magpie: release failed: {ex.Message}");
-        }
+        await ReleaseMagpieUpscaleAsync();
         Close();
     }
 
@@ -354,12 +426,15 @@ public partial class SlideshowWindow : Window
         {
             WindowState = WindowState.Maximized; ResizeMode = ResizeMode.NoResize; Topmost = true;
             NormalLayout.Visibility = Visibility.Collapsed; FullscreenLayout.Visibility = Visibility.Visible;
+            // 超分的目标就是全屏的这个回想窗口
+            _ = EnableMagpieUpscaleAsync();
         }
         else
         {
             WindowState = WindowState.Normal; ResizeMode = ResizeMode.CanResize; Topmost = _isTopmost;
             NormalLayout.Visibility = Visibility.Visible; FullscreenLayout.Visibility = Visibility.Collapsed;
             if (Owner != null) { Left = Owner.Left + (Owner.Width - Width) / 2; Top = Owner.Top + (Owner.Height - Height) / 2; }
+            _ = ReleaseMagpieUpscaleAsync();
         }
     }
 

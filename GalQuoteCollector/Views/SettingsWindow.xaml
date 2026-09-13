@@ -76,11 +76,11 @@
                       Background="White" BorderBrush="#DDD"
                       DisplayMemberPath="Source"/>
 
-            <!-- ═══ Magpie 超分（回想） ═══ -->
+            <!-- ═══ Magpie 超分（回想全屏） ═══ -->
             <CheckBox x:Name="MagpieSlideshowCheckBox"
-                      Content="回想时用 Magpie 超分（需 Magpie 正在运行）"
+                      Content="全屏回想（F11）时用 Magpie 超分"
                       FontSize="13" Foreground="#333" Margin="0,0,0,4"
-                      ToolTip="打开回想窗口后自动发送 Magpie 的「缩放窗口」热键，由 Magpie 接管并超分回想画面；关闭回想时自动解除"/>
+                      ToolTip="在回想窗口里按 F11 进入全屏后，自动发送 Magpie 的「缩放窗口」热键，由 Magpie 接管并超分这个全屏窗口；退出全屏或关闭回想时自动解除"/>
             <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
@@ -104,7 +104,7 @@
                         Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
             </Grid>
             <TextBlock x:Name="MagpieStatusText"
-                       Text="热键留空自动读取 Magpie 配置；点「测试」可验证热键是否真的触发 Magpie"
+                       Text="热键留空自动读取 Magpie 配置；点「测试」可验证热键是否真的触发 Magpie（全屏回想按 F11 后生效）"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
 
             <TextBlock Text="界面字体" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>

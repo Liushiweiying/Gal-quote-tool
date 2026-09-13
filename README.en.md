@@ -105,15 +105,21 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.2.6 (2026-09-13)
+- **Fix** the slideshow upscaling targeted the **wrong window**: it fired as soon as the slideshow opened, upscaling the small window. It now fires when you enter **fullscreen (F11)** — the fullscreen slideshow is the window that gets upscaled — and is released when you leave fullscreen or close the slideshow
+- **Fix** the result is now confirmed through Magpie's log: Magpie's hotkey is a toggle, so **pressing it while another window is being scaled only stops that session** — the app now sends it again to move the upscaling onto the fullscreen slideshow and says so in the status bar
+- **Fix** leaving fullscreen no longer sends a blind hotkey press (it used to restart a just-finished session on the small window); Magpie's log is checked first
+- **Correction** v1.2.5 claimed that a Magpie running as administrator blocks the hotkey — that is wrong, injection works there too in practice
+- **New** diagnostic switch `--open-slideshow` (opens the slideshow with upscaling forced on, enters fullscreen, then leaves it)
 ### v1.2.5 (2026-09-13)
 - **Fix** the boot-time TranslucentTB repair did nothing: it restarted TTB about one second after logon, before the shell was ready. It now waits for the taskbar tray area, waits 20 more seconds, restarts TTB and checks the taskbar pixels — retrying once 30 seconds later if the appearance did not change
 - **Change** the default capture method is now **Current monitor**: Magpie upscaling does not hide the game's title bar, so window-based captures include it
   - Existing settings are migrated once (`auto`/empty → Current monitor) and can still be changed back
   - "Prefer the game's native resolution when Magpie is running" now defaults to off (it includes the title bar); turn it on if you want native resolution
-- **New** Magpie upscaling for the slideshow: opening the slideshow triggers Magpie on that window and closing it releases the upscaling
+- **New** Magpie upscaling for the slideshow: entering **fullscreen (F11)** triggers Magpie on that fullscreen window, and leaving fullscreen releases it
   - The hotkey is read from Magpie's own config (or typed manually); Magpie is started automatically if it is not running
   - Settings offers "Read Magpie config" and "Test": the test sends the hotkey once and checks Magpie's log for confirmation
-  - If Magpie runs as administrator, a normal-privilege app cannot inject the hotkey — Settings says so, and the slideshow falls back to built-in high quality scaling
+  - If Magpie is already scaling a game, the upscaling is moved to the fullscreen slideshow window (the game's session stops)
 - **New** slideshow images now use a high quality scaling algorithm
 ### v1.2.4 (2026-09-12)
 - **New** the updater now upgrades in the **same form as the current install**:

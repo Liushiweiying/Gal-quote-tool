@@ -201,6 +201,23 @@ public static class MagpieService
         }
     }
 
+    /// <summary>
+    /// Magpie 是否允许缩放最大化窗口（config.json 的 allowScalingMaximized，默认 true）。
+    /// 回想全屏是最大化窗口，这一项为 false 时 Magpie 会拒绝缩放。
+    /// </summary>
+    public static bool IsScalingMaximizedAllowed()
+    {
+        var path = TryFindConfigPath();
+        if (path == null) return true;
+        try
+        {
+            using var doc = JsonDocument.Parse(File.ReadAllText(path));
+            return !doc.RootElement.TryGetProperty("allowScalingMaximized", out var v)
+                   || v.ValueKind != JsonValueKind.False;
+        }
+        catch { return true; }
+    }
+
     /// <summary>最终生效的热键：用户填写 → Magpie 配置 → Magpie 默认值。</summary>
     public static string ResolveScaleHotkey(string? configured, out string source)
     {
@@ -422,6 +439,51 @@ public static class MagpieService
                 }
             }
             return false;
+        }
+        catch { return false; }
+    }
+
+    /// <summary>
+    /// Magpie 当前是否正在缩放某个窗口：看日志里「缩放开始」和「缩放结束」哪个更靠后。
+    /// 热键是开关语义——正在缩放时按下去只会**停掉**当前会话，不会切换到新窗口，
+    /// 所以发送前/发送后都要用它来判断。
+    /// </summary>
+    public static bool IsScalingActive(string? logPath)
+    {
+        if (logPath == null) return false;
+        try
+        {
+            if (!File.Exists(logPath)) return false;
+            using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            long start = Math.Max(0, fs.Length - 256 * 1024);
+            fs.Seek(start, SeekOrigin.Begin);
+            using var reader = new StreamReader(fs, Encoding.UTF8);
+            var text = reader.ReadToEnd();
+            return text.LastIndexOf("缩放开始", StringComparison.Ordinal)
+                 > text.LastIndexOf("缩放结束", StringComparison.Ordinal);
+        }
+        catch { return false; }
+    }
+
+    /// <summary>givenSize 之后是否出现新的「缩放开始」，并返回紧随其后的源矩形行（用于确认缩放的是我们的窗口）。</summary>
+    public static bool LogHasScalingStartedSince(string? logPath, long sinceSize, out string rectLine)
+    {
+        rectLine = "";
+        try
+        {
+            if (logPath == null || !File.Exists(logPath)) return false;
+            using var fs = new FileStream(logPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            if (sinceSize > 0 && sinceSize <= fs.Length) fs.Seek(sinceSize, SeekOrigin.Begin);
+            using var reader = new StreamReader(fs, Encoding.UTF8);
+            var text = reader.ReadToEnd();
+            if (!text.Contains("缩放开始")) return false;
+
+            var lines = text.Split('\n');
+            foreach (var l in lines)
+            {
+                if (l.Contains("源矩形")) { rectLine = l.Trim(); break; }
+            }
+            return true;
         }
         catch { return false; }
     }

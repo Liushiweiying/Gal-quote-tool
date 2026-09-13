@@ -337,32 +337,28 @@ public partial class SettingsWindow : Window
         try
         {
             var running = MagpieService.IsRunning();
-            var elevated = running && MagpieService.IsProbablyElevated();
             var hotkey = MagpieService.ResolveScaleHotkey(cfg.MagpieScaleHotkey, out var source);
             var exe = !string.IsNullOrWhiteSpace(cfg.MagpiePath) && File.Exists(cfg.MagpiePath)
                 ? cfg.MagpiePath
                 : MagpieService.TryFindExePath();
+            var log = MagpieService.TryFindLogPath(exe);
+            var scaling = log != null && MagpieService.IsScalingActive(log);
 
             if (!running)
             {
                 MagpieStatusText.Foreground = System.Windows.Media.Brushes.Gray;
                 MagpieStatusText.Text = $"未检测到 Magpie 正在运行（exe：{exe ?? "未找到"}）· 生效热键 {hotkey}（{source}）";
             }
-            else if (elevated)
-            {
-                MagpieStatusText.Foreground = System.Windows.Media.Brushes.DarkOrange;
-                MagpieStatusText.Text =
-                    $"Magpie 正在运行（管理员权限）· 生效热键 {hotkey}（{source}）\n" +
-                    "注意：Magpie 以管理员身份运行时，Windows 会拦截普通权限程序注入的热键，自动超分可能无效；" +
-                    "可在 Magpie 设置里关闭「总是以管理员身份运行」，或让本程序也以管理员身份运行";
-            }
             else
             {
                 MagpieStatusText.Foreground = System.Windows.Media.Brushes.SeaGreen;
-                MagpieStatusText.Text = $"Magpie 正在运行 · 生效热键 {hotkey}（来源：{source}）";
+                MagpieStatusText.Text =
+                    $"Magpie 正在运行 · 生效热键 {hotkey}（来源：{source}）" +
+                    (scaling ? "· 当前正在缩放某个窗口（全屏回想时会先把超分切过去）" : "") +
+                    "\n全屏回想（F11）时才会超分「全屏的那个窗口」，退出全屏自动解除";
             }
 
-            AppLog.Write($"magpie status: running={running} elevated={elevated} hotkey={hotkey} ({source}) exe={exe ?? "<none>"}");
+            AppLog.Write($"magpie status: running={running} scaling={scaling} hotkey={hotkey} ({source}) exe={exe ?? "<none>"}");
         }
         catch (Exception ex)
         {
@@ -428,7 +424,9 @@ public partial class SettingsWindow : Window
 
         var ok = InfoDialog.Show(this, "测试 Magpie 超分",
             $"将向 Magpie 发送热键 {hotkey}（来源：{source}）。\n\n" +
-            "本设置窗口会被 Magpie 超分约 3 秒，然后自动解除。请确认 Magpie 正在运行。",
+            "本设置窗口会被 Magpie 超分约 3 秒，然后自动解除。\n" +
+            "如果 Magpie 此刻正在超分别的窗口（比如游戏），这个测试会先把它停掉。\n\n" +
+            "请确认 Magpie 正在运行。",
             InfoDialogButtons.OKCancel, InfoDialogIcon.Question);
         if (ok != InfoDialogResult.OK) return;
 
@@ -462,14 +460,12 @@ public partial class SettingsWindow : Window
             }
             else
             {
-                var elevated = MagpieService.IsProbablyElevated();
                 MagpieStatusText.Foreground = System.Windows.Media.Brushes.Firebrick;
                 MagpieStatusText.Text = logPath == null
                     ? "？找不到 Magpie 日志，无法确认；若本窗口刚才被超分则说明热键有效"
-                    : elevated
-                        ? $"✗ Magpie 没有响应热键 {hotkey}：Magpie 以管理员身份运行时会拦截普通权限程序的热键，请关闭 Magpie 的「总是以管理员身份运行」或让本程序以管理员身份运行"
-                        : $"✗ Magpie 日志里没有新增「缩放」记录：热键 {hotkey} 可能和 Magpie 内的设置不一致";
-                AppLog.Write($"magpie test: {hotkey} not confirmed (elevated={elevated}, log={logPath ?? "<none>"})");
+                    : $"✗ Magpie 日志里没有新增「缩放」记录：热键 {hotkey} 可能和 Magpie 内的设置不一致" +
+                      (MagpieService.IsProbablyElevated() ? "（Magpie 为管理员权限，注入也有可能被系统拦下）" : "");
+                AppLog.Write($"magpie test: {hotkey} not confirmed (log={logPath ?? "<none>"})");
             }
         }
         finally
