@@ -119,6 +119,19 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
    - 诊断开关：`--open-slideshow` = 打开回想（强制开超分）+ 自动进全屏→等 12s→退全屏→关闭，用于验证整条链路（**会真的发 Magpie 热键，会打断用户正在进行的游戏超分，慎用**）。
 3. **（仍未做）窗口内容截图裁掉标题栏**：`CaptureMode.WindowContent` 走 `PrintWindow(PW_RENDERFULLCONTENT)`，会把非客户区（顶栏）一起截进去。可用 `GetWindowRect` 与 `ClientToScreen`/`GetClientRect` 的偏移量在位图上裁掉标题栏（注意 DPI 感知：进程若为 DPI-unaware，虚拟化坐标会与物理像素不一致，需先确认）。
 
+### 下次要做（用户指定，2026-09-13；**本轮只记录，不处理**）
+1. **Magpie 超分「第一次往往不成功，要点两次」**
+   - 用户原话：开始测试时 Magpie 响应太快，导致要测试两次才能成功。
+   - 现象是「第一次触发没生效、再来一次就好」，怀疑点（**均未验证**）：
+     - a) `EnableMagpieUpscaleAsync()` 发完键只用 1.3s 窗口查日志（`LogHasScalingStartedSince`）判断有没有真的开始缩放；若 Magpie 这条日志落盘稍慢就会误判成「没开始」→ 自动补发第二次 → 那一下恰好把刚开起来的会话**停掉**，表现就是「没生效」。
+     - b) 设置里的「测试」按钮在 InfoDialog 关闭后立刻发键，此刻前台窗口可能还在切换；Magpie 缩放的永远是**当前前台窗口**，可能缩到了别的窗口上。
+     - c) Magpie 内部 `ShortcutService::_FireShortcut` 有 **100ms 限流**（同一热键 100ms 内只触发一次）。
+   - 建议改法：把「是否已开始缩放」的判断改成**发键后轮询日志最多 3~4 秒**（确认到 `缩放开始` 就停），而不是固定等 1.3s 就下结论；发键前再 `Activate()` + 多等 200~300ms 确保前台是本窗口。
+2. **回想顶栏的全屏按钮（⛶）按下也要触发超分**
+   - 用户反馈：按按钮时没有超分（F11 那条链路是通的）。
+   - 现状（代码层面）：`SlideshowWindow.xaml` 的 `FullscreenBtn.Click → OnToggleFullscreen → ToggleFullscreen()`，而 `ToggleFullscreen()` 里**已经**调了 `EnableMagpieUpscaleAsync()`/`ReleaseMagpieUpscaleAsync()`——理论上按钮和 F11 是同一条路径，所以很可能是与第 1 条同因（鼠标点击后的前台/激活时机、或日志误判导致补发把会话停掉）。
+   - 下次实测：点 ⛶ 进全屏后看 `startup.log` 里有没有 `slideshow magpie: scaling fullscreen window with …`，以及是否出现「no scaling start seen, retrying once」。
+
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
 - 代码签名：自签名证书 `CN=Gal Quote Collector`（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。
