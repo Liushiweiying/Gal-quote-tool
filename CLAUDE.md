@@ -131,6 +131,21 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
    - 用户反馈：按按钮时没有超分（F11 那条链路是通的）。
    - 现状（代码层面）：`SlideshowWindow.xaml` 的 `FullscreenBtn.Click → OnToggleFullscreen → ToggleFullscreen()`，而 `ToggleFullscreen()` 里**已经**调了 `EnableMagpieUpscaleAsync()`/`ReleaseMagpieUpscaleAsync()`——理论上按钮和 F11 是同一条路径，所以很可能是与第 1 条同因（鼠标点击后的前台/激活时机、或日志误判导致补发把会话停掉）。
    - 下次实测：点 ⛶ 进全屏后看 `startup.log` 里有没有 `slideshow magpie: scaling fullscreen window with …`，以及是否出现「no scaling start seen, retrying once」。
+3. **「使用时长统计」窗口改成 iOS「屏幕使用时间」那种卡片式页面**（参考图：用户 2026-09-13 发的 iPhone 截图，附件对象 `C:\Users\未时\.dsh\attachments\v1\objects\af\af0e5519c845668b569ff4f8d7107a06e72106879c8106283610e2d315610064`，1007×4165 竖版长图）
+   - 参考图结构（从上到下）：① 标题栏 `← Screen time`；② 分段控件 `Today` / `Last 7 days`；③ 大卡片：总时长 `3 h 52 min` + 与昨天对比 `9 h 22 min less than yesterday.` + **24 小时柱状图**（y 轴 0/29/58 min，x 轴 00:00/06:00/12:00/18:00/24:00）+ 一行小字脚注；④ `APP USAGE` 区块：**图标 + 名称 + 右侧时长 + 细进度条**（按当天最大项为满格），多于若干条折叠成 `Show more`；⑤ `UNLOCKS` 区块：大字总数 `7 in total` + 24 小时柱状图 + 两行小字 `Unlock frequency / Once every 1 h 57 min`；⑥ `EXTENSIONS` 区块：`名称 —— 值` 两行。
+   - 适配映射（现有数据 `%LOCALAPPDATA%\GalQuoteCollector\usage.json` = `Records[日期][进程key] = {Name, Seconds}`）：
+     | 参考图元素 | 本程序 | 数据 |
+     |---|---|---|
+     | 总时长 / 与昨天对比 | 当天各进程 Seconds 求和、与昨天相减 | ✅ 已有 |
+     | 24 小时柱状图 | 现在**只有按天累计，没有小时维度** | ❌ 需扩展 |
+     | APP USAGE 行（名称/时长/进度条） | `Records[日期]` 的 Name/Seconds，进度条 = 该项 / 当天最大项 | ✅ 已有 |
+     | 应用图标 | 现在只存进程名，没存 exe 路径 | ⚠️ 需记录时存 `Path`，或退化成首字母色块 |
+     | `Show more` | 默认显示前 6 条，点击展开 | ✅ 易做 |
+     | `Today / Last 7 days` | 已有 `DayModeBtn` / `WeekModeBtn`（今天 / 最近 7 天） | ✅ 复用 |
+     | `UNLOCKS` / `EXTENSIONS` | 没有对应概念 | ❌ 需先定口径（见下） |
+   - 需要的数据结构改动（`Models/UsageData.cs`，JSON 向后兼容，旧文件缺字段默认 0）：`ProcessRecord` 加 `int[] Hourly = new int[24]` 与 `string Path = ""`；`UsageTracker.Tick()` 里同时 `Hourly[DateTime.Now.Hour] += 60`。旧数据没有小时桶 → 历史日期柱状图只能空着（与 iOS 一致：只有当天有明细），「最近 7 天」改用每日总和画柱。
+   - **做之前必须先问用户的三件事**：① `UNLOCKS` 那块换成什么（候选：采集次数 / 活跃时段数 / 平均每次时长 / 直接去掉）；② `EXTENSIONS` 那块换成什么（候选：统计范围「已记录 N 天 · 黑名单 N 个」/ 标签分组统计 / 去掉）；③ 是改造现有 `UsageStatsWindow` 还是新开一个「今日概览」页。
+   - WPF 实现要点：页面 = `ScrollViewer` + 卡片 `Border`（CornerRadius 12、白底、1px #E5E5EA 边框、Section 小标题 #8E8E93 大写）；柱状图继续用现有手绘 `Rectangle` 方式（不引第三方库），y 轴沿用现有 `NiceScaleMax()` 的「整齐刻度」；图标用 `System.Drawing.Icon.ExtractAssociatedIcon(exePath)` + `Imaging.CreateBitmapSourceFromHIcon`，取不到就用首字母圆形色块；顶部沿用现有 `DayModeBtn`/`WeekModeBtn` 与日历按钮，只改样式。参考图是浅色主题 + 蓝色柱，适配时用本程序主色 `#5B6ABF`（或 iOS 蓝 `#007AFF`）。
 
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
