@@ -129,13 +129,14 @@ public partial class App : Application
                 }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }
 
-            // Diagnostic: --fix-ttb restarts TranslucentTB (repair) and logs the result
+            // Diagnostic: --fix-ttb runs the full boot repair path (shell wait → settle →
+            // restart → pixel verification → one retry) and logs the result. Takes ~10-20s.
             if (e.Args.Contains("--fix-ttb"))
             {
                 _ = Task.Run(async () =>
                 {
-                    Log("--fix-ttb: restarting TranslucentTB");
-                    var (ok, detail) = await Services.TranslucentTbService.RestartAsync();
+                    Log("--fix-ttb: running TranslucentTB boot repair");
+                    var (ok, detail) = await Services.TranslucentTbService.RepairAtBootAsync(2);
                     Log($"--fix-ttb: ok={ok} detail={detail}");
                 });
             }

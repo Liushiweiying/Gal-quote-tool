@@ -105,6 +105,16 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.2.5 (2026-09-13)
+- **Fix** the boot-time TranslucentTB repair did nothing: it restarted TTB about one second after logon, before the shell was ready. It now waits for the taskbar tray area, waits 20 more seconds, restarts TTB and checks the taskbar pixels — retrying once 30 seconds later if the appearance did not change
+- **Change** the default capture method is now **Current monitor**: Magpie upscaling does not hide the game's title bar, so window-based captures include it
+  - Existing settings are migrated once (`auto`/empty → Current monitor) and can still be changed back
+  - "Prefer the game's native resolution when Magpie is running" now defaults to off (it includes the title bar); turn it on if you want native resolution
+- **New** Magpie upscaling for the slideshow: opening the slideshow triggers Magpie on that window and closing it releases the upscaling
+  - The hotkey is read from Magpie's own config (or typed manually); Magpie is started automatically if it is not running
+  - Settings offers "Read Magpie config" and "Test": the test sends the hotkey once and checks Magpie's log for confirmation
+  - If Magpie runs as administrator, a normal-privilege app cannot inject the hotkey — Settings says so, and the slideshow falls back to built-in high quality scaling
+- **New** slideshow images now use a high quality scaling algorithm
 ### v1.2.4 (2026-09-12)
 - **New** the updater now upgrades in the **same form as the current install**:
   - Installer build → downloads Setup and upgrades in place (same directory; quotes/screenshots/settings untouched)

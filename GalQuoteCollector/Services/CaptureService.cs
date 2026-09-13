@@ -37,13 +37,18 @@ public class CaptureService
         Directory.CreateDirectory(screenshotDir);
     }
 
-    public static CaptureMode ParseMode(string? mode) => (mode ?? "auto").Trim().ToLowerInvariant() switch
+    /// <summary>
+    /// 截图方式解析。空串/未知值一律落到「当前显示器」——这是 v1.2.5 起的默认值，
+    /// 也兼容更早版本 settings.json 里没写过 CaptureMode 的空值。
+    /// </summary>
+    public static CaptureMode ParseMode(string? mode) => (mode ?? "").Trim().ToLowerInvariant() switch
     {
         "window" => CaptureMode.WindowContent,
         "region" => CaptureMode.WindowRegion,
         "monitor" => CaptureMode.Monitor,
         "screen" => CaptureMode.VirtualScreen,
-        _ => CaptureMode.Auto
+        "auto" => CaptureMode.Auto,
+        _ => CaptureMode.Monitor
     };
 
     /// <summary>

@@ -24,9 +24,20 @@ public class HotkeyConfig
     // JPG 截图质量（50-100，仅 JPG 格式生效）
     public int JpegQuality { get; set; } = 90;
     // 截图方式: auto / window / region / monitor / screen
-    public string CaptureMode { get; set; } = "auto";
-    // 检测到 Magpie 运行时，自动模式改用「窗口内容」抓游戏原生分辨率画面
-    public bool PreferNativeCaptureWhenMagpie { get; set; } = true;
+    // v1.2.5 起默认「当前显示器」：Magpie 超分不会让游戏顶栏消失，按窗口截取会把标题栏截进去
+    public string CaptureMode { get; set; } = "monitor";
+    // 检测到 Magpie 运行时改用「窗口内容」抓游戏原生分辨率画面（默认关：抓超分后的显示器画面）
+    public bool PreferNativeCaptureWhenMagpie { get; set; }
+    // v1.2.5 一次性迁移标记（截图方式默认值从 auto 改为 monitor）
+    public bool CaptureDefaultsMigratedV125 { get; set; }
+
+    // ── 回想时用 Magpie 超分 ──
+    // 打开回想窗口后自动触发 Magpie 缩放该窗口
+    public bool MagpieUpscaleSlideshow { get; set; }
+    // Magpie「缩放窗口」热键；留空则自动读取 Magpie 配置，读不到时用 Alt+Shift+A（Magpie 默认值）
+    public string MagpieScaleHotkey { get; set; } = "";
+    // Magpie.exe 路径；留空自动探测
+    public string MagpiePath { get; set; } = "";
     // 用户选择跳过的更新版本 tag（自动检查时不再提示）
     public string SkippedUpdateVersion { get; set; } = "";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
@@ -153,6 +164,10 @@ public class HotkeyConfig
             JpegQuality = JpegQuality,
             CaptureMode = CaptureMode,
             PreferNativeCaptureWhenMagpie = PreferNativeCaptureWhenMagpie,
+            CaptureDefaultsMigratedV125 = CaptureDefaultsMigratedV125,
+            MagpieUpscaleSlideshow = MagpieUpscaleSlideshow,
+            MagpieScaleHotkey = MagpieScaleHotkey,
+            MagpiePath = MagpiePath,
             SkippedUpdateVersion = SkippedUpdateVersion,
             EnableTranslucentTbFix = EnableTranslucentTbFix,
             OcrEngine = OcrEngine,

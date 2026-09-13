@@ -137,6 +137,8 @@
                         </ToggleButton>
                         <TextBlock x:Name="ProgressText" FontSize="13" Foreground="#999"
                                    VerticalAlignment="Center"/>
+                        <TextBlock x:Name="MagpieStatusText" FontSize="11" Foreground="#5B6ABF"
+                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
 
                     <Button Grid.Column="4" Content="━" x:Name="MinimizeBtn"
@@ -165,7 +167,8 @@
                     </Grid.RowDefinitions>
                     <Border Grid.Row="0" x:Name="ScreenshotBox" Background="#F5F5F5" CornerRadius="8" BorderBrush="#E0E0E0" BorderThickness="1"
                             HorizontalAlignment="Center" MaxWidth="800" MaxHeight="380" Margin="0,0,0,12">
-                        <Image x:Name="ScreenshotImage" Stretch="Uniform" MaxWidth="800" MaxHeight="380"/>
+                        <Image x:Name="ScreenshotImage" Stretch="Uniform" MaxWidth="800" MaxHeight="380"
+                               RenderOptions.BitmapScalingMode="HighQuality"/>
                     </Border>
                     <Border Grid.Row="1" Background="#FAFAFA" CornerRadius="8" BorderBrush="#E0E0E0" BorderThickness="1"
                             Padding="20,12" Margin="0,0,0,4" HorizontalAlignment="Center">
@@ -196,6 +199,7 @@
         <!-- Fullscreen Layout -->
         <Grid x:Name="FullscreenLayout" Visibility="Collapsed" Background="Black">
             <Image x:Name="FsScreenshotImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
+                   RenderOptions.BitmapScalingMode="HighQuality"
                    MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}"
                    MaxHeight="{Binding ActualHeight, RelativeSource={RelativeSource AncestorType=Grid}}"/>
             <Border x:Name="FsOverlay" VerticalAlignment="Bottom" Background="#80000000" Padding="24,16"

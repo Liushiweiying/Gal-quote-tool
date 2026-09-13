@@ -94,7 +94,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 应用侧（C#）的用户内容文件删除**均已**走 `FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin)`（MainViewModel.cs 的 DeleteScreenshots/DeleteScreenshot/DeleteUnassociatedScreenshots/MigrateScreenshots），无需改动；自启 VBS/lnk、临时文件、日志截断为永久删除属合理范围。
 
 ### 发布约定（用户要求，2026-08-13）
-- 版本号走 **1.2.x**（当前 v1.2.4；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v124` 形式（去掉小数点）。
+- 版本号走 **1.2.x**（当前 v1.2.5；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v125` 形式（去掉小数点）。
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
@@ -104,15 +104,17 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 用法：`InfoDialog.Show(owner, 标题, 正文, InfoDialogButtons.OK/OKCancel/YesNo, InfoDialogIcon.Information/Question/Warning/Error, dangerConfirm: true)` 返回 `InfoDialogResult.OK/Yes/No/Cancel`。删除类确认传 `dangerConfirm: true`（红色"是"）。按钮顺序约定：**左是右否**（是/确定在左，否/取消在右）。
 - 后续可选项：教程/关于窗口做成"分节排版 + 图标 + 版本号 + 仓库链接"的专属窗口（当前已统一为 InfoDialog，够用）。
 
-### 下次要做（用户指定，2026-09-12；本轮不发布）
-1. **默认截图方式改为「当前显示器」**
-   - 原因（用户实测）：**Magpie 超分不会让游戏窗口的标题栏消失**，按窗口区域/窗口内容截取会把顶栏一起截进去，效果不好；按显示器整体截图才是 Magpie 场景下的正确默认。
-   - 改法：`HotkeyConfig.CaptureMode` 默认值 `"auto"` → `"monitor"`；`CaptureService.ParseMode` 里**空字符串也要落到 monitor**（旧 settings.json 里 CaptureMode 可能是空串，需迁移）。
-   - 需要一并理顺 `MainViewModel.EffectiveCaptureMode()` 与 v1.2.3 的「检测到 Magpie 优先原生截图」选项的交互：默认已是 monitor 时，该开关应决定「monitor（含超分）/ window content（原生）」的取舍，而不是只在 auto 下生效。设置界面文案要同步。
-2. **Magpie 回想超分设置项**（此前 Phase 2 计划）
-   - 设置项：「回想时用 Magpie 超分」开关 + 触发热键（默认 Magpie 的 `Win+Shift+A`，可改）+ Magpie 路径（自动探测 `Magpie.exe`）。
-   - 实现：回想窗口显示/置顶后，用 `SendInput` 合成缩放热键让 Magpie 超分该窗口；关闭回想时再发一次解除；Magpie 未运行时提示或回退**内置高质量放大**（`RenderOptions.BitmapScalingMode=HighQuality` + 轻量锐化）。
-   - 注意：Magpie 需正在运行；热键在 Magpie 内可自定义，所以必须可配置；要测 F11 全屏与多显示器下的行为。
+### 下次要做（用户指定，2026-09-12；v1.2.5 已完成前两项）
+1. **默认截图方式改为「当前显示器」**（✅ v1.2.5 已完成）
+   - 原因（用户实测）：**Magpie 超分不会让游戏窗口的标题栏消失**，按窗口区域/窗口内容截取会把顶栏一起截进去；按显示器整体截图才是 Magpie 场景下的正确默认。
+   - 已改：`HotkeyConfig.CaptureMode` 默认 `"monitor"`；`CaptureService.ParseMode` 空串/未知 → `Monitor`；`SettingsService.MigrateCaptureDefaults()` 一次性迁移（`CaptureDefaultsMigratedV125` 标记）把旧的 `auto`/空值 → `monitor`，并把旧的 `PreferNativeCaptureWhenMagpie=true`（旧默认值，会带上标题栏）改为 false。
+   - `MainViewModel.EffectiveCaptureMode()`：monitor/auto + 勾选「优先原生分辨率」+ Magpie 在跑 → 返回 `window`（原生分辨率，含标题栏）。设置里截图方式下拉顺序改为：当前显示器（推荐）/ 窗口内容 / 窗口可见区域 / 自动 / 整个屏幕。
+2. **Magpie 回想超分设置项**（✅ v1.2.5 已完成）
+   - 实现：`Services/MagpieService.cs` + 回想窗口 `Loaded`/`Closing` 钩子；配置项 `MagpieUpscaleSlideshow` / `MagpieScaleHotkey`（留空自动读）/ `MagpiePath`（留空自动探测）。
+   - 关键情报（都实测过）：Magpie 热键存在 `%LOCALAPPDATA%\Magpie\config\v4\config.json` 的 `shortcuts.scale`，是 **uint32**：低 8 位 = 虚拟键码，`0x100/0x200/0x400/0x800` = Win/Ctrl/Alt/Shift（Magpie 源码 `AppSettings.cpp` 的 `EncodeShortcut`）。用户本机 = `1111` = **Alt+W**（不是默认的 Alt+Shift+A）。Magpie 默认值：Scale=Alt+Shift+A、窗口化缩放=Alt+Shift+Q、工具栏=Alt+Shift+D、截图=Alt+Shift+S。
+   - Magpie 热键窗口类名 `Magpie_Hotkey`（消息窗口），`ShortcutAction` 枚举 Scale=0/WindowedModeScale=1/Toolbar=2/TakeScreenshot=3；日志在 `<Magpie.exe 所在目录>\logs\magpie.log`（UTF-8，轮转 500KB），热键激活会写「热键 Scale 激活（Keyboard Hook）」——可用来验证是否真的触发。
+   - **坑**：Magpie 开了「总是以管理员身份运行」（本机 `alwaysRunAsAdmin: true`）时，普通权限进程 **PostMessage 到它的窗口会被 UIPI 拒绝**（实测 `PostMessage` 返回 False），`SendInput` 合成热键也大概率被拦（日志里「管理员: 是」可确认）。设置界面因此会检测 `MagpieService.IsProbablyElevated()`（读不到 MainModule 即视为管理员）并给出提示；回想窗口失败时回退内置高质量放大。**未实测**：在非管理员 Magpie 上热键注入是否真的生效（本机 Magpie 是管理员权限）。
+3. **（仍未做）窗口内容截图裁掉标题栏**：`CaptureMode.WindowContent` 走 `PrintWindow(PW_RENDERFULLCONTENT)`，会把非客户区（顶栏）一起截进去。可用 `GetWindowRect` 与 `ClientToScreen`/`GetClientRect` 的偏移量在位图上裁掉标题栏（注意 DPI 感知：进程若为 DPI-unaware，虚拟化坐标会与物理像素不一致，需先确认）。
 
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。

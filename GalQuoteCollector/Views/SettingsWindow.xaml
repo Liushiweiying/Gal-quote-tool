@@ -76,6 +76,37 @@
                       Background="White" BorderBrush="#DDD"
                       DisplayMemberPath="Source"/>
 
+            <!-- ═══ Magpie 超分（回想） ═══ -->
+            <CheckBox x:Name="MagpieSlideshowCheckBox"
+                      Content="回想时用 Magpie 超分（需 Magpie 正在运行）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,4"
+                      ToolTip="打开回想窗口后自动发送 Magpie 的「缩放窗口」热键，由 Magpie 接管并超分回想画面；关闭回想时自动解除"/>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/><ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="MagpieHotkeyBox" FontSize="12" Padding="6,4"
+                         VerticalContentAlignment="Center" Background="#F5F5F5" BorderBrush="#E0E0E0"
+                         ToolTip="Magpie「缩放窗口」热键，如 Alt+Shift+A；留空则自动读取 Magpie 配置"/>
+                <Button Grid.Column="1" Content="读取 Magpie 配置" Click="OnReadMagpieHotkey"
+                        Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
+                <Button Grid.Column="2" Content="测试" Click="OnTestMagpieHotkey"
+                        Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
+            </Grid>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="MagpiePathBox" FontSize="12" Padding="6,4"
+                         VerticalContentAlignment="Center" Background="#F5F5F5" BorderBrush="#E0E0E0"
+                         ToolTip="Magpie.exe 路径，留空则自动探测"/>
+                <Button Grid.Column="1" Content="浏览..." Click="OnBrowseMagpiePath"
+                        Padding="8,4" Margin="4,0,0,0" FontSize="12"/>
+            </Grid>
+            <TextBlock x:Name="MagpieStatusText"
+                       Text="热键留空自动读取 Magpie 配置；点「测试」可验证热键是否真的触发 Magpie"
+                       Foreground="#BBB" FontSize="11" Margin="0,0,0,6" TextWrapping="Wrap"/>
+
             <TextBlock Text="界面字体" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <ComboBox x:Name="FontCombo" FontSize="13" Margin="0,0,0,6"
                       Background="White" BorderBrush="#DDD"
@@ -140,20 +171,20 @@
                 <TextBlock Grid.Column="0" Text="截图方式" FontSize="13" Foreground="#555" VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <ComboBox Grid.Column="1" x:Name="CaptureModeCombo" FontSize="12" HorizontalAlignment="Left" Width="220"
                           Background="White" BorderBrush="#DDD">
-                    <ComboBoxItem Content="自动（推荐）"/>
+                    <ComboBoxItem Content="当前显示器（推荐）"/>
                     <ComboBoxItem Content="窗口内容（原生分辨率）"/>
                     <ComboBoxItem Content="窗口可见区域"/>
-                    <ComboBoxItem Content="当前显示器"/>
+                    <ComboBoxItem Content="自动（判断窗口是否全屏）"/>
                     <ComboBoxItem Content="整个屏幕（所有显示器）"/>
                 </ComboBox>
             </Grid>
-            <TextBlock Text="串流窗口 / 特殊引擎（如 minori）截图不全时，改用「窗口内容」"
+            <TextBlock Text="默认按当前显示器截取（Magpie 超分后也能截到完整画面）；截出来带上游戏标题栏时，改用「窗口可见区域」"
                        Foreground="#BBB" FontSize="11" Margin="0,-4,0,6" TextWrapping="Wrap"/>
 
             <CheckBox x:Name="MagpieNativeCheckBox"
-                      Content="检测到 Magpie 时优先抓取游戏原生分辨率（自动模式下生效）"
+                      Content="检测到 Magpie 时优先抓取游戏原生分辨率（会带上窗口标题栏）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"
-                      ToolTip="Magpie 会在屏幕上放大画面；开启后用 PrintWindow 抓窗口自身的渲染内容，得到游戏原生分辨率的截图"/>
+                      ToolTip="Magpie 会在屏幕上放大画面；开启后用 PrintWindow 抓窗口自身的渲染内容，得到游戏原生分辨率的截图，但也会把窗口标题栏一起截进去。关闭时按「当前显示器」截取超分后的画面"/>
 
             <Separator Margin="0,12,0,16"/>
 

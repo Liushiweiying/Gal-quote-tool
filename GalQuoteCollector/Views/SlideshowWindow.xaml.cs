@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media.Imaging;
 using GalQuoteCollector.Models;
+using GalQuoteCollector.Services;
 
 namespace GalQuoteCollector.Views;
 
@@ -28,6 +29,12 @@ public partial class SlideshowWindow : Window
     private bool _isTopmost;
     private readonly string _chineseFont;
     private readonly string _englishFont;
+    private readonly bool _magpieUpscale;
+    private readonly string _magpieHotkey;
+    private readonly string _magpiePath;
+    private bool _magpieActive;
+    private bool _magpieClosing;
+    private bool _closed;
 
     public SlideshowWindow(Window owner, List<Quote> quotes,
         Dictionary<int, List<Tag>> tagsByQuote,
@@ -36,7 +43,8 @@ public partial class SlideshowWindow : Window
         List<QuoteGroup> availableGroups,
         List<Tag> availableTags,
         int slideshowMode, bool slideshowLoop,
-        string chineseFont = "Microsoft YaHei", string englishFont = "Segoe UI")
+        string chineseFont = "Microsoft YaHei", string englishFont = "Segoe UI",
+        bool magpieUpscale = false, string magpieHotkey = "", string magpiePath = "")
     {
         InitializeComponent();
         Owner = owner;
@@ -50,6 +58,9 @@ public partial class SlideshowWindow : Window
         _loop = slideshowLoop;
         _chineseFont = chineseFont;
         _englishFont = englishFont;
+        _magpieUpscale = magpieUpscale;
+        _magpieHotkey = magpieHotkey;
+        _magpiePath = magpiePath;
 
         foreach (var g in availableGroups)
             GroupFilter.Items.Add(new ComboBoxItem { Content = g.Name, Tag = g });
@@ -62,6 +73,96 @@ public partial class SlideshowWindow : Window
         ApplyFilter();
         if (_filtered.Count > 0) ShowCurrent();
         _ready = true;
+
+        if (_magpieUpscale)
+        {
+            Loaded += OnSlideshowLoaded;
+            Closing += OnSlideshowClosing;
+        }
+    }
+
+    // ── 回想时用 Magpie 超分 ──
+
+    /// <summary>
+    /// 回想窗口显示后触发一次 Magpie 的「缩放窗口」热键，让 Magpie 接管并超分本窗口。
+    /// Magpie 的钩子按前台窗口判断目标，所以必须等本窗口真正激活后再发。
+    /// </summary>
+    private async void OnSlideshowLoaded(object sender, RoutedEventArgs e)
+    {
+        Loaded -= OnSlideshowLoaded;
+
+        // 窗口显示后稍微等一会儿再激活，避免和 Owner 的关闭动画抢焦点
+        await Task.Delay(350);
+
+        if (!MagpieService.IsRunning())
+        {
+            MagpieStatusText.Text = "Magpie 未运行，未超分";
+            var (started, detail) = await Task.Run(() =>
+            {
+                var ok = MagpieService.TryStart(_magpiePath, out var d);
+                return (ok, d);
+            });
+            if (!started)
+            {
+                MagpieStatusText.Text = "Magpie 未运行，已使用内置高质量放大";
+                AppLog.Write($"slideshow magpie: {detail}");
+                return;
+            }
+            await Task.Delay(700);
+        }
+
+        var hotkey = MagpieService.ResolveScaleHotkey(_magpieHotkey, out var source);
+        if (!MagpieService.IsValidHotkey(hotkey))
+        {
+            MagpieStatusText.Text = $"Magpie 热键无效：{hotkey}";
+            return;
+        }
+
+        if (WindowState == WindowState.Minimized) return;
+        if (_closed) return; // 已经关掉了就别再发热键，否则 Magpie 会缩放别的窗口
+        Activate();
+        await Task.Delay(180);
+        if (_closed) return;
+
+        if (await MagpieService.SendHotkeyAsync(hotkey))
+        {
+            _magpieActive = true;
+            MagpieStatusText.Text = MagpieService.IsProbablyElevated()
+                ? $"Magpie 超分：{hotkey}（Magpie 为管理员权限，可能被系统拦截）"
+                : $"Magpie 超分：{hotkey}（{source}）";
+            AppLog.Write($"slideshow magpie: sent {hotkey} ({source})");
+        }
+        else
+        {
+            MagpieStatusText.Text = "Magpie 超分热键发送失败";
+        }
+    }
+
+    /// <summary>
+    /// 关闭前先解除 Magpie 超分：Magpie 对「缩放窗口」热键是开关语义，正在缩放时再按一次
+    /// 就会结束缩放。这里先取消关闭，等解除动作发完再真正关闭（否则窗口一销毁就来不及了）。
+    /// </summary>
+    private async void OnSlideshowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
+    {
+        _closed = true;
+        if (!_magpieActive || _magpieClosing) return;
+        // 程序正在退出时不要拦下关闭
+        if (Application.Current?.Dispatcher.HasShutdownStarted == true) return;
+
+        e.Cancel = true;
+        _magpieClosing = true;
+        _magpieActive = false;
+        try
+        {
+            var hotkey = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
+            await MagpieService.SendHotkeyAsync(hotkey);
+            await Task.Delay(300);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"slideshow magpie: release failed: {ex.Message}");
+        }
+        Close();
     }
 
     private void ApplyFilter()

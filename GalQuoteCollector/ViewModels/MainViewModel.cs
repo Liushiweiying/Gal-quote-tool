@@ -35,8 +35,8 @@ public partial class MainViewModel : ObservableObject
     private bool _hideUnrecognized;
     private string _screenshotFormat = "png";
     private int _jpegQuality = 90;
-    private string _captureMode = "auto";
-    private bool _preferNativeWhenMagpie = true;
+    private string _captureMode = "monitor";
+    private bool _preferNativeWhenMagpie;
     private readonly UpdateService _updateService = new();
 
     // Undo-delete support: snapshot of the last N deleted quotes (record + tag/group/screenshot rows)
@@ -143,17 +143,18 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Auto mode + Magpie running → grab the window's own render buffer (the game's
-    /// native resolution) instead of Magpie's upscaled screen output.
+    /// 默认按「当前显示器」截图（Magpie 超分不会让游戏顶栏消失，按窗口截取会把标题栏截进去）。
+    /// 如果用户希望 Magpie 场景拿游戏原生分辨率的画面，勾选「优先原生分辨率」后改为「窗口内容」。
     /// </summary>
     private string EffectiveCaptureMode()
     {
-        if (_captureMode == "auto" && _preferNativeWhenMagpie && IsMagpieRunning())
+        var mode = string.IsNullOrWhiteSpace(_captureMode) ? "monitor" : _captureMode;
+        if (_preferNativeWhenMagpie && IsMagpieRunning() && mode is "monitor" or "auto")
         {
             AppLog.Write("capture: Magpie detected → window content (native resolution)");
             return "window";
         }
-        return _captureMode;
+        return mode;
     }
 
     private static bool IsMagpieRunning()
@@ -164,8 +165,9 @@ public partial class MainViewModel : ObservableObject
 
     /// <summary>
     /// When the option is enabled and we were launched by the auto-start path (--minimized),
-    /// wait for TranslucentTB to be running, then restart it once so it re-applies the
-    /// taskbar transparency (a fresh start always applies its config).
+    /// repair TranslucentTB at boot. Restarting it too early (right after logon, while the
+    /// shell is still initialising) does not work — the repair waits for the taskbar, lets
+    /// TTB's own start-up attempt settle, restarts it and verifies the taskbar pixels.
     /// </summary>
     private async void RunTranslucentTbFixIfNeeded()
     {
@@ -174,16 +176,7 @@ public partial class MainViewModel : ObservableObject
         if (!_settingsService.LoadHotkeyConfig().EnableTranslucentTbFix)
             return;
 
-        for (int i = 0; i < 60 && !TranslucentTbService.IsRunning(); i++)
-            await Task.Delay(1000);
-
-        if (!TranslucentTbService.IsRunning())
-        {
-            AppLog.Write("TTB boot fix: not running within 60s, skipped");
-            return;
-        }
-
-        var (ok, detail) = await TranslucentTbService.RestartAsync();
+        var (ok, detail) = await TranslucentTbService.RepairAtBootAsync();
         AppLog.Write($"TTB boot fix: ok={ok} detail={detail}");
     }
 
@@ -640,7 +633,8 @@ public partial class MainViewModel : ObservableObject
 
         var win = new Views.SlideshowWindow(_window, quotes, tagsByQuote,
             groupsByQuote, screenshotsByQuote, allGroups, allTags, slideshowMode, slideshowLoop,
-            cfg.SlideshowChineseFont, cfg.SlideshowEnglishFont);
+            cfg.SlideshowChineseFont, cfg.SlideshowEnglishFont,
+            cfg.MagpieUpscaleSlideshow, cfg.MagpieScaleHotkey, cfg.MagpiePath);
         win.ShowDialog();
     }
 

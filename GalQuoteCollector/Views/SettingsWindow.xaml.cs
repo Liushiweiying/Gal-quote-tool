@@ -66,11 +66,15 @@ public partial class SettingsWindow : Window
         {
             "window" => 1,
             "region" => 2,
-            "monitor" => 3,
+            "auto" => 3,
             "screen" => 4,
-            _ => 0
+            _ => 0 // monitor（默认）
         };
         SlideshowLoopCheckBox.IsChecked = cfg.SlideshowLoop;
+        MagpieSlideshowCheckBox.IsChecked = cfg.MagpieUpscaleSlideshow;
+        MagpieHotkeyBox.Text = cfg.MagpieScaleHotkey ?? "";
+        MagpiePathBox.Text = cfg.MagpiePath ?? "";
+        UpdateMagpieStatus(cfg);
 
         // TranslucentTB fix: always visible so it can be enabled before TTB runs at boot
         TranslucentTbFixCheckBox.IsChecked = cfg.EnableTranslucentTbFix;
@@ -327,6 +331,153 @@ public partial class SettingsWindow : Window
         }
     }
 
+    /// <summary>设置窗口打开时把 Magpie 状态（是否运行 / 生效热键）显示出来。</summary>
+    private void UpdateMagpieStatus(HotkeyConfig cfg)
+    {
+        try
+        {
+            var running = MagpieService.IsRunning();
+            var elevated = running && MagpieService.IsProbablyElevated();
+            var hotkey = MagpieService.ResolveScaleHotkey(cfg.MagpieScaleHotkey, out var source);
+            var exe = !string.IsNullOrWhiteSpace(cfg.MagpiePath) && File.Exists(cfg.MagpiePath)
+                ? cfg.MagpiePath
+                : MagpieService.TryFindExePath();
+
+            if (!running)
+            {
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.Gray;
+                MagpieStatusText.Text = $"未检测到 Magpie 正在运行（exe：{exe ?? "未找到"}）· 生效热键 {hotkey}（{source}）";
+            }
+            else if (elevated)
+            {
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.DarkOrange;
+                MagpieStatusText.Text =
+                    $"Magpie 正在运行（管理员权限）· 生效热键 {hotkey}（{source}）\n" +
+                    "注意：Magpie 以管理员身份运行时，Windows 会拦截普通权限程序注入的热键，自动超分可能无效；" +
+                    "可在 Magpie 设置里关闭「总是以管理员身份运行」，或让本程序也以管理员身份运行";
+            }
+            else
+            {
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.SeaGreen;
+                MagpieStatusText.Text = $"Magpie 正在运行 · 生效热键 {hotkey}（来源：{source}）";
+            }
+
+            AppLog.Write($"magpie status: running={running} elevated={elevated} hotkey={hotkey} ({source}) exe={exe ?? "<none>"}");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"magpie status failed: {ex.Message}");
+        }
+    }
+
+    /// <summary>读取 Magpie 配置里的「缩放窗口」热键。</summary>
+    private void OnReadMagpieHotkey(object sender, RoutedEventArgs e)
+    {
+        if (MagpieService.TryReadScaleHotkey(out var hotkey, out var detail))
+        {
+            MagpieHotkeyBox.Text = hotkey;
+            MagpieStatusText.Foreground = System.Windows.Media.Brushes.SeaGreen;
+            MagpieStatusText.Text = "✓ " + detail;
+        }
+        else
+        {
+            MagpieStatusText.Foreground = System.Windows.Media.Brushes.Firebrick;
+            MagpieStatusText.Text = "✗ " + detail;
+        }
+    }
+
+    private void OnBrowseMagpiePath(object sender, RoutedEventArgs e)
+    {
+        var dlg = new OpenFileDialog
+        {
+            Title = "选择 Magpie.exe",
+            Filter = "Magpie|Magpie.exe|所有文件|*.*",
+            CheckFileExists = true
+        };
+        if (dlg.ShowDialog(this) == true)
+            MagpiePathBox.Text = dlg.FileName;
+    }
+
+    /// <summary>
+    /// 验证热键是否真的能触发 Magpie：发一次热键（会超分当前的前台窗口），
+    /// 2.5 秒后查 Magpie 日志里是否新增「热键 Scale 激活」记录，再发一次解除超分。
+    /// </summary>
+    private async void OnTestMagpieHotkey(object sender, RoutedEventArgs e)
+    {
+        var btn = sender as System.Windows.Controls.Button;
+        var hotkey = MagpieService.ResolveScaleHotkey(MagpieHotkeyBox.Text, out var source);
+        if (!MagpieService.IsValidHotkey(hotkey))
+        {
+            InfoDialog.Show(this, "Magpie 超分", $"热键格式无法识别：{hotkey}\n\n示例：Alt+Shift+A、Ctrl+Alt+W",
+                icon: InfoDialogIcon.Warning);
+            return;
+        }
+
+        if (!MagpieService.IsRunning())
+        {
+            MagpieStatusText.Text = "Magpie 未运行，正在尝试启动…";
+            var (started, detail) = await Task.Run(() => MagpieService.TryStart(MagpiePathBox.Text.Trim(), out var d) ? (true, d) : (false, d));
+            if (!started)
+            {
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.Firebrick;
+                MagpieStatusText.Text = "✗ " + detail;
+                InfoDialog.Show(this, "Magpie 超分", detail, icon: InfoDialogIcon.Warning);
+                return;
+            }
+        }
+
+        var ok = InfoDialog.Show(this, "测试 Magpie 超分",
+            $"将向 Magpie 发送热键 {hotkey}（来源：{source}）。\n\n" +
+            "本设置窗口会被 Magpie 超分约 3 秒，然后自动解除。请确认 Magpie 正在运行。",
+            InfoDialogButtons.OKCancel, InfoDialogIcon.Question);
+        if (ok != InfoDialogResult.OK) return;
+
+        if (btn != null) btn.IsEnabled = false;
+        try
+        {
+            var logPath = MagpieService.TryFindLogPath(MagpiePathBox.Text.Trim());
+            var size = MagpieService.LogSize(logPath);
+
+            Activate();
+            await Task.Delay(200);
+            if (!await MagpieService.SendHotkeyAsync(hotkey))
+            {
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.Firebrick;
+                MagpieStatusText.Text = "✗ 热键发送失败";
+                return;
+            }
+
+            MagpieStatusText.Foreground = System.Windows.Media.Brushes.Gray;
+            MagpieStatusText.Text = "已发送热键，等待 Magpie 响应…";
+            await Task.Delay(2500);
+
+            bool fired = MagpieService.LogHasScaleActivation(logPath, size, out var line);
+            await MagpieService.SendHotkeyAsync(hotkey); // 解除超分
+
+            if (fired)
+            {
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.SeaGreen;
+                MagpieStatusText.Text = $"✓ Magpie 已响应热键 {hotkey}";
+                AppLog.Write($"magpie test: {hotkey} fired — {line}");
+            }
+            else
+            {
+                var elevated = MagpieService.IsProbablyElevated();
+                MagpieStatusText.Foreground = System.Windows.Media.Brushes.Firebrick;
+                MagpieStatusText.Text = logPath == null
+                    ? "？找不到 Magpie 日志，无法确认；若本窗口刚才被超分则说明热键有效"
+                    : elevated
+                        ? $"✗ Magpie 没有响应热键 {hotkey}：Magpie 以管理员身份运行时会拦截普通权限程序的热键，请关闭 Magpie 的「总是以管理员身份运行」或让本程序以管理员身份运行"
+                        : $"✗ Magpie 日志里没有新增「缩放」记录：热键 {hotkey} 可能和 Magpie 内的设置不一致";
+                AppLog.Write($"magpie test: {hotkey} not confirmed (elevated={elevated}, log={logPath ?? "<none>"})");
+            }
+        }
+        finally
+        {
+            if (btn != null) btn.IsEnabled = true;
+        }
+    }
+
     private void OnBrowseScreenshotDir(object sender, RoutedEventArgs e)
     {
         try
@@ -372,10 +523,13 @@ public partial class SettingsWindow : Window
         {
             1 => "window",
             2 => "region",
-            3 => "monitor",
+            3 => "auto",
             4 => "screen",
-            _ => "auto"
+            _ => "monitor"
         };
+        _newConfig.MagpieUpscaleSlideshow = MagpieSlideshowCheckBox.IsChecked == true;
+        _newConfig.MagpieScaleHotkey = MagpieHotkeyBox.Text.Trim();
+        _newConfig.MagpiePath = MagpiePathBox.Text.Trim();
         _newConfig.OcrEngine = OcrEngineCombo.SelectedIndex switch { 1 => "local", 2 => "rapid", _ => "win" };
         _newConfig.LocalOcrUrl = LocalOcrUrlBox.Text.Trim();
         _newConfig.LocalOcrModel = LocalOcrModelBox.Text.Trim();
