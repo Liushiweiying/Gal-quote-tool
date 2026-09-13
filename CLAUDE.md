@@ -120,10 +120,13 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
 - 代码签名：自签名证书 `CN=Gal Quote Collector`（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。
 - **发布顺序（重要）**：打包 → 先签 `publish-installer\Gal-quote-tool.exe` → 再 Compress-Archive 生成 zip → 再跑 ISCC → 再签三个 exe（FDD/SCD/Setup）→ curl 上传（curl 需 `--ssl-no-revoke`；180MB 文件上传慢，后台任务 + 大超时）。
-- 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`，用 `curl --ssl-no-revoke --data-binary @file`；GitHub 令牌可用 `git credential fill`（protocol=https, host=github.com）获取。
+- 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；GitHub 令牌可用 `git credential fill`（protocol=https, host=github.com）获取。
+- **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
 ### 已修的坑（避免重复踩）
 - **WPF Slider 的 `ValueChanged` 会在 `InitializeComponent()` 期间触发**（设置 `Minimum` 时把默认值 0 钳到 Minimum）。若处理器引用了 XAML 中**声明在后面**的元素 → NullReferenceException → 打开窗口即崩溃。已给 `SettingsWindow` 的 Jpeg/Delay 两个滑杆加空值保护。
 - `App.OnStartup` 已注册 `DispatcherUnhandledException` / `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException`，异常写入 `%LOCALAPPDATA%\GalQuoteCollector\startup.log`（UI 线程异常不再闪退）。
 - 诊断开关：`Gal-quote-tool.exe --open-settings` 启动后自动打开设置窗口（用于复现/排查）。
 - **测试前必须先 `taskkill /IM Gal-quote-tool.exe /F`**：程序在运行时 exe 被锁，`dotnet build` 会静默失败（仍是旧二进制），导致"修了却没生效"的假象。构建后核对 exe 时间戳。
+- **诊断开关补充**：`--minimized`（托盘启动）、`--fix-ttb`（跑完整 TTB 开机修复流程，等 shell → 等 20s → 重启 → 像素校验，约 10~40s）。TTB 采样在"任务栏被全屏/Magpie 缩放窗口遮住"时会全黑，此时 `CanTell()` 返回 false、跳过补重启，属预期。
+- 引用 `Microsoft.Win32.Registry` / `System.Drawing` 等类型时不要新加 `using` 去和 WPF 的 `Application`、`MessageBox` 冲突；`MagpieService` 里用的是全限定名。
