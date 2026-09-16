@@ -38,6 +38,19 @@ public class HotkeyConfig
     public string MagpieScaleHotkey { get; set; } = "";
     // Magpie.exe 路径；留空自动探测
     public string MagpiePath { get; set; } = "";
+
+    // 使用统计里每个应用的自定义图标：进程名 → exe / 图片路径（留空 = 自动解析）
+    public Dictionary<string, string> UsageIconOverrides { get; set; } = new();
+    // 使用时间页：上次选的时间段（day/week/month/year/custom）与自选区间、窗口尺寸
+    public string UsagePeriodMode { get; set; } = "day";
+    public DateTime? UsageRangeFrom { get; set; }
+    public DateTime? UsageRangeTo { get; set; }
+    public double UsageWindowWidth { get; set; }
+    public double UsageWindowHeight { get; set; }
+    // 除默认锁屏进程（LockApp.exe / LogonUI.exe）外，用户额外指定的锁屏相关进程（如壁纸软件）
+    public List<string> UsageLockProcesses { get; set; } = new();
+    // 进程名 → 显示名 的自定义映射（如 msedge.exe → Edge）
+    public Dictionary<string, string> UsageNameMap { get; set; } = new();
     // 用户选择跳过的更新版本 tag（自动检查时不再提示）
     public string SkippedUpdateVersion { get; set; } = "";
     // 开机时自动重启一次 TranslucentTB，修复任务栏透明偶尔失效
@@ -168,6 +181,14 @@ public class HotkeyConfig
             MagpieUpscaleSlideshow = MagpieUpscaleSlideshow,
             MagpieScaleHotkey = MagpieScaleHotkey,
             MagpiePath = MagpiePath,
+            UsageIconOverrides = new Dictionary<string, string>(UsageIconOverrides),
+            UsagePeriodMode = UsagePeriodMode,
+            UsageRangeFrom = UsageRangeFrom,
+            UsageRangeTo = UsageRangeTo,
+            UsageWindowWidth = UsageWindowWidth,
+            UsageWindowHeight = UsageWindowHeight,
+            UsageLockProcesses = new List<string>(UsageLockProcesses),
+            UsageNameMap = new Dictionary<string, string>(UsageNameMap),
             SkippedUpdateVersion = SkippedUpdateVersion,
             EnableTranslucentTbFix = EnableTranslucentTbFix,
             OcrEngine = OcrEngine,

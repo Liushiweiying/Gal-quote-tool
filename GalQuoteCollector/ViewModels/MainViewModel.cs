@@ -93,6 +93,7 @@ public partial class MainViewModel : ObservableObject
         _captureMode = hotkeyConfig.CaptureMode;
         _preferNativeWhenMagpie = hotkeyConfig.PreferNativeCaptureWhenMagpie;
         _gameDetectService.SetRules(hotkeyConfig.GameNameRules);
+        Services.UsageRules.Load(hotkeyConfig); // 锁屏进程 + 应用显示名映射
 
         // Custom screenshot directory
         if (!string.IsNullOrWhiteSpace(hotkeyConfig.ScreenshotDirectory))
@@ -1108,6 +1109,7 @@ public partial class MainViewModel : ObservableObject
         _jpegQuality = cfg.JpegQuality;
         _captureMode = cfg.CaptureMode;
         _preferNativeWhenMagpie = cfg.PreferNativeCaptureWhenMagpie;
+        Services.UsageRules.Load(cfg); // 锁屏进程 / 显示名映射可能被改过
         ToggleUsageTracking(cfg.EnableUsageTracking);
         if (!string.IsNullOrWhiteSpace(cfg.FontFamily))
         {
@@ -2107,9 +2109,70 @@ public partial class MainViewModel : ObservableObject
             return;
         }
         var data = _usageTracker.GetData();
-        var win = new Views.UsageStatsWindow(_window, data);
+        var win = new Views.UsageStatsWindow(_window, data, _allQuotes.ToList(), _settingsService)
+        {
+            UsageSave = () => _usageTracker?.Save(),
+        };
         win.ShowDialog();
         _usageTracker.Save();
+    }
+
+    /// <summary>
+    /// 诊断用（--usage-demo）：复制一份使用数据、注入合成的锁屏分段后打开使用时间页（只读，不落盘）。
+    /// 这样不用真的锁屏也能检查绿色锁屏分段与各种时间段的渲染。
+    /// </summary>
+    public void OpenUsageStatsDemo()
+    {
+        var source = _usageTracker?.GetData() ?? new Models.UsageData();
+        var demo = BuildDemoUsageData(source);
+        var win = new Views.UsageStatsWindow(_window, demo, _allQuotes.ToList(), _settingsService, readOnly: true);
+        win.ShowDialog();
+    }
+
+    private static Models.UsageData CloneUsageData(Models.UsageData src)
+    {
+        var copy = new Models.UsageData { Blacklist = new List<string>(src.Blacklist) };
+        foreach (var (date, day) in src.Records)
+        {
+            var cloned = new Dictionary<string, Models.ProcessRecord>();
+            foreach (var (key, rec) in day)
+                cloned[key] = new Models.ProcessRecord
+                {
+                    Name = rec.Name,
+                    Seconds = rec.Seconds,
+                    Path = rec.Path,
+                    Hourly = (int[])rec.HourlyOrEmpty().Clone(),
+                };
+            copy.Records[date] = cloned;
+        }
+        return copy;
+    }
+
+    private static Models.UsageData BuildDemoUsageData(Models.UsageData src)
+    {
+        var data = CloneUsageData(src);
+        const string demoKey = "__demo__";
+
+        // 最近 14 天：注入「使用 + 锁屏」样例，让蓝色/绿色分段在日、周、月视图里都能看到
+        var rnd = new Random(20260913);
+        for (int i = 0; i < 14; i++)
+        {
+            var date = DateTime.Today.AddDays(-i).ToString("yyyy-MM-dd");
+            // 上午/下午各一段演示使用时长
+            data.AddSeconds(date, demoKey, "演示数据（合成）", 55 * 60 + rnd.Next(0, 40) * 60, 10);
+            data.AddSeconds(date, demoKey, "演示数据（合成）", 40 * 60 + rnd.Next(0, 50) * 60, 16);
+            // 凌晨与下午各一段锁屏
+            data.AddSeconds(date, Models.UsageData.LockedKey, "锁屏", 42 * 60, 2);
+            data.AddSeconds(date, Models.UsageData.LockedKey, "锁屏", 26 * 60, 14);
+        }
+        // 今天再多几段，小时图能看到蓝绿搭配
+        var today = DateTime.Today.ToString("yyyy-MM-dd");
+        data.AddSeconds(today, demoKey, "演示数据（合成）", 38 * 60, 9);
+        data.AddSeconds(today, demoKey, "演示数据（合成）", 52 * 60, 11);
+        data.AddSeconds(today, demoKey, "演示数据（合成）", 47 * 60, 15);
+        data.AddSeconds(today, Models.UsageData.LockedKey, "锁屏", 18 * 60, 7);
+        data.AddSeconds(today, Models.UsageData.LockedKey, "锁屏", 12 * 60, 20);
+        return data;
     }
 
     public void SaveUsageDataNow()

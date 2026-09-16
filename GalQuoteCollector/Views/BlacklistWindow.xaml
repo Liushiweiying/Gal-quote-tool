@@ -2,29 +2,60 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="管理黑名单"
-        Width="360" Height="300"
+        Width="520" Height="560"
+        MinWidth="440" MinHeight="420"
         WindowStartupLocation="CenterOwner"
-        Background="#FFF" ShowInTaskbar="False">
-    <Grid Margin="16">
+        Background="#F2F2F7" FontFamily="Segoe UI" ShowInTaskbar="False">
+    <Grid Margin="16,12,16,12">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="黑名单中的进程不会被记录使用时长" FontSize="12" Foreground="#888" Margin="0,0,0,8"/>
+        <TextBlock Grid.Row="0" Text="黑名单里的进程不再记录使用时长" FontSize="13"
+                   Foreground="#3C3C43" Margin="2,0,0,8"/>
 
-        <ListBox Grid.Row="1" x:Name="BlacklistBox" Margin="0,0,0,8"/>
+        <!-- 已记录的应用：直接点「加入黑名单」，不用手打进程名 -->
+        <TextBlock Grid.Row="1" Text="已记录的应用（点右侧按钮加入黑名单）" FontSize="12"
+                   FontWeight="SemiBold" Foreground="#8E8E93" Margin="2,0,0,6"/>
 
-        <Grid Grid.Row="2">
+        <Border Grid.Row="2" Background="White" BorderBrush="#E5E5EA" BorderThickness="1"
+                CornerRadius="12" Padding="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="AppsPanel"/>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock Grid.Row="3" Text="当前黑名单（点 ✕ 移除）" FontSize="12" FontWeight="SemiBold"
+                   Foreground="#8E8E93" Margin="2,12,0,6"/>
+
+        <Border Grid.Row="4" Background="White" BorderBrush="#E5E5EA" BorderThickness="1"
+                CornerRadius="12" Padding="10" MinHeight="60" MaxHeight="140">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel>
+                    <ItemsControl x:Name="BlacklistBox"/>
+                    <TextBlock x:Name="EmptyHint" Text="（空）" FontSize="12" Foreground="#C7C7CC"/>
+                </StackPanel>
+            </ScrollViewer>
+        </Border>
+
+        <Grid Grid.Row="5" Margin="0,12,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBox Grid.Column="0" x:Name="ProcessInput" Padding="6,4" VerticalContentAlignment="Center"/>
-            <Button Grid.Column="1" Content="添加" Click="OnAdd" Padding="10,4" Margin="4,0,0,0" Background="#5B6ABF" Foreground="White" BorderThickness="0" Cursor="Hand"/>
-            <Button Grid.Column="2" Content="关闭" Click="OnClose" Padding="10,4" Margin="4,0,0,0" Background="#EEE" Foreground="#333" BorderThickness="0" Cursor="Hand"/>
+            <TextBox Grid.Column="0" x:Name="ProcessInput" Padding="8,5" VerticalContentAlignment="Center"
+                     Background="White" BorderBrush="#DDD" FontSize="13"
+                     ToolTip="进程名，如 hokejyo 或 hokejyo.exe（可省略 .exe）"/>
+            <Button Grid.Column="1" Content="添加" Click="OnAdd" Padding="14,5" Margin="6,0,0,0"
+                    Background="#5B6ABF" Foreground="White" BorderThickness="0" Cursor="Hand" FontSize="13"/>
+            <Button Grid.Column="2" Content="关闭" Click="OnClose" Padding="14,5" Margin="6,0,0,0"
+                    Background="#E4E4EA" Foreground="#3C3C43" BorderThickness="0" Cursor="Hand" FontSize="13"/>
         </Grid>
     </Grid>
 </Window>

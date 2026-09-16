@@ -72,20 +72,13 @@ public partial class App : Application
             _startMinimized = e.Args.Contains("--minimized");
             Log($"Minimized mode: {_startMinimized}");
 
-            // High priority for auto-start scenarios (faster capture hotkey response)
-            if (_startMinimized)
-            {
-                try
-                {
-                    using var proc = System.Diagnostics.Process.GetCurrentProcess();
-                    proc.PriorityClass = System.Diagnostics.ProcessPriorityClass.High;
-                    Log("Priority set to High");
-                }
-                catch (Exception ex)
-                {
-                    Log($"Failed to set priority: {ex.Message}");
-                }
-            }
+            // 触摸板/滚轮滚动手感：统一半速（对所有窗口生效）
+            Services.SmoothScroll.Register();
+
+            // 以前开机自启时会把整个进程设成 High 优先级（想让它响应热键更快）。
+            // 这是坏做法：常驻进程占 High 会跟游戏抢 CPU，而 OCR/截图本身很吃 CPU，
+            // 热键延迟也主要取决于低级钩子而不是优先级。现在保持默认（Normal）。
+            Log($"Priority: {System.Diagnostics.Process.GetCurrentProcess().PriorityClass}（默认，不再提升）");
 
             CreateTrayIcon();
             Log("Tray icon created");
@@ -125,6 +118,25 @@ public partial class App : Application
                     catch (Exception ex)
                     {
                         Log($"--open-usage failed: {ex}");
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            }
+
+            // Diagnostic: --usage-demo 用「真数据 + 注入的锁屏样例」打开使用时间页（只读、不落盘），
+            // 用来在没有真正锁屏的情况下检查绿色锁屏分段 / 多时间段渲染
+            if (e.Args.Contains("--usage-demo"))
+            {
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    Log("--usage-demo: opening usage stats window with demo data (read-only)");
+                    try
+                    {
+                        if (MainWindow?.DataContext is ViewModels.MainViewModel vm)
+                            vm.OpenUsageStatsDemo();
+                    }
+                    catch (Exception ex)
+                    {
+                        Log($"--usage-demo failed: {ex}");
                     }
                 }), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
             }

@@ -1,0 +1,105 @@
+<Window x:Class="GalQuoteCollector.Views.ProcessMapWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="应用名 / 锁屏进程"
+        Width="620" Height="640"
+        MinWidth="500" MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        Background="#F2F2F7" FontFamily="Segoe UI" ShowInTaskbar="False">
+    <Window.Resources>
+        <!-- 分段开关（按时间 / 按名称） -->
+        <Style x:Key="SegToggle" TargetType="ToggleButton">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Foreground" Value="#3C3C43"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="White"/>
+                                <Setter Property="Foreground" Value="#1D1D1F"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid Margin="16,12,16,12">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Grid Grid.Row="0" Margin="2,0,0,6">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="左边是进程名，右边填你想显示的名字（留空 = 用自动识别的名字）"
+                       FontSize="12" Foreground="#8E8E93" VerticalAlignment="Center" TextWrapping="Wrap"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <TextBlock Text="排序" FontSize="12" Foreground="#8E8E93" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Border Background="#E4E4EA" CornerRadius="9" Padding="2">
+                    <StackPanel Orientation="Horizontal">
+                        <ToggleButton x:Name="SortByTimeBtn" Content="按时间" Click="OnSortByTime" IsChecked="True"
+                                      Style="{StaticResource SegToggle}" Padding="12,3"/>
+                        <ToggleButton x:Name="SortByNameBtn" Content="按名称" Click="OnSortByName"
+                                      Style="{StaticResource SegToggle}" Padding="12,3"/>
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Grid>
+
+        <Border Grid.Row="1" Background="White" BorderBrush="#E5E5EA" BorderThickness="1"
+                CornerRadius="12" Padding="4">
+            <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="AppsPanel"/>
+            </ScrollViewer>
+        </Border>
+
+        <TextBlock Grid.Row="2" Text="锁屏相关进程（默认已含 LockApp.exe / LogonUI.exe；壁纸软件画锁屏时也加进来）"
+                   FontSize="12" FontWeight="SemiBold" Foreground="#8E8E93"
+                   Margin="2,12,0,6" TextWrapping="Wrap"/>
+
+        <Border Grid.Row="3" Background="White" BorderBrush="#E5E5EA" BorderThickness="1"
+                CornerRadius="12" Padding="10" MaxHeight="150">
+            <StackPanel>
+                <ScrollViewer VerticalScrollBarVisibility="Auto" MaxHeight="80">
+                    <ItemsControl x:Name="LockList"/>
+                </ScrollViewer>
+                <Grid Margin="0,6,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" x:Name="LockInput" Padding="8,4" FontSize="12"
+                             VerticalContentAlignment="Center" Background="#F7F7FA" BorderBrush="#E0E0E0"
+                             ToolTip="进程名，如 wallpaper32.exe / Lively.exe（可省略 .exe）"/>
+                    <Button Grid.Column="1" Content="添加" Click="OnAddLockProcess" Padding="12,4" Margin="6,0,0,0"
+                            FontSize="12" Background="#E4E4EA" Foreground="#3C3C43" BorderThickness="0" Cursor="Hand"/>
+                </Grid>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,12,0,0">
+            <TextBlock Text="每行可以单独保存/复原；锁屏进程改动即时生效"
+                       FontSize="11" Foreground="#8E8E93" VerticalAlignment="Center" Margin="0,0,10,0"/>
+            <Button Content="全部保存" Click="OnSave" Padding="16,6" FontSize="13" FontWeight="SemiBold"
+                    Background="#5B6ABF" Foreground="White" BorderThickness="0" Cursor="Hand"/>
+            <Button Content="关闭" Click="OnCancel" Padding="16,6" FontSize="13" Margin="8,0,0,0"
+                    Background="#E4E4EA" Foreground="#3C3C43" BorderThickness="0" Cursor="Hand"/>
+        </StackPanel>
+    </Grid>
+</Window>

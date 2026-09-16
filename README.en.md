@@ -105,6 +105,20 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.0 (2026-09-16)
+- **Reworked** the "Usage time" page into an iOS Screen Time style card layout
+  - Big total + comparison with the previous period + hourly / daily / weekly / monthly bar charts; hover a bar for a value bubble (click to pin, Esc or click elsewhere to unpin) while the other bars dim
+  - Axis labels adapt to the window width, chart height scales with width, the app list becomes two columns on wide windows, window size is remembered
+- **New** lock-screen time tracked separately (green)
+  - While the session is locked only "Locked" is recorded — no more time credited to a game/app; `LockApp.exe` (the Windows lock screen) and `LogonUI.exe` are folded into it, and existing data is migrated once
+  - Bars stack blue (usage) over green (locked); the card, legend and scope section all show locked time
+  - Detected via session events + input-desktop checks (works even when a wallpaper tool draws the lock screen) + a user-editable lock-process list
+- **New** periods: Today / Last 7 days / This month / This year / **Custom range (calendar)**, each compared with the previous equal-length period
+- **New** "App names / lock processes" window: rename any process (per-row save/undo, sort by time or by name); same app recorded under different process names or casing is no longer split
+- **New** app icons resolved from many sources (recorded path → running process → MuiCache → uninstall info → App Paths → Everything HTTP), falling back to a coloured initial; right-click a row to pick an image, an exe, auto-search, or reset
+- **Improved** all windows scroll at half speed with smooth pixel scrolling
+- **Improved** blacklist window redesigned (lists recorded apps, one click to block, asks whether to delete existing data)
+- **Removed** the High process priority on auto-start (a resident High process steals CPU from games)
 ### v1.2.6 (2026-09-13)
 - **Fix** the slideshow upscaling targeted the **wrong window**: it fired as soon as the slideshow opened, upscaling the small window. It now fires when you enter **fullscreen (F11)** — the fullscreen slideshow is the window that gets upscaled — and is released when you leave fullscreen or close the slideshow
 - **Fix** the result is now confirmed through Magpie's log: Magpie's hotkey is a toggle, so **pressing it while another window is being scaled only stops that session** — the app now sends it again to move the upscaling onto the fullscreen slideshow and says so in the status bar

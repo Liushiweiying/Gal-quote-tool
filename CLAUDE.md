@@ -94,7 +94,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 应用侧（C#）的用户内容文件删除**均已**走 `FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin)`（MainViewModel.cs 的 DeleteScreenshots/DeleteScreenshot/DeleteUnassociatedScreenshots/MigrateScreenshots），无需改动；自启 VBS/lnk、临时文件、日志截断为永久删除属合理范围。
 
 ### 发布约定（用户要求，2026-08-13）
-- 版本号走 **1.2.x**（当前 v1.2.6；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v126` 形式（去掉小数点）。
+- 版本号走 **1.2.x / 1.3.x**（当前 v1.3.0，2026-09-16 发布；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v130` 形式（去掉小数点）。
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
@@ -131,21 +131,27 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
    - 用户反馈：按按钮时没有超分（F11 那条链路是通的）。
    - 现状（代码层面）：`SlideshowWindow.xaml` 的 `FullscreenBtn.Click → OnToggleFullscreen → ToggleFullscreen()`，而 `ToggleFullscreen()` 里**已经**调了 `EnableMagpieUpscaleAsync()`/`ReleaseMagpieUpscaleAsync()`——理论上按钮和 F11 是同一条路径，所以很可能是与第 1 条同因（鼠标点击后的前台/激活时机、或日志误判导致补发把会话停掉）。
    - 下次实测：点 ⛶ 进全屏后看 `startup.log` 里有没有 `slideshow magpie: scaling fullscreen window with …`，以及是否出现「no scaling start seen, retrying once」。
-3. **「使用时长统计」窗口改成 iOS「屏幕使用时间」那种卡片式页面**（参考图：用户 2026-09-13 发的 iPhone 截图，附件对象 `C:\Users\未时\.dsh\attachments\v1\objects\af\af0e5519c845668b569ff4f8d7107a06e72106879c8106283610e2d315610064`，1007×4165 竖版长图）
-   - 参考图结构（从上到下）：① 标题栏 `← Screen time`；② 分段控件 `Today` / `Last 7 days`；③ 大卡片：总时长 `3 h 52 min` + 与昨天对比 `9 h 22 min less than yesterday.` + **24 小时柱状图**（y 轴 0/29/58 min，x 轴 00:00/06:00/12:00/18:00/24:00）+ 一行小字脚注；④ `APP USAGE` 区块：**图标 + 名称 + 右侧时长 + 细进度条**（按当天最大项为满格），多于若干条折叠成 `Show more`；⑤ `UNLOCKS` 区块：大字总数 `7 in total` + 24 小时柱状图 + 两行小字 `Unlock frequency / Once every 1 h 57 min`；⑥ `EXTENSIONS` 区块：`名称 —— 值` 两行。
-   - 适配映射（现有数据 `%LOCALAPPDATA%\GalQuoteCollector\usage.json` = `Records[日期][进程key] = {Name, Seconds}`）：
-     | 参考图元素 | 本程序 | 数据 |
-     |---|---|---|
-     | 总时长 / 与昨天对比 | 当天各进程 Seconds 求和、与昨天相减 | ✅ 已有 |
-     | 24 小时柱状图 | 现在**只有按天累计，没有小时维度** | ❌ 需扩展 |
-     | APP USAGE 行（名称/时长/进度条） | `Records[日期]` 的 Name/Seconds，进度条 = 该项 / 当天最大项 | ✅ 已有 |
-     | 应用图标 | 现在只存进程名，没存 exe 路径 | ⚠️ 需记录时存 `Path`，或退化成首字母色块 |
-     | `Show more` | 默认显示前 6 条，点击展开 | ✅ 易做 |
-     | `Today / Last 7 days` | 已有 `DayModeBtn` / `WeekModeBtn`（今天 / 最近 7 天） | ✅ 复用 |
-     | `UNLOCKS` / `EXTENSIONS` | 没有对应概念 | ❌ 需先定口径（见下） |
-   - 需要的数据结构改动（`Models/UsageData.cs`，JSON 向后兼容，旧文件缺字段默认 0）：`ProcessRecord` 加 `int[] Hourly = new int[24]` 与 `string Path = ""`；`UsageTracker.Tick()` 里同时 `Hourly[DateTime.Now.Hour] += 60`。旧数据没有小时桶 → 历史日期柱状图只能空着（与 iOS 一致：只有当天有明细），「最近 7 天」改用每日总和画柱。
-   - **做之前必须先问用户的三件事**：① `UNLOCKS` 那块换成什么（候选：采集次数 / 活跃时段数 / 平均每次时长 / 直接去掉）；② `EXTENSIONS` 那块换成什么（候选：统计范围「已记录 N 天 · 黑名单 N 个」/ 标签分组统计 / 去掉）；③ 是改造现有 `UsageStatsWindow` 还是新开一个「今日概览」页。
-   - WPF 实现要点：页面 = `ScrollViewer` + 卡片 `Border`（CornerRadius 12、白底、1px #E5E5EA 边框、Section 小标题 #8E8E93 大写）；柱状图继续用现有手绘 `Rectangle` 方式（不引第三方库），y 轴沿用现有 `NiceScaleMax()` 的「整齐刻度」；图标用 `System.Drawing.Icon.ExtractAssociatedIcon(exePath)` + `Imaging.CreateBitmapSourceFromHIcon`，取不到就用首字母圆形色块；顶部沿用现有 `DayModeBtn`/`WeekModeBtn` 与日历按钮，只改样式。参考图是浅色主题 + 蓝色柱，适配时用本程序主色 `#5B6ABF`（或 iOS 蓝 `#007AFF`）。
+3. **「使用时长统计」窗口改成 iOS「屏幕使用时间」那种卡片式页面**（✅ v1.3.0 已完成，2026-09-16）
+   - 已实现：整页重做（`UsageStatsWindow` + 新控件 `Views/Controls/UsageBarChart.cs` + `Services/UsageAggregator.cs` + `Services/UsageRules.cs`），iOS 式卡片、悬浮数值气泡、锁屏绿色分段、多时间段（今天/7 天/本月/今年/自选范围）、应用名映射窗口（`Views/ProcessMapWindow`）、图标多来源解析（`Services/AppIconService.cs`）、响应式两列布局。
+   - 参考图的 `UNLOCKS` → 换成「采集」（条数 + 每小时柱状图）；`EXTENSIONS` → 换成「统计范围」（区间/使用时长/锁屏时长/应用数/工具运行/黑名单）。
+   - 关键情报与坑记录在下面「### 使用时间页（v1.3.0 起）」一节。
+
+### 使用时间页（v1.3.0 起，改动前先读这节）
+- **数据**（`Models/UsageData.cs`，`%LOCALAPPDATA%\GalQuoteCollector\usage.json`）：`Records[日期][进程key] = {Name, Seconds, Hourly[24], Path}`；两个保留 key：`__tool__`（工具运行）、`__locked__`（锁屏），都不计入「使用时长」。
+  - 内层字典**必须大小写不敏感**：反序列化出来的默认字典是区分大小写的，`GetOrCreateDay()` 会重建。**注意不能用 `new Dictionary(day, OrdinalIgnoreCase)`**——旧数据里本来就有 `Steam.exe`/`steam.exe` 这种只差大小写的重复键，那样构造会抛 `An item with the same key has already been added`（v1.3.0 踩过，整段迁移被异常中断且不报错给用户）。要逐个搬并就地合并（`MergeRecord`）。
+  - 一次性整理（`Normalize` = `MergeCaseDuplicateKeys` + `MoveLockProcesses`）：合并大小写重复、把锁屏进程的时长并入 `__locked__`（用户历史里 40.4 小时的「Windows 默认锁屏界面」= `LockApp.exe` 就是这么迁走的）。`MoveLockProcesses` 幂等且每次都跑，用户以后新加锁屏进程也会迁移。
+- **锁屏识别**（`Services/UsageTracker.cs`）：① `SystemEvents.SessionSwitch`（锁/解锁即时切换并写日志 `usage tracker: session locked/unlocked`）；② 每分钟兜底 `OpenInputDesktop` → 桌面名不是 `Default` 即锁屏（**壁纸软件画的锁屏也能认出来**，所以不要把 `wallpaper64.exe` 这类平时也在跑的进程加进锁屏列表）；③ 进程名在锁屏列表里（默认 `LockApp.exe`/`LogonUI.exe`，可在「应用名 / 锁屏进程」里加）。
+- **规则**（`Services/UsageRules.cs`，静态单例，`MainViewModel` 启动时 `Load(cfg)`、设置保存后重新 `Load`）：锁屏进程列表 + 进程名 → 显示名映射（`HotkeyConfig.UsageLockProcesses` / `UsageNameMap`）。
+  - `GroupKey()`：设了自定义名就按自定义名归并（可把不同 exe 合成一条），否则按进程名 → **应用列表按进程名归组**（曾经按显示名归组，导致浏览器标签/歌名把同一应用拆成多条）。
+  - `AutoName()`：历史里明显是窗口标题的名字（含 ` - `/`–`/`—`、以 `?`/`*` 开头、以 `.exe` 结尾）自动退回进程名。
+- **图表控件**（`Views/Controls/UsageBarChart.cs`，自绘 FrameworkElement）：
+  - 只有**绘图区**内才弹气泡（避开顶部气泡预留区与底部时间刻度条）；点击用**更严的柱子矩形命中**（`HitBarIndex`）——点在柱子之间的空白要取消钉住，只有真的点在柱子上才钉住/换一根；`Esc`/点图表以外由 `UsageStatsWindow` 统一取消（`_charts` 列表 + `Unpin`）。
+  - 必须重写 `HitTestCore` 返回整块命中，否则 FrameworkElement 只在"画出来的内容"上可命中，空白处点击会漏掉。
+  - 刻度密度按控件宽度自适应（窄 → 只显示 0/12/23），柱高 = `clamp(width*0.22, 112, 200)`。
+- **图标**（`Services/AppIconService.cs`）：解析顺序 = 用户自定义 → 记录路径 → 运行中进程（`MainModule`/`QueryFullProcessImageName`）→ MuiCache（游戏命中率高）→ 卸载信息 → App Paths → Everything HTTP（`127.0.0.1:80/8080`，需用户开 HTTP 服务）→（手动）常见目录扫描。位图在内存缓存（含负缓存），重建列表不会先闪首字母；右键行可自定义（图片/exe/自动搜索/恢复）。
+- **滚动**：`Services/SmoothScroll.cs` 在 `App.OnStartup` 里用类级处理器把滚轮/触摸板滚动改成半速按像素滚动（`Factor = 0.5`）。
+- **窗口行为**：点窗口外自动关闭（`Deactivated` → 等 650ms 再确认：仍失活、无本程序其它窗口在前台、没有菜单抓鼠标才关，并写日志 `usage window: 点窗口外 → 自动关闭`）；子对话框/文件对话框期间用 `_childDialogs` 计数保护。
+- 诊断：`--open-usage`（真实数据）、`--usage-demo`（**只读**，注入合成的锁屏/使用样例，用来在没真锁屏时验证渲染）。注意 demo 只读不落盘，但追踪器本身仍会正常保存真实数据。
 
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
