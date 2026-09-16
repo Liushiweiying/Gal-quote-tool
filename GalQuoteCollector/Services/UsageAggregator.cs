@@ -64,11 +64,15 @@ public static class UsageAggregator
     }
 
     public static UsageReport Build(UsageData data, DateTime from, DateTime to, UsageGranularity? granularity = null,
-        int maxBuckets = 64)
+        int maxBuckets = 64, IReadOnlyCollection<string>? onlyKeys = null)
     {
         from = from.Date;
         to = to.Date;
         if (to < from) (from, to) = (to, from);
+
+        var filter = onlyKeys == null || onlyKeys.Count == 0
+            ? null
+            : new HashSet<string>(onlyKeys, StringComparer.OrdinalIgnoreCase);
 
         var g = granularity ?? PickGranularity(from, to);
         // 桶太多就提高粒度，避免柱子细到看不见
@@ -95,6 +99,7 @@ public static class UsageAggregator
             foreach (var kv in day)
             {
                 if (kv.Key == UsageData.ToolKey || kv.Key == UsageData.LockedKey) continue;
+                if (filter != null && !filter.Contains(kv.Key)) continue;
 
                 var groupKey = UsageRules.GroupKey(kv.Key);
                 if (string.IsNullOrWhiteSpace(groupKey)) groupKey = kv.Key;
@@ -155,27 +160,39 @@ public static class UsageAggregator
             for (var d = bucketStart.Date; d <= bucketEnd.Date; d = d.AddDays(1))
             {
                 var key = d.ToString("yyyy-MM-dd");
+                var day = data.GetDay(key);
                 if (g == UsageGranularity.Hourly)
                 {
-                    var day = data.GetDay(key);
                     if (day != null)
                     {
                         foreach (var kv in day)
                         {
                             if (kv.Key == UsageData.LockedKey)
                             {
-                                bucket.LockedSeconds += kv.Value.HourlyOrEmpty()[bucketStart.Hour];
+                                if (filter == null)
+                                    bucket.LockedSeconds += kv.Value.HourlyOrEmpty()[bucketStart.Hour];
                                 continue;
                             }
                             if (kv.Key == UsageData.ToolKey) continue;
+                            if (filter != null && !filter.Contains(kv.Key)) continue;
                             bucket.ActiveSeconds += kv.Value.HourlyOrEmpty()[bucketStart.Hour];
                         }
                     }
                 }
-                else
+                else if (filter == null)
                 {
                     bucket.ActiveSeconds += data.TotalSeconds(key);
                     bucket.LockedSeconds += data.LockedSeconds(key);
+                }
+                else if (day != null)
+                {
+                    // 只看某些应用时：逐 key 累加（锁屏不算在单个应用头上）
+                    foreach (var kv in day)
+                    {
+                        if (kv.Key == UsageData.LockedKey || kv.Key == UsageData.ToolKey) continue;
+                        if (!filter.Contains(kv.Key)) continue;
+                        bucket.ActiveSeconds += kv.Value.Seconds;
+                    }
                 }
             }
             report.Buckets.Add(bucket);

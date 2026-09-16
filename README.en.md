@@ -105,6 +105,12 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.1 (2026-09-16)
+- **New** click an app row to open a **per-app detail page** (like tapping an app in iOS Screen Time)
+  - Big "Average daily" figure, total for the period, and the app's own bar chart (hourly for today, daily for 7 days / this month, monthly for this year)
+  - Scope table: range / total / average per day / days with records / busiest day / last used / **share of total time** / process names
+  - A `›` chevron marks clickable rows; the detail page has its own period switcher and closes with `Esc` or "← Back"
+- **Fix** app rows were only clickable on the text itself (the gap between name and duration did nothing) — the whole row is clickable now
 ### v1.3.0 (2026-09-16)
 - **Reworked** the "Usage time" page into an iOS Screen Time style card layout
   - Big total + comparison with the previous period + hourly / daily / weekly / monthly bar charts; hover a bar for a value bubble (click to pin, Esc or click elsewhere to unpin) while the other bars dim

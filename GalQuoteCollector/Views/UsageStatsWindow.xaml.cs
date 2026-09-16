@@ -477,11 +477,18 @@ public partial class UsageStatsWindow : Window
 
     private UIElement BuildAppRow(UsageAppStat app, int maxSec)
     {
-        var outer = new StackPanel { Margin = new Thickness(0, 6, 0, 8) };
+        // Transparent 背景是"整行可点"的关键：没有背景时只有文字本身能被点到，
+        // 点在名称和时长之间的空白会漏到卡片上，行点击就失效了。
+        var outer = new StackPanel
+        {
+            Margin = new Thickness(0, 6, 0, 8),
+            Background = Brushes.Transparent,
+        };
 
         var row = new Grid();
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
         row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
         var icon = BuildIcon(app.Name);
@@ -509,7 +516,28 @@ public partial class UsageStatsWindow : Window
         };
         Grid.SetColumn(timeText, 2);
         row.Children.Add(timeText);
+
+        // 右侧箭头：提示"点进去看这个应用的详情"
+        var chevron = new TextBlock
+        {
+            Text = "›",
+            FontSize = 16,
+            Foreground = new SolidColorBrush(Faint),
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0)
+        };
+        Grid.SetColumn(chevron, 3);
+        row.Children.Add(chevron);
+
         outer.Children.Add(row);
+
+        // 点这一行 → 该应用的详情页（平均每天 / 区间合计 / 自己的柱状图）
+        outer.Cursor = System.Windows.Input.Cursors.Hand;
+        outer.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            OpenAppDetail(app);
+        };
 
         if (app.AllBlacklisted)
         {
@@ -553,7 +581,15 @@ public partial class UsageStatsWindow : Window
         return outer;
     }
 
-    private static UIElement BuildProgressBar(double fraction)
+    /// <summary>打开某个应用的详情页（平均每天 / 区间合计 / 该应用自己的柱状图）。</summary>
+    private void OpenAppDetail(UsageAppStat app)
+    {
+        AppLog.Write($"usage: open app detail '{app.Name}' keys=[{string.Join(",", app.Keys)}]");
+        var win = new AppUsageWindow(this, _data, app, _period, _anchor, _customFrom, _customTo);
+        ShowChildDialog(win);
+    }
+
+    private UIElement BuildProgressBar(double fraction)
     {
         fraction = Math.Max(0, Math.Min(1, fraction));
         var grid = new Grid { Height = 3, Margin = new Thickness(0, 7, 0, 0) };
