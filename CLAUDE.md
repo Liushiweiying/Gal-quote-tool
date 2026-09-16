@@ -162,6 +162,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
 ### 已修的坑（避免重复踩）
+- **网络**：用户平时挂加速器（代理）才能稳定访问 GitHub；**加速器没开时**会出现 `git credential fill` 报 `refusing to work with credential missing protocol field`、GitHub API/上传超时等怪现象。遇到这类报错先问一句是不是没开加速器，再考虑改代码/换方案。
 - **WPF Slider 的 `ValueChanged` 会在 `InitializeComponent()` 期间触发**（设置 `Minimum` 时把默认值 0 钳到 Minimum）。若处理器引用了 XAML 中**声明在后面**的元素 → NullReferenceException → 打开窗口即崩溃。已给 `SettingsWindow` 的 Jpeg/Delay 两个滑杆加空值保护。
 - `App.OnStartup` 已注册 `DispatcherUnhandledException` / `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException`，异常写入 `%LOCALAPPDATA%\GalQuoteCollector\startup.log`（UI 线程异常不再闪退）。
 - 诊断开关：`Gal-quote-tool.exe --open-settings` 启动后自动打开设置窗口（用于复现/排查）。
