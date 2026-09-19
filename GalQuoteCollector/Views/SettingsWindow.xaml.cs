@@ -29,6 +29,7 @@ public partial class SettingsWindow : Window
     {
         _newConfig = cfg.Clone();
         AutoStartCheckBox.IsChecked = cfg.AutoStart;
+        SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
         DelaySlider.Value = cfg.CaptureDelayMs;
         UpdateDelayLabel(cfg.CaptureDelayMs);
         SlideshowModeCombo.SelectedIndex = cfg.SlideshowMode;
@@ -501,6 +502,7 @@ public partial class SettingsWindow : Window
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
+        _newConfig.SwallowCaptureHotkey = SwallowHotkeyCheckBox.IsChecked == true;
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         _newConfig.SlideshowLoop = SlideshowLoopCheckBox.IsChecked == true;

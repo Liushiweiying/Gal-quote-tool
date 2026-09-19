@@ -118,7 +118,10 @@ public partial class MainViewModel : ObservableObject
 
         _hotkeyService = new HotkeyService(
             hotkeyConfig.ToModifiers(), hotkeyConfig.VirtualKey,
-            hotkeyConfig.ToAddModifiers(), hotkeyConfig.AddShotVirtualKey);
+            hotkeyConfig.ToAddModifiers(), hotkeyConfig.AddShotVirtualKey)
+        {
+            SwallowHotkeys = hotkeyConfig.SwallowCaptureHotkey,
+        };
         _hotkeyService.HotkeyPressed += OnHotkeyPressed;
         _hotkeyService.HotkeyPressedAdd += OnHotkeyPressedAdd;
 
@@ -1051,7 +1054,13 @@ public partial class MainViewModel : ObservableObject
         var currentConfig = _settingsService.LoadHotkeyConfig();
         var dialog = new SettingsWindow(_window, currentConfig, _hotkeyService.CurrentHotkeyDisplay);
 
-        if (dialog.ShowDialog() == true && dialog.Result != null)
+        // 改键期间挂起热键：否则用户在设置里按新组合时会被当成一次截图
+        _hotkeyService.Suspend();
+        bool? settingsResult;
+        try { settingsResult = dialog.ShowDialog(); }
+        finally { _hotkeyService.Resume(); }
+
+        if (settingsResult == true && dialog.Result != null)
         {
             var newConfig = dialog.Result;
             _captureDelayMs = newConfig.CaptureDelayMs;
@@ -1069,6 +1078,7 @@ public partial class MainViewModel : ObservableObject
             }
 
             _hotkeyService.UpdateAddHotkey(newConfig.ToAddModifiers(), newConfig.AddShotVirtualKey);
+            _hotkeyService.SwallowHotkeys = newConfig.SwallowCaptureHotkey;
 
             // UpdateHotkey returns false when the primary collides with the add-screenshot
             // hotkey — the two must stay distinct so a single press can't fire both actions.

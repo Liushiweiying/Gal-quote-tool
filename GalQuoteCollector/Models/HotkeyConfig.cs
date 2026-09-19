@@ -12,6 +12,8 @@ public class HotkeyConfig
     public uint VirtualKey { get; set; } = 0x5A; // Z
     public bool AutoStart { get; set; }
     public int CaptureDelayMs { get; set; } = 200;
+    // 触发截图热键时是否吞掉这次按键（很多游戏引擎也用 Alt+E 之类的键，不吞会同时弹出游戏窗口）
+    public bool SwallowCaptureHotkey { get; set; } = true;
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public bool SlideshowLoop { get; set; }
     public string FontFamily { get; set; } = "Segoe UI";
@@ -165,6 +167,7 @@ public class HotkeyConfig
             VirtualKey = VirtualKey,
             AutoStart = AutoStart,
             CaptureDelayMs = CaptureDelayMs,
+            SwallowCaptureHotkey = SwallowCaptureHotkey,
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
             FontFamily = FontFamily,

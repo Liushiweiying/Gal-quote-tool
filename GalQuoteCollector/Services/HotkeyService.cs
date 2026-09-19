@@ -7,7 +7,9 @@ public class HotkeyService : IDisposable
 {
     private const int WH_KEYBOARD_LL = 13;
     private const int WM_KEYDOWN = 0x0100;
+    private const int WM_KEYUP = 0x0101;
     private const int WM_SYSKEYDOWN = 0x0104;
+    private const int WM_SYSKEYUP = 0x0105;
 
     private IntPtr _hookId = IntPtr.Zero;
     private HookProc? _hookProc;
@@ -17,6 +19,24 @@ public class HotkeyService : IDisposable
 
     // Secondary hotkey (add screenshot)
     private uint _mod2, _vk2;
+
+    /// <summary>
+    /// 触发截图热键时是否吞掉这次按键（不让前台程序收到）。
+    /// 很多游戏的引擎也用 Alt+E 之类热键，不吞的话会同时弹游戏的窗口。
+    /// 默认开；在自己的窗口里（设置改键等）永远不吞。
+    /// </summary>
+    public bool SwallowHotkeys { get; set; } = true;
+
+    // 挂起计数：设置窗口改键期间不要触发截图
+    private int _suspended;
+
+    // 已经吞掉了按下事件的键，对应的抬起也要吞掉，避免前台程序收到"悬空"按键
+    private uint _swallowUpVk;
+
+    private static int _ownPid = Process.GetCurrentProcess().Id;
+
+    public void Suspend() => _suspended++;
+    public void Resume() { if (_suspended > 0) _suspended--; }
 
     public event EventHandler? HotkeyPressed;
     public event EventHandler? HotkeyPressedAdd;
@@ -83,17 +103,45 @@ public class HotkeyService : IDisposable
         {
             int vkCode = Marshal.ReadInt32(lParam);
             bool keyDown = wParam == WM_KEYDOWN || wParam == WM_SYSKEYDOWN;
+            bool keyUp = wParam == WM_KEYUP || wParam == WM_SYSKEYUP;
 
-            if (keyDown)
+            if (keyDown && _suspended == 0)
             {
-                if (vkCode == _vk1 && ModifiersMatch(_mod1, WinKeyDown))
-                    HotkeyPressed?.Invoke(this, EventArgs.Empty);
+                bool primary = vkCode == _vk1 && ModifiersMatch(_mod1, WinKeyDown);
+                bool add = _vk2 > 0 && vkCode == _vk2 && ModifiersMatch(_mod2, WinKeyDown);
 
-                if (_vk2 > 0 && vkCode == _vk2 && ModifiersMatch(_mod2, WinKeyDown))
-                    HotkeyPressedAdd?.Invoke(this, EventArgs.Empty);
+                if (primary) HotkeyPressed?.Invoke(this, EventArgs.Empty);
+                if (add) HotkeyPressedAdd?.Invoke(this, EventArgs.Empty);
+
+                // 吞掉这次按键，免得游戏引擎的同名热键也被触发
+                // （在自己窗口里不吞：设置界面改键、或者我们在自己的 UI 上按了同样的键）
+                if ((primary || add) && SwallowHotkeys && !IsOwnProcessForeground())
+                {
+                    _swallowUpVk = (uint)vkCode;
+                    AppLog.Write($"hotkey: 已吞掉 {FormatKeys(primary ? _mod1 : _mod2, (uint)vkCode)}（不再传给前台程序）");
+                    return 1;
+                }
+            }
+            else if (keyUp && _swallowUpVk != 0 && _swallowUpVk == (uint)vkCode)
+            {
+                _swallowUpVk = 0;
+                return 1;
             }
         }
         return CallNextHookEx(_hookId, nCode, wParam, lParam);
+    }
+
+    /// <summary>前台窗口是不是本程序自己（自己窗口里不改键、不吞键）。</summary>
+    private static bool IsOwnProcessForeground()
+    {
+        try
+        {
+            IntPtr hwnd = GetForegroundWindow();
+            if (hwnd == IntPtr.Zero) return false;
+            GetWindowThreadProcessId(hwnd, out uint pid);
+            return pid == (uint)_ownPid;
+        }
+        catch { return false; }
     }
 
     public void Dispose()
@@ -126,4 +174,10 @@ public class HotkeyService : IDisposable
     private static extern IntPtr GetModuleHandle(string lpModuleName);
     [DllImport("user32.dll")]
     private static extern short GetAsyncKeyState(int vKey);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint lpdwProcessId);
 }

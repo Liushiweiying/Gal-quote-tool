@@ -105,6 +105,14 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.2 (2026-09-19)
+- **Fix** lock-screen time was heavily over-counted (a v1.3.0/v1.3.1 bug)
+  - Cause: the old rule treated "input desktop is not Default" as locked; without any real lock event this still fired, crediting a whole evening of gaming to the lock bucket (about 145 of 229 minutes on one day)
+  - Locked is now decided by three signals, most reliable first: (1) a real session lock event (`SessionLock`/`SessionUnlock`; console/remote disconnect no longer counts) (2) the lock-screen app itself is in the foreground (`LockApp.exe` / `LogonUI.exe`, user-extensible) (3) the input desktop is not Default **and** there has been no user input for at least 2 minutes
+  - Every locked minute now logs its reason to `startup.log`, and a missed unlock event is recovered when the desktop returns to Default
+- **New** the capture hotkey is no longer passed on to games (toggleable in Settings): engines with their own `Alt+E` hotkey used to pop their own window on every capture; that key press is now swallowed (never inside our own windows)
+- **Fix** rebinding the hotkey in Settings no longer fires a capture (hotkeys are suspended while the dialog is open)
+- **New** command-line helpers to repair history: `--fix-lock <date> <process> [fromHour toHour]` and `--move-usage <date> <fromProcess> <toProcess> [fromHour toHour]`
 ### v1.3.1 (2026-09-16)
 - **New** click an app row to open a **per-app detail page** (like tapping an app in iOS Screen Time)
   - Big "Average daily" figure, total for the period, and the app's own bar chart (hourly for today, daily for 7 days / this month, monthly for this year)

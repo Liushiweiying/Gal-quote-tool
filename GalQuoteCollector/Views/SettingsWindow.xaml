@@ -44,7 +44,16 @@
             <TextBlock Text="常规" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,12"/>
 
             <CheckBox x:Name="AutoStartCheckBox" Content="开机时自动启动（最小化到任务栏）"
-                      FontSize="13" Foreground="#333" Margin="0,0,0,14"/>
+                      FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
+
+            <CheckBox x:Name="SwallowHotkeyCheckBox"
+                      Content="截图热键不再传给游戏（避免撞键，如引擎自带的 Alt+E）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,4"
+                      ToolTip="开启后：按截图热键时这个键不会传到游戏里，游戏引擎自己的同名热键（例如 Alt+E）就不会被触发。
+关掉后：按键照常传给游戏，可能与游戏功能同时触发。
+在本程序自己的窗口里永远不拦截。"/>
+            <TextBlock Text="如果你确实需要游戏里的这个键，就关掉它，或者把截图热键换成不冲突的组合（如 Ctrl+Alt+E）"
+                       Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
             <TextBlock Text="采集延迟" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <Grid Margin="0,0,0,14">

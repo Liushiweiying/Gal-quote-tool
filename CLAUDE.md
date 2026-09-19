@@ -94,7 +94,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 应用侧（C#）的用户内容文件删除**均已**走 `FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin)`（MainViewModel.cs 的 DeleteScreenshots/DeleteScreenshot/DeleteUnassociatedScreenshots/MigrateScreenshots），无需改动；自启 VBS/lnk、临时文件、日志截断为永久删除属合理范围。
 
 ### 发布约定（用户要求，2026-08-13）
-- 版本号走 **1.2.x / 1.3.x**（当前 v1.3.1，2026-09-16 发布；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v131` 形式（去掉小数点）。
+- 版本号走 **1.2.x / 1.3.x**（当前 v1.3.2，2026-09-19 发布；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v132` 形式（去掉小数点）。
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
@@ -140,7 +140,12 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **数据**（`Models/UsageData.cs`，`%LOCALAPPDATA%\GalQuoteCollector\usage.json`）：`Records[日期][进程key] = {Name, Seconds, Hourly[24], Path}`；两个保留 key：`__tool__`（工具运行）、`__locked__`（锁屏），都不计入「使用时长」。
   - 内层字典**必须大小写不敏感**：反序列化出来的默认字典是区分大小写的，`GetOrCreateDay()` 会重建。**注意不能用 `new Dictionary(day, OrdinalIgnoreCase)`**——旧数据里本来就有 `Steam.exe`/`steam.exe` 这种只差大小写的重复键，那样构造会抛 `An item with the same key has already been added`（v1.3.0 踩过，整段迁移被异常中断且不报错给用户）。要逐个搬并就地合并（`MergeRecord`）。
   - 一次性整理（`Normalize` = `MergeCaseDuplicateKeys` + `MoveLockProcesses`）：合并大小写重复、把锁屏进程的时长并入 `__locked__`（用户历史里 40.4 小时的「Windows 默认锁屏界面」= `LockApp.exe` 就是这么迁走的）。`MoveLockProcesses` 幂等且每次都跑，用户以后新加锁屏进程也会迁移。
-- **锁屏识别**（`Services/UsageTracker.cs`）：① `SystemEvents.SessionSwitch`（锁/解锁即时切换并写日志 `usage tracker: session locked/unlocked`）；② 每分钟兜底 `OpenInputDesktop` → 桌面名不是 `Default` 即锁屏（**壁纸软件画的锁屏也能认出来**，所以不要把 `wallpaper64.exe` 这类平时也在跑的进程加进锁屏列表）；③ 进程名在锁屏列表里（默认 `LockApp.exe`/`LogonUI.exe`，可在「应用名 / 锁屏进程」里加）。
+- **锁屏识别**（`Services/UsageTracker.cs`，v1.3.2 重做；**不要再用「输入桌面不是 Default」单独判锁屏**）：
+  1. **真正的会话锁定事件**：`SystemEvents.SessionSwitch` 里**只认 `SessionLock`/`SessionUnlock`**；`ConsoleDisconnect`/`RemoteDisconnect` 等一律忽略（会被远程工具/会话切换误触发）。事件丢失时靠下面第 3 条的"输入桌面回到 Default"自动恢复。
+  2. **前台就是锁屏程序**：进程名在锁屏列表里（默认 `LockApp.exe`/`LogonUI.exe`，可在「应用名 / 锁屏进程」里加）→ 记锁屏。这是最直观的信号。
+  3. **输入桌面非 Default 且 ≥2 分钟无任何输入**（`OpenInputDesktop` + `GetLastInputInfo`）→ 记锁屏。**必须有"无输入"这道约束**：v1.3.0/v1.3.1 只用桌面名，实测在没有真实锁屏事件的情况下也成立，把用户整晚玩游戏的时间（一天 229 分钟里约 145 分钟）记成了锁屏。屏保（桌面名 `Screen-saver`）算"离开"，符合预期。
+  - 每次记锁屏都会写日志说明原因；`wallpaper64.exe` 这类平时也在跑的进程**不要**加进锁屏列表（会把正常时间算成锁屏；它当屏保时靠第 3 条即可识别）。
+  - **Magpie 超分不影响统计**（实测 2026-09-19）：Magpie 的缩放窗口用 `SWP_NOACTIVATE` 显示，前台窗口仍是游戏本体（日志「缩放开始」期间 `GetForegroundWindow` 的进程 = 游戏），所以计时/锁屏判定都不受影响。
 - **规则**（`Services/UsageRules.cs`，静态单例，`MainViewModel` 启动时 `Load(cfg)`、设置保存后重新 `Load`）：锁屏进程列表 + 进程名 → 显示名映射（`HotkeyConfig.UsageLockProcesses` / `UsageNameMap`）。
   - `GroupKey()`：设了自定义名就按自定义名归并（可把不同 exe 合成一条），否则按进程名 → **应用列表按进程名归组**（曾经按显示名归组，导致浏览器标签/歌名把同一应用拆成多条）。
   - `AutoName()`：历史里明显是窗口标题的名字（含 ` - `/`–`/`—`、以 `?`/`*` 开头、以 `.exe` 结尾）自动退回进程名。
@@ -153,6 +158,17 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **滚动**：`Services/SmoothScroll.cs` 在 `App.OnStartup` 里用类级处理器把滚轮/触摸板滚动改成半速按像素滚动（`Factor = 0.5`）。
 - **窗口行为**：点窗口外自动关闭（`Deactivated` → 等 650ms 再确认：仍失活、无本程序其它窗口在前台、没有菜单抓鼠标才关，并写日志 `usage window: 点窗口外 → 自动关闭`）；子对话框/文件对话框期间用 `_childDialogs` 计数保护。
 - 诊断：`--open-usage`（真实数据）、`--usage-demo`（**只读**，注入合成的锁屏/使用样例，用来在没真锁屏时验证渲染）。注意 demo 只读不落盘，但追踪器本身仍会正常保存真实数据。
+
+### 热键与截图（v1.3.2 起）
+- **吞掉截图热键**（`HotkeyService.SwallowHotkeys`，默认开，设置里可关）：匹配到截图热键时钩子 `return 1`，并**连抬起一起吞**（避免前台程序收到悬空按键）。很多引擎自带 `Alt+E` 之类热键，用户设置的截图热键若撞上，游戏会同时弹窗。
+  - **本程序自己的窗口里永远不吞也不触发**（`IsOwnProcessForeground()` 比对前台窗口 PID）。
+  - 用户热键是 `Alt+E`（settings.json 里 `Alt=true`、`VirtualKey=69`）。`ConsoleDisconnect`/`RemoteDisconnect` 不再影响锁屏状态。
+- **改键期间挂起**：`MainViewModel` 打开设置窗口时 `_hotkeyService.Suspend()`、关闭后 `Resume()`——否则用户在设置里按新组合会被当成一次截图。
+- **历史数据修正开关**（App.OnStartup 解析，改完写 `startup.log`）：
+  - `--fix-lock <yyyy-MM-dd> <进程名> [起小时 止小时]`：把某天（可选小时范围）误记的锁屏时长改记到指定应用。
+  - `--move-usage <yyyy-MM-dd> <源进程> <目标进程> [起小时 止小时]`：把某天的时长从一个应用改记到另一个；目标当天没有记录时会从其它日期沿用显示名和图标路径。
+  - 注意：进程名带空格时必须整体加引号（`Start-Process -ArgumentList` 不会自动加）；**运行完要立刻退出进程**，否则追踪器会把内存里的旧数据写回去（首个 tick 在 60 秒后，8 秒内杀掉即可）。
+  - 改历史前先备份 `usage.json`（`%TEMP%\usage-before-*.json`）。
 
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。

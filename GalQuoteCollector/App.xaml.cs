@@ -181,6 +181,47 @@ public partial class App : Application
                     $"exe={Environment.ProcessPath} dir={AppContext.BaseDirectory}");
             }
 
+            // Diagnostic: --fix-lock <yyyy-MM-dd> <进程名> [起始小时 结束小时]
+            // 把某天（可选小时范围）误记的锁屏时长改记到指定应用；结果写日志
+            int fixIdx = Array.IndexOf(e.Args, "--fix-lock");
+            if (fixIdx >= 0 && e.Args.Length > fixIdx + 2)
+            {
+                var date = e.Args[fixIdx + 1];
+                var key = e.Args[fixIdx + 2];
+                int fromHour = 0, toHour = 23;
+                if (e.Args.Length > fixIdx + 4)
+                {
+                    int.TryParse(e.Args[fixIdx + 3], out fromHour);
+                    int.TryParse(e.Args[fixIdx + 4], out toHour);
+                }
+                var dataDir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "GalQuoteCollector");
+                var (ok, detail) = Services.UsageRepair.MoveLockToApp(dataDir, date, key, fromHour, toHour);
+                Log($"--fix-lock: ok={ok} {detail}");
+            }
+
+            // Diagnostic: --move-usage <yyyy-MM-dd> <源进程> <目标进程> [起始小时 结束小时]
+            // 把某天（可选小时范围）某个应用的时长改记到另一个应用；结果写日志
+            int moveIdx = Array.IndexOf(e.Args, "--move-usage");
+            if (moveIdx >= 0 && e.Args.Length > moveIdx + 3)
+            {
+                var date = e.Args[moveIdx + 1];
+                var fromKey = e.Args[moveIdx + 2];
+                var toKey = e.Args[moveIdx + 3];
+                int fromHour = 0, toHour = 23;
+                if (e.Args.Length > moveIdx + 5)
+                {
+                    int.TryParse(e.Args[moveIdx + 4], out fromHour);
+                    int.TryParse(e.Args[moveIdx + 5], out toHour);
+                }
+                var dataDir2 = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "GalQuoteCollector");
+                var (ok2, detail2) = Services.UsageRepair.MoveUsage(dataDir2, date, fromKey, toKey, fromHour, toHour);
+                Log($"--move-usage: ok={ok2} {detail2}");
+            }
+
             Log("=== Startup complete ===");
         }
         catch (Exception ex)

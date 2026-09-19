@@ -54,11 +54,13 @@ public class UsageTracker : IDisposable
         lock (_lock) { _data.AddSeconds(today, ToolKey, "工具运行", 0); }
         Save();
 
-        // 锁屏事件：锁屏期间的时间单独记到 __locked__，不算到任何应用头上
+        // 锁屏事件：锁屏期间的时间单独记到 __locked__，不算到任何应用头上。
+        // 注意：只认 SessionLock / SessionUnlock —— ConsoleDisconnect / RemoteDisconnect
+        // 在"远程串流 / 远程工具接管控制台"时也会触发，本地屏幕变成锁屏画面（输入桌面
+        // 变成 Winlogon），但那并不是用户离开，实测会把远程玩游戏的几小时全记成锁屏。
         try { Microsoft.Win32.SystemEvents.SessionSwitch += OnSessionSwitch; }
         catch (Exception ex) { AppLog.Write($"usage tracker: SessionSwitch subscribe failed: {ex.Message}"); }
 
-        _locked = IsSessionLocked();
         _timer = new Timer(Tick, null, TimeSpan.FromSeconds(60), TimeSpan.FromSeconds(60));
     }
 
@@ -74,15 +76,9 @@ public class UsageTracker : IDisposable
 
     private void OnSessionSwitch(object sender, Microsoft.Win32.SessionSwitchEventArgs e)
     {
-        bool locked = e.Reason is Microsoft.Win32.SessionSwitchReason.SessionLock
-            or Microsoft.Win32.SessionSwitchReason.ConsoleDisconnect
-            or Microsoft.Win32.SessionSwitchReason.RemoteDisconnect;
-        bool unlocked = e.Reason is Microsoft.Win32.SessionSwitchReason.SessionUnlock
-            or Microsoft.Win32.SessionSwitchReason.ConsoleConnect
-            or Microsoft.Win32.SessionSwitchReason.RemoteConnect;
-
-        if (locked) SetLocked(true);
-        else if (unlocked) SetLocked(false);
+        if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionLock) SetLocked(true);
+        else if (e.Reason == Microsoft.Win32.SessionSwitchReason.SessionUnlock) SetLocked(false);
+        else AppLog.Write($"usage tracker: 忽略会话事件 {e.Reason}（不算锁屏）");
     }
 
     private void SetLocked(bool locked)
@@ -93,11 +89,11 @@ public class UsageTracker : IDisposable
         if (_running) Tick(null); // 立刻把当前这一分钟归到正确的桶
     }
 
-    /// <summary>兜底判断：锁屏时输入桌面会切到 Winlogon（桌面名不再是 Default）。</summary>
-    private static bool IsSessionLocked()
+    /// <summary>输入桌面是不是普通的 Default 桌面（锁屏 / 屏保 / UAC 安全桌面时不是）。</summary>
+    private static bool IsInputDesktopDefault()
     {
         IntPtr desktop = OpenInputDesktop(0, false, 0x0001 /* DESKTOP_READOBJECTS */);
-        if (desktop == IntPtr.Zero) return true; // 打不开通常就是被锁了
+        if (desktop == IntPtr.Zero) return false;
         try
         {
             uint need = 0;
@@ -108,7 +104,7 @@ public class UsageTracker : IDisposable
             {
                 if (!GetUserObjectInformation(desktop, 2, buf, need, ref need)) return false;
                 var name = System.Runtime.InteropServices.Marshal.PtrToStringUni(buf) ?? "";
-                return !name.Equals("Default", StringComparison.OrdinalIgnoreCase);
+                return name.Equals("Default", StringComparison.OrdinalIgnoreCase);
             }
             finally { System.Runtime.InteropServices.Marshal.FreeHGlobal(buf); }
         }
@@ -118,6 +114,41 @@ public class UsageTracker : IDisposable
 
     public UsageData GetData() { lock (_lock) { return _data; } }
 
+    /// <summary>记一分钟锁屏（并写清原因，方便排查误判）。</summary>
+    private void RecordLocked(string date, int hour, string reason)
+    {
+        if (_lastLockReason != reason)
+        {
+            _lastLockReason = reason;
+            AppLog.Write($"usage tracker: 锁屏（{reason}）");
+        }
+        lock (_lock)
+        {
+            _data.AddSeconds(date, LockedKey, "锁屏", 60, hour);
+            _data.AddSeconds(date, ToolKey, "工具运行", 60, hour);
+        }
+        Save();
+    }
+
+    private string? _lastLockReason;
+
+    /// <summary>距最后一次用户输入过了多少秒（用 GetLastInputInfo，跨会话有效）。</summary>
+    private static uint IdleSeconds()
+    {
+        var info = new LASTINPUTINFO { cbSize = (uint)System.Runtime.InteropServices.Marshal.SizeOf<LASTINPUTINFO>() };
+        if (!GetLastInputInfo(ref info)) return 0;
+        uint now = (uint)Environment.TickCount;
+        uint last = info.dwTime;
+        return now >= last ? (now - last) / 1000 : 0;
+    }
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct LASTINPUTINFO
+    {
+        public uint cbSize;
+        public uint dwTime;
+    }
+
     private void Tick(object? state)
     {
         try
@@ -126,21 +157,21 @@ public class UsageTracker : IDisposable
             var date = now.ToString("yyyy-MM-dd");
             var hour = now.Hour;
 
-            // 锁屏中：这一分钟只记到「锁屏」桶里
-            if (_locked || IsSessionLocked())
+            // ① 会话锁定事件期间（最可靠）：这一分钟记到「锁屏」桶。
+            // 如果输入桌面已经回到 Default，说明解锁事件丢了，顺手恢复。
+            if (_locked)
             {
-                if (!_locked) AppLog.Write("usage tracker: 锁屏（轮询检测到，输入桌面已切到 Winlogon）");
-                _locked = true;
-                lock (_lock)
+                if (IsInputDesktopDefault())
                 {
-                    _data.AddSeconds(date, LockedKey, "锁屏", 60, hour);
-                    _data.AddSeconds(date, ToolKey, "工具运行", 60, hour);
+                    _locked = false;
+                    AppLog.Write("usage tracker: 输入桌面已回到 Default，解除锁屏状态（解锁事件可能丢失）");
                 }
-                Save();
-                return;
+                else
+                {
+                    RecordLocked(date, hour, "会话锁定事件");
+                    return;
+                }
             }
-            if (_locked) AppLog.Write("usage tracker: 已解锁（轮询检测到）");
-            _locked = false;
 
             var hwnd = CaptureService.GetForegroundWindowHandle();
             if (hwnd == IntPtr.Zero) return;
@@ -161,17 +192,20 @@ public class UsageTracker : IDisposable
 
             if (processName == null) return;
 
-            // 锁屏相关的进程（LockApp.exe / LogonUI.exe / 用户自定的壁纸软件锁屏）→ 记到「锁屏」桶。
-            // 有些锁屏界面是第三方程序画的，光靠桌面判断不够，所以这里再认一次进程名。
+            // ② 前台就是锁屏程序（LockApp.exe / LogonUI.exe / 用户自定）→ 记到「锁屏」桶。
+            // 这是很可靠的信号：锁屏界面自己就是前台窗口。
             if (UsageRules.IsLockProcess(processName))
             {
-                _locked = true;
-                lock (_lock)
-                {
-                    _data.AddSeconds(date, LockedKey, "锁屏", 60, hour);
-                    _data.AddSeconds(date, ToolKey, "工具运行", 60, hour);
-                }
-                Save();
+                RecordLocked(date, hour, $"前台是锁屏程序 {processName}");
+                return;
+            }
+
+            // ③ 输入桌面不是 Default（锁屏/屏保/UAC 安全桌面）——**必须同时长时间没有任何输入**才算锁屏。
+            // 只用桌面名太不可靠：实测有整晚被误判成锁屏（日志里并没有真正的 SessionLock 事件），
+            // 把正在玩的游戏时间全吃掉了；加上"无输入"约束后，边玩边看也不会被误判。
+            if (!IsInputDesktopDefault() && IdleSeconds() >= 120)
+            {
+                RecordLocked(date, hour, $"输入桌面非 Default 且已 {IdleSeconds() / 60} 分钟无输入");
                 return;
             }
 
@@ -253,4 +287,7 @@ public class UsageTracker : IDisposable
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
     private static extern bool GetUserObjectInformation(IntPtr hObj, int index, IntPtr info, uint length, ref uint lengthNeeded);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetLastInputInfo(ref LASTINPUTINFO plii);
 }
