@@ -169,6 +169,8 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
   - `--move-usage <yyyy-MM-dd> <源进程> <目标进程> [起小时 止小时]`：把某天的时长从一个应用改记到另一个；目标当天没有记录时会从其它日期沿用显示名和图标路径。
   - 注意：进程名带空格时必须整体加引号（`Start-Process -ArgumentList` 不会自动加）；**运行完要立刻退出进程**，否则追踪器会把内存里的旧数据写回去（首个 tick 在 60 秒后，8 秒内杀掉即可）。
   - 改历史前先备份 `usage.json`（`%TEMP%\usage-before-*.json`）。
+  - 已知小瑕疵：`--fix-lock` 在目标应用当天没有记录时会新建一条、显示名直接用 key 原文（`Xxx.exe`），不像 `--move-usage` 会去别的日期沿用显示名——用完手工改一下 Name 即可（或用「应用名 / 锁屏进程」窗口改）。
+  - 2026-09-18 实测数据（用户确认过的正确拆分）：夏空カナタ_chs.exe 151 分 + Hollow Knight Silksong 84 分 + 其他 ≈ 工具运行 269 分，锁屏 0。
 
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
