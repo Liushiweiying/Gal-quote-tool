@@ -136,6 +136,20 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
    - 参考图的 `UNLOCKS` → 换成「采集」（条数 + 每小时柱状图）；`EXTENSIONS` → 换成「统计范围」（区间/使用时长/锁屏时长/应用数/工具运行/黑名单）。
    - 关键情报与坑记录在下面「### 使用时间页（v1.3.0 起）」一节。
 
+### 下次要做（用户指定，2026-09-19；**只记录，未实现**）
+1. **回想（Slideshow）右下角显示日期时间**（用户想法，攒到下一批做）
+   - 位置：右下角；窗口化与 F11 全屏都要显示（全屏时同样贴右下，注意 `FsOverlay` 底部浮层避让）
+   - 内容可配置：
+     - 日期格式：`年-月-日` / `月-日` / `年-月`（三种，可含"不显示日期"）
+     - 时间格式：`时:分` / `时:分:秒`（可含"不显示时间"）
+     - **默认显示什么**要能在设置里选（例如：不显示 / 仅日期 / 仅时间 / 日期+时间，且各自记住格式选择）
+   - 实现要点：
+     - 配置项加到 `HotkeyConfig`：`SlideshowClockMode`（0=不显示,1=仅日期,2=仅时间,3=日期+时间）、`SlideshowClockDateFormat`（0=yyyy-MM-dd,1=MM-dd,2=yyyy-MM）、`SlideshowClockShowSeconds`（bool）；记得在 `Clone()` 里带上
+     - `SlideshowWindow.xaml` 加一个右下角 `TextBlock`（`HorizontalAlignment=Right`,`VerticalAlignment=Bottom`,`IsHitTestVisible=False`,半透明底或阴影，避免压在浅色图片上看不清；字号随窗口缩放可后续再说）
+     - 刷新：用 `DispatcherTimer`——显示秒时 1 秒一跳，否则 10~30 秒或每分钟一跳即可（别用每秒刷新浪费）；窗口加载/切换图片时立即刷新一次
+     - 设置界面在「回想」分组里加：显示内容下拉 + 日期格式下拉 + 秒勾选框（选"不显示"时把下面两项灰掉）
+     - 注意别把时钟算进截图/OCR 内容（回想窗口本身不参与采集，无需处理）；Magpie 超分时会被一起放大，属预期
+   - 参考：用户原话「回想在右下角显示日期时间，当然也可以自己选择显示年月日/月日/年月，时分（秒），并且有默认显示什么的设置。」
 ### 使用时间页（v1.3.0 起，改动前先读这节）
 - **数据**（`Models/UsageData.cs`，`%LOCALAPPDATA%\GalQuoteCollector\usage.json`）：`Records[日期][进程key] = {Name, Seconds, Hourly[24], Path}`；两个保留 key：`__tool__`（工具运行）、`__locked__`（锁屏），都不计入「使用时长」。
   - 内层字典**必须大小写不敏感**：反序列化出来的默认字典是区分大小写的，`GetOrCreateDay()` 会重建。**注意不能用 `new Dictionary(day, OrdinalIgnoreCase)`**——旧数据里本来就有 `Steam.exe`/`steam.exe` 这种只差大小写的重复键，那样构造会抛 `An item with the same key has already been added`（v1.3.0 踩过，整段迁移被异常中断且不报错给用户）。要逐个搬并就地合并（`MergeRecord`）。
