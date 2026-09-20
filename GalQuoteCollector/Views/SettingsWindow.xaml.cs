@@ -14,6 +14,10 @@ public partial class SettingsWindow : Window
 
     public HotkeyConfig? Result { get; private set; }
 
+    /// <summary>数据目录（备份功能要用）。</summary>
+    private static readonly string _dataDir = System.IO.Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GalQuoteCollector");
+
     public SettingsWindow(Window owner, HotkeyConfig currentConfig, string currentDisplay)
     {
         InitializeComponent();
@@ -30,6 +34,12 @@ public partial class SettingsWindow : Window
         _newConfig = cfg.Clone();
         AutoStartCheckBox.IsChecked = cfg.AutoStart;
         SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
+        BackupCheckBox.IsChecked = cfg.BackupEnabled;
+        BackupDirBox.Text = cfg.BackupDirectory ?? "";
+        WebCheckBox.IsChecked = cfg.WebEnabled;
+        WebPortBox.Text = (cfg.WebPort >= 1024 && cfg.WebPort <= 65535 ? cfg.WebPort : 8088).ToString();
+        WebCodeBox.Text = cfg.WebAccessCode ?? "";
+        UpdateWebUrls();
         DelaySlider.Value = cfg.CaptureDelayMs;
         UpdateDelayLabel(cfg.CaptureDelayMs);
         SlideshowModeCombo.SelectedIndex = cfg.SlideshowMode;
@@ -499,10 +509,111 @@ public partial class SettingsWindow : Window
         catch { }
     }
 
+    private void OnBrowseBackupDir(object sender, RoutedEventArgs e)
+    {
+        var picked = BrowseForFolder("选择备份保存目录");
+        if (!string.IsNullOrWhiteSpace(picked)) BackupDirBox.Text = picked;
+    }
+
+    private void OnOpenBackupDir(object sender, RoutedEventArgs e)
+    {
+        var dir = BackupDirBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(dir)) dir = Services.BackupService.DefaultDirectory(_dataDir);
+        try
+        {
+            System.IO.Directory.CreateDirectory(dir);
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = dir,
+                UseShellExecute = true,
+            });
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "打开失败", ex.Message, icon: Views.InfoDialogIcon.Warning);
+        }
+    }
+
+    private void OnBackupNow(object sender, RoutedEventArgs e)
+    {
+        _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
+        _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
+        _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
+        _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
+        _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
+        var (ok, path, message) = Services.BackupService.BackupNow(_newConfig, _dataDir);
+        BackupHintText.Text = message + (path.Length > 0 ? $"\n{path}" : "");
+        if (!ok)
+            Views.InfoDialog.Show(this, "备份", message, icon: Views.InfoDialogIcon.Warning);
+    }
+
+    /// <summary>系统文件夹选择对话框（和截图目录用的是同一套）。</summary>
+    private static string BrowseForFolder(string title)
+    {
+        try
+        {
+            var psScript = "$f=New-Object -ComObject Shell.Application; " +
+                           $"$b=$f.BrowseForFolder(0,'{title}',0,0); " +
+                           "if($b){$b.Self.Path}else{Write-Host 'CANCEL'}";
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "powershell.exe",
+                Arguments = $"-NoProfile -NoLogo -Command \"{psScript}\"",
+                UseShellExecute = false, CreateNoWindow = true,
+                RedirectStandardOutput = true
+            };
+            using var proc = System.Diagnostics.Process.Start(psi);
+            if (proc == null) return "";
+            var output = proc.StandardOutput.ReadToEnd().Trim();
+            proc.WaitForExit(5000);
+            return output == "CANCEL" ? "" : output;
+        }
+        catch { return ""; }
+    }
+
+    private void OnGenWebCode(object sender, RoutedEventArgs e)
+    {
+        const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+        var rnd = new Random();
+        WebCodeBox.Text = new string(Enumerable.Range(0, 6).Select(_ => alphabet[rnd.Next(alphabet.Length)]).ToArray());
+        WebHintText.Text = "已生成访问码：手机第一次打开用 http://IP:端口/?k=这个码（之后浏览器会记住）";
+        UpdateWebUrls();
+    }
+
+    private void OnOpenWebPage(object sender, RoutedEventArgs e)
+    {
+        int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
+        var code = WebCodeBox.Text.Trim();
+        var url = $"http://127.0.0.1:{port}/" + (code.Length > 0 ? $"?k={Uri.EscapeDataString(code)}" : "");
+        try
+        {
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "打开失败",
+                ex.Message + "\n（网页服务需要在点「保存」后才会生效）", icon: Views.InfoDialogIcon.Warning);
+        }
+    }
+
+    private void UpdateWebUrls()
+    {
+        int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
+        var code = WebCodeBox.Text.Trim();
+        var suffix = code.Length > 0 ? $"?k={code}" : "";
+        var urls = Services.WebServerService.LocalUrls(port).Take(3).Select(u => u + suffix);
+        WebUrlText.Text = "局域网地址：" + string.Join("    ", urls);
+    }
+
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.SwallowCaptureHotkey = SwallowHotkeyCheckBox.IsChecked == true;
+        _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
+        _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
+        _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
+        _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
+        _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         _newConfig.SlideshowLoop = SlideshowLoopCheckBox.IsChecked == true;

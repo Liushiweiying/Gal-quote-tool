@@ -55,6 +55,60 @@
             <TextBlock Text="如果你确实需要游戏里的这个键，就关掉它，或者把截图热键换成不冲突的组合（如 Ctrl+Alt+E）"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
+            <CheckBox x:Name="BackupCheckBox"
+                      Content="每天首次启动自动备份（语录库 / 使用记录 / 设置），只保留最近 3 天"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,6"
+                      ToolTip="备份 quotes.db、usage.json、settings.json 到下面这个目录。
+每天只备份一次；超过 3 天的旧备份会自动删除。截图不参与备份。"/>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="BackupDirBox" FontSize="12" Padding="6,4"
+                         Background="White" BorderBrush="#DDD" VerticalContentAlignment="Center"
+                         ToolTip="留空 = 数据目录下的 backups 文件夹"/>
+                <Button Grid.Column="1" Content="浏览…" Click="OnBrowseBackupDir" Margin="6,0,0,0"
+                        Padding="10,5" FontSize="12"/>
+                <Button Grid.Column="2" Content="打开" Click="OnOpenBackupDir" Margin="6,0,0,0"
+                        Padding="10,5" FontSize="12"/>
+                <Button Grid.Column="3" Content="立即备份" Click="OnBackupNow" Margin="6,0,0,0"
+                        Padding="10,5" FontSize="12"/>
+            </Grid>
+            <TextBlock x:Name="BackupHintText" Text="留空 = 使用默认目录（数据目录下的 backups）"
+                       Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
+
+            <CheckBox x:Name="WebCheckBox"
+                      Content="开启内网网页（手机 / 电脑浏览器查看、搜索、修改、导出语录）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,6"
+                      ToolTip="在程序里起一个极简网页服务，同一局域网内的手机/电脑打开下面的网址即可访问。
+默认局域网免密；如果要暴露到公网，请设置访问码，并自己在路由器/反向代理上做好 HTTPS。"/>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="端口" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox Grid.Column="1" x:Name="WebPortBox" Width="70" FontSize="12" Padding="6,4"
+                         Background="White" BorderBrush="#DDD" VerticalContentAlignment="Center"/>
+                <TextBox Grid.Column="2" x:Name="WebCodeBox" FontSize="12" Padding="6,4" Margin="8,0,0,0"
+                         Background="White" BorderBrush="#DDD" VerticalContentAlignment="Center"
+                         ToolTip="留空 = 局域网免密；填了就要求 http://…/?k=访问码"/>
+                <Button Grid.Column="3" Content="随机码" Click="OnGenWebCode" Margin="6,0,0,0"
+                        Padding="10,5" FontSize="12"/>
+                <Button Grid.Column="4" Content="打开网页" Click="OnOpenWebPage" Margin="6,0,0,0"
+                        Padding="10,5" FontSize="12"/>
+            </Grid>
+            <TextBlock x:Name="WebHintText" Text="访问码留空 = 局域网免密（同一 WiFi 下谁都能改）；"
+                       Foreground="#BBB" FontSize="11" Margin="0,0,0,2" TextWrapping="Wrap"/>
+            <TextBlock x:Name="WebUrlText" Text="" Foreground="#5B6ABF" FontSize="11"
+                       Margin="0,0,0,14" TextWrapping="Wrap"/>
+
             <TextBlock Text="采集延迟" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <Grid Margin="0,0,0,14">
                 <Grid.ColumnDefinitions>

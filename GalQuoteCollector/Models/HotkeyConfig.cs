@@ -14,6 +14,13 @@ public class HotkeyConfig
     public int CaptureDelayMs { get; set; } = 200;
     // 触发截图热键时是否吞掉这次按键（很多游戏引擎也用 Alt+E 之类的键，不吞会同时弹出游戏窗口）
     public bool SwallowCaptureHotkey { get; set; } = true;
+    // 每天首次启动自动备份（quotes.db / usage.json / settings.json），只保留最近 3 天
+    public bool BackupEnabled { get; set; } = true;
+    public string BackupDirectory { get; set; } = ""; // 留空 = 数据目录下的 backups
+    // 内网网页（手机/电脑访问）：默认关闭，端口可改，访问码留空 = 局域网免密
+    public bool WebEnabled { get; set; }
+    public int WebPort { get; set; } = 8088;
+    public string WebAccessCode { get; set; } = "";
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public bool SlideshowLoop { get; set; }
     public string FontFamily { get; set; } = "Segoe UI";
@@ -168,6 +175,11 @@ public class HotkeyConfig
             AutoStart = AutoStart,
             CaptureDelayMs = CaptureDelayMs,
             SwallowCaptureHotkey = SwallowCaptureHotkey,
+            BackupEnabled = BackupEnabled,
+            BackupDirectory = BackupDirectory,
+            WebEnabled = WebEnabled,
+            WebPort = WebPort,
+            WebAccessCode = WebAccessCode,
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
             FontFamily = FontFamily,

@@ -23,6 +23,7 @@ public partial class MainViewModel : ObservableObject
     private readonly OcrService _ocrService;
     private readonly GameDetectService _gameDetectService;
     private StorageService _storageService;
+    private Services.WebServerService? _webServer;
     private readonly SettingsService _settingsService;
     private readonly ExportService _exportService = new();
     private readonly Window _window;
@@ -86,6 +87,26 @@ public partial class MainViewModel : ObservableObject
         _settingsService = new SettingsService(_dataDir);
 
         var hotkeyConfig = _settingsService.LoadHotkeyConfig();
+
+        // 内网网页（可选）：手机/电脑浏览器访问
+        try
+        {
+            if (hotkeyConfig.WebEnabled)
+            {
+                _webServer ??= new Services.WebServerService(_storageService);
+                var (webOk, webMsg) = _webServer.Start(hotkeyConfig.WebPort, hotkeyConfig.WebAccessCode);
+                AppLog.Write($"web: {(webOk ? "OK" : "失败")} {webMsg}");
+            }
+        }
+        catch (Exception ex) { AppLog.Write($"web start failed: {ex.Message}"); }
+
+        // 每天首次启动自动备份（quotes.db / usage.json / settings.json，保留最近 3 天）
+        try
+        {
+            var (didBackup, backupMsg) = Services.BackupService.BackupIfNeeded(hotkeyConfig, _dataDir);
+            AppLog.Write($"backup: {(didBackup ? "已备份" : "跳过")} {backupMsg}");
+        }
+        catch (Exception ex) { AppLog.Write($"backup failed: {ex.Message}"); }
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
         _hideUnrecognized = hotkeyConfig.HideUnrecognized;
         _screenshotFormat = hotkeyConfig.ScreenshotFormat;
@@ -1079,6 +1100,7 @@ public partial class MainViewModel : ObservableObject
 
             _hotkeyService.UpdateAddHotkey(newConfig.ToAddModifiers(), newConfig.AddShotVirtualKey);
             _hotkeyService.SwallowHotkeys = newConfig.SwallowCaptureHotkey;
+            SyncWebServer(newConfig);
 
             // UpdateHotkey returns false when the primary collides with the add-screenshot
             // hotkey — the two must stay distinct so a single press can't fire both actions.
@@ -1100,6 +1122,26 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>Apply a confirmed settings config: persist, re-apply game-name rules and UI-affecting options.</summary>
+    /// <summary>按当前设置同步内网网页服务（开启就启动/重启，关闭就停）。</summary>
+    private void SyncWebServer(HotkeyConfig cfg)
+    {
+        try
+        {
+            if (!cfg.WebEnabled)
+            {
+                _webServer?.Stop();
+                _webServer = null;
+                return;
+            }
+            _webServer ??= new Services.WebServerService(_storageService);
+            if (_webServer.IsRunning && _webServer.Port == cfg.WebPort && _webServer.RequiresCode == (cfg.WebAccessCode ?? "").Trim().Length > 0)
+                return;
+            var (ok, msg) = _webServer.Start(cfg.WebPort, cfg.WebAccessCode ?? "");
+            AppLog.Write($"web: {(ok ? "OK" : "失败")} {msg}");
+        }
+        catch (Exception ex) { AppLog.Write($"web sync failed: {ex.Message}"); }
+    }
+
     private (bool ok, string msg) ApplySettings(HotkeyConfig cfg)
     {
         // The settings dialog doesn't edit window bounds — keep the persisted values.

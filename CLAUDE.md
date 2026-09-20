@@ -173,6 +173,21 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **窗口行为**：点窗口外自动关闭（`Deactivated` → 等 650ms 再确认：仍失活、无本程序其它窗口在前台、没有菜单抓鼠标才关，并写日志 `usage window: 点窗口外 → 自动关闭`）；子对话框/文件对话框期间用 `_childDialogs` 计数保护。
 - 诊断：`--open-usage`（真实数据）、`--usage-demo`（**只读**，注入合成的锁屏/使用样例，用来在没真锁屏时验证渲染）。注意 demo 只读不落盘，但追踪器本身仍会正常保存真实数据。
 
+### 内网网页 + 每日备份（v1.3.3 起，改动前先读这节）
+- **内网网页**（`Services/WebServerService.cs` + `Services/WebPage.cs`）：在**程序进程内**用 `TcpListener` 起一个极简 HTTP/1.1 服务（**不需要管理员、不需要 URL ACL**，便携版也能用），手机/电脑浏览器打开 `http://本机IP:端口/` 即可查看/搜索/修改/导出语录。
+  - 设置项（`HotkeyConfig`）：`WebEnabled`（默认 **false**）、`WebPort`（默认 8088）、`WebAccessCode`（默认空 = **局域网免密**；填了就要求 `?k=码`，页面响应会带 `Set-Cookie: k=…`）。
+  - 路由：`GET /`（内嵌单页）、`GET /api/meta`、`GET /api/quotes?q=&game=&group=&tag=&offset=&limit=`、`GET /api/quotes/{id}`、`PUT /api/quotes/{id}`（改 text/gameName/notes/capturedAt + groups/tags/newNames，按名字自动建分组标签）、`DELETE /api/quotes/{id}`、`GET /api/shot/{id}`（原图）、`GET /api/export?format=json|md`（复用 `ExportService`）。
+  - **只改语录**（用户选定）：不暴露设置、映射、黑名单、游戏名规则。
+  - 数据库安全：直接复用程序自己的 `StorageService`（它内部有 `_sync` 锁，线程安全），**不要**另外开第二个进程/连接写库。
+  - `DELETE` **只删数据行，不删截图文件**（有意为之：截图更宝贵，误删可从「未关联截图」找回）。
+  - 网页是单文件内嵌 HTML/CSS/JS（内网可能没外网，**不能用 CDN**）；响应式断点 720px（单列、弹窗贴底、缩略图 200px）与 520px（标题独占一行、按钮换行不裁切）；缩略图 `max-height` 桌面 280px / 手机 200px + 点击放大。
+  - 安装版在 `installer.iss` 的 `[Run]` 里用 `netsh advfirewall` 放行 **8088**（profile=private）；用户改端口需要自己放行，便携版第一次启动 Windows 会弹防火墙允许框。
+  - 想让公网访问：让用户**自己设访问码**（当前无 HTTPS/双因素），并建议走路由器端口映射 + 反向代理加 HTTPS。
+- **每日首次启动自动备份**（`Services/BackupService.cs`）：`HotkeyConfig.BackupEnabled`（默认 **true**）/`BackupDirectory`（留空 = 数据目录下 `backups`）。
+  - 内容：`quotes.db` + `usage.json` + `settings.json`，**外加截图目录整份复制**到 `backups\backup-yyyy-MM-dd_HHmmss\screenshots\`（用户要求含截图，体积大；截图复制失败只写日志、不影响数据文件）。
+  - 每天只备份一次（同一天再启动跳过）；`PruneOldBackups` 只保留**最近 3 天**（按目录名日期判断，删不掉就忽略）。
+  - 设置界面有「浏览…/打开/立即备份」按钮（`BrowseForFolder` 复用 Shell.Application 那套）。
+  - 备份路径解析注意：`ScreenshotDirectory` 为空时用「图片\GalQuoteCollector」，与截图目录设置保持一致。
 ### 热键与截图（v1.3.2 起）
 - **吞掉截图热键**（`HotkeyService.SwallowHotkeys`，默认开，设置里可关）：匹配到截图热键时钩子 `return 1`，并**连抬起一起吞**（避免前台程序收到悬空按键）。很多引擎自带 `Alt+E` 之类热键，用户设置的截图热键若撞上，游戏会同时弹窗。
   - **本程序自己的窗口里永远不吞也不触发**（`IsOwnProcessForeground()` 比对前台窗口 PID）。

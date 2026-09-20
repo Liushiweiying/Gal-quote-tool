@@ -115,11 +115,35 @@ public partial class AppUsageWindow : Window
         var report = UsageAggregator.Build(_data, from, to, null, 64, _keys);
         int days = (to - from).Days + 1;
 
+        // 使用天数 / 最多的一天 / 最近一次 —— 「平均每天」的分母只算**真的有记录的天数**，
+        // 否则今年视图会拿 259 天去平均，数字被稀释得毫无意义。
+        int usedDays = 0, bestSec = 0;
+        string bestDay = "—", lastDay = "—";
+        for (var d = from; d <= to; d = d.AddDays(1))
+        {
+            var key = d.ToString("yyyy-MM-dd");
+            var day = _data.GetDay(key);
+            if (day == null) continue;
+            int sec = 0;
+            foreach (var k in _keys)
+                if (day.TryGetValue(k, out var rec)) sec += rec.Seconds;
+            if (sec > 0)
+            {
+                usedDays++;
+                lastDay = d.Date == DateTime.Today ? "今天" : d.ToString("MM-dd");
+                if (sec > bestSec) { bestSec = sec; bestDay = d.ToString("MM-dd"); }
+            }
+        }
+
+        string avgText = usedDays > 0
+            ? $"{UsageBarChart.FormatDuration(report.ActiveSeconds / usedDays)}/天"
+            : "—";
+
         // ① 头部卡片：平均每天 + 区间合计 + 柱状图
         var card = CreateCard();
         Add(card, new TextBlock
         {
-            Text = $"平均每天 {UsageBarChart.FormatDuration(report.ActiveSeconds / Math.Max(1, days))}",
+            Text = usedDays > 0 ? $"平均 {avgText}" : "这段时间没有记录",
             FontSize = 24,
             FontWeight = FontWeights.Bold,
             Foreground = new SolidColorBrush(Ink),
@@ -127,8 +151,10 @@ public partial class AppUsageWindow : Window
         });
         Add(card, new TextBlock
         {
-            Text = $"{days} 天合计 {UsageBarChart.FormatDuration(report.ActiveSeconds)}" +
-                   $"{DescribeCompare(report)}",
+            Text = (usedDays > 0
+                    ? $"有记录的 {usedDays} 天合计 {UsageBarChart.FormatDuration(report.ActiveSeconds)}"
+                    : $"（区间共 {days} 天）")
+                   + DescribeCompare(report),
             FontSize = 13,
             Foreground = new SolidColorBrush(Muted),
             Margin = new Thickness(0, 0, 0, 10)
@@ -174,31 +200,15 @@ public partial class AppUsageWindow : Window
         var all = UsageAggregator.Build(_data, from, to);
         int share = all.ActiveSeconds > 0 ? (int)Math.Round(report.ActiveSeconds * 100.0 / all.ActiveSeconds) : 0;
 
-        // 使用天数 / 最多的一天 / 最近一次
-        int usedDays = 0, bestSec = 0;
-        string bestDay = "—", lastDay = "—";
-        for (var d = from; d <= to; d = d.AddDays(1))
-        {
-            var key = d.ToString("yyyy-MM-dd");
-            var day = _data.GetDay(key);
-            if (day == null) continue;
-            int sec = 0;
-            foreach (var k in _keys)
-                if (day.TryGetValue(k, out var rec)) sec += rec.Seconds;
-            if (sec > 0)
-            {
-                usedDays++;
-                lastDay = d.Date == DateTime.Today ? "今天" : d.ToString("MM-dd");
-                if (sec > bestSec) { bestSec = sec; bestDay = d.ToString("MM-dd"); }
-            }
-        }
-
+        // 使用天数 / 最多的一天 / 最近一次（上面已经算过，这里直接用）
         var rows = new List<(string, string)>
         {
             ("区间", $"{from:yyyy-MM-dd} ~ {to:yyyy-MM-dd}"),
             ("合计", UsageBarChart.FormatDuration(report.ActiveSeconds)),
-            ("平均每天", UsageBarChart.FormatDuration(report.ActiveSeconds / Math.Max(1, days))),
             ("有记录的天数", $"{usedDays} / {days} 天"),
+            ("平均每天", usedDays > 0
+                ? $"{UsageBarChart.FormatDuration(report.ActiveSeconds / usedDays)}（按有记录的 {usedDays} 天）"
+                : "—"),
             ("最多的一天", bestSec > 0 ? $"{bestDay}（{UsageBarChart.FormatDuration(bestSec)}）" : "—"),
             ("最近使用", lastDay),
             ("占同期总时长", $"{share}%"),

@@ -41,6 +41,9 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "Launch {#MyAppName}"; Flags: postinstall nowait skipifsilent
+; 内网网页功能：放行默认端口 8088（仅入站 TCP；用户改端口时需要自行在防火墙里放行）
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall delete rule name=""GalQuoteCollector Web 8088"""; Flags: runhidden; StatusMsg: "配置防火墙…"
+Filename: "{sys}\netsh.exe"; Parameters: "advfirewall firewall add rule name=""GalQuoteCollector Web 8088"" dir=in action=allow protocol=TCP localport=8088 profile=private"; Flags: runhidden; StatusMsg: "配置防火墙…"
 
 [Code]
 var
