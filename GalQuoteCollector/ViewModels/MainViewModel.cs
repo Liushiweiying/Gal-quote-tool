@@ -93,8 +93,8 @@ public partial class MainViewModel : ObservableObject
         {
             if (hotkeyConfig.WebEnabled)
             {
-                _webServer ??= new Services.WebServerService(_storageService);
-                var (webOk, webMsg) = _webServer.Start(hotkeyConfig.WebPort, hotkeyConfig.WebAccessCode);
+                _webServer ??= new Services.WebServerService(_storageService, _dataDir);
+                var (webOk, webMsg) = _webServer.Start(hotkeyConfig.WebPort, hotkeyConfig.WebAccessCode ?? "", hotkeyConfig.WebUseHttps);
                 AppLog.Write($"web: {(webOk ? "OK" : "失败")} {webMsg}");
             }
         }
@@ -1133,10 +1133,10 @@ public partial class MainViewModel : ObservableObject
                 _webServer = null;
                 return;
             }
-            _webServer ??= new Services.WebServerService(_storageService);
-            if (_webServer.IsRunning && _webServer.Port == cfg.WebPort && _webServer.RequiresCode == (cfg.WebAccessCode ?? "").Trim().Length > 0)
+            _webServer ??= new Services.WebServerService(_storageService, _dataDir);
+            if (_webServer.IsRunning && _webServer.Port == cfg.WebPort && _webServer.UseHttps == cfg.WebUseHttps && _webServer.RequiresCode == (cfg.WebAccessCode ?? "").Trim().Length > 0)
                 return;
-            var (ok, msg) = _webServer.Start(cfg.WebPort, cfg.WebAccessCode ?? "");
+            var (ok, msg) = _webServer.Start(cfg.WebPort, cfg.WebAccessCode ?? "", cfg.WebUseHttps);
             AppLog.Write($"web: {(ok ? "OK" : "失败")} {msg}");
         }
         catch (Exception ex) { AppLog.Write($"web sync failed: {ex.Message}"); }

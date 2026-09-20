@@ -1,6 +1,10 @@
 using System.IO;
 using System.Net;
+using System.Net.Security;
 using System.Net.Sockets;
+using System.Security.Authentication;
+using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Nodes;
@@ -16,27 +20,37 @@ namespace GalQuoteCollector.Services;
 public sealed class WebServerService : IDisposable
 {
     private readonly StorageService _storage;
+    private readonly string _dataDir;
     private TcpListener? _listener;
     private CancellationTokenSource? _cts;
     private int _port;
     private string _code = "";
+    private X509Certificate2? _cert;
 
     public bool IsRunning => _listener != null;
     public int Port => _port;
     public bool RequiresCode => _code.Length > 0;
+    public bool UseHttps { get; private set; }
+    public string CertPath => Path.Combine(_dataDir, "web-cert.pfx");
 
-    public WebServerService(StorageService storage)
+    public WebServerService(StorageService storage, string dataDir)
     {
         _storage = storage;
+        _dataDir = dataDir;
     }
 
-    /// <summary>启动（重复调用会先停掉旧的）。accessCode 留空 = 局域网免密。</summary>
-    public (bool ok, string message) Start(int port, string accessCode)
+    /// <summary>启动（重复调用会先停掉旧的）。accessCode 留空 = 局域网免密；useHttps 用自签证书。</summary>
+    public (bool ok, string message) Start(int port, string accessCode, bool useHttps = false)
     {
         Stop();
         if (port < 1024 || port > 65535) return (false, "端口要在 1024-65535 之间");
         try
         {
+            if (useHttps)
+            {
+                _cert = GetOrCreateCertificate();
+                UseHttps = true;
+            }
             var listener = new TcpListener(IPAddress.Any, port);
             listener.Start();
             _listener = listener;
@@ -44,8 +58,8 @@ public sealed class WebServerService : IDisposable
             _code = (accessCode ?? "").Trim();
             _cts = new CancellationTokenSource();
             _ = Task.Run(() => AcceptLoopAsync(listener, _cts.Token));
-            AppLog.Write($"web: 已启动 http://0.0.0.0:{port}/ 访问码={(RequiresCode ? "需要" : "无")}");
-            return (true, $"已启动，端口 {port}");
+            AppLog.Write($"web: 已启动 {(UseHttps ? "https" : "http")}://0.0.0.0:{port}/ 访问码={(RequiresCode ? "需要" : "无")}");
+            return (true, $"已启动（{(UseHttps ? "HTTPS" : "HTTP")}），端口 {port}");
         }
         catch (Exception ex)
         {
@@ -55,18 +69,66 @@ public sealed class WebServerService : IDisposable
         }
     }
 
+    /// <summary>取出（必要时生成）自签证书：SAN 含机器名 + 所有本机 IPv4。</summary>
+    private X509Certificate2 GetOrCreateCertificate()
+    {
+        if (File.Exists(CertPath))
+        {
+            try { return new X509Certificate2(CertPath, "galquote", X509KeyStorageFlags.Exportable); }
+            catch (Exception ex) { AppLog.Write($"web: 读取证书失败，重新生成（{ex.Message}）"); }
+        }
+
+        using var rsa = RSA.Create(2048);
+        var req = new CertificateRequest("CN=Gal Quote Collector Web", rsa,
+            HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
+        var san = new SubjectAlternativeNameBuilder();
+        san.AddDnsName(Environment.MachineName);
+        san.AddDnsName("localhost");
+        san.AddIpAddress(IPAddress.Loopback);
+        foreach (var url in LocalUrls(_port == 0 ? 8088 : _port))
+        {
+            var host = url.Replace("http://", "").Replace("https://", "");
+            var colon = host.LastIndexOf(':');
+            if (colon > 0) host = host[..colon];
+            if (IPAddress.TryParse(host, out var ip)) san.AddIpAddress(ip);
+        }
+        req.CertificateExtensions.Add(san.Build());
+        req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+        req.CertificateExtensions.Add(new X509KeyUsageExtension(
+            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, false));
+        req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
+            new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false)); // serverAuth
+
+        var cert = req.CreateSelfSigned(DateTimeOffset.Now.AddDays(-1), DateTimeOffset.Now.AddYears(5));
+        var bytes = cert.Export(X509ContentType.Pfx, "galquote");
+        File.WriteAllBytes(CertPath, bytes);
+        AppLog.Write($"web: 已生成自签证书 {CertPath}");
+        return new X509Certificate2(bytes, "galquote", X509KeyStorageFlags.Exportable);
+    }
+
+    /// <summary>把证书导出成 .cer（给手机安装用），返回文件路径。</summary>
+    public string ExportCertificate()
+    {
+        var cert = _cert ?? (_cert = GetOrCreateCertificate());
+        var path = Path.Combine(_dataDir, "GalQuoteCollectorWeb.cer");
+        File.WriteAllBytes(path, cert.Export(X509ContentType.Cert));
+        return path;
+    }
+
     public void Stop()
     {
         try { _cts?.Cancel(); } catch { }
         try { _listener?.Stop(); } catch { }
         _listener = null;
         _cts = null;
+        _cert = null;
+        UseHttps = false;
         if (_port != 0) AppLog.Write("web: 已停止");
         _port = 0;
     }
 
     /// <summary>本机可用于访问的地址（局域网 IPv4）。</summary>
-    public static List<string> LocalUrls(int port)
+    public static List<string> LocalUrls(int port, bool https = false)
     {
         var list = new List<string>();
         try
@@ -76,12 +138,12 @@ public sealed class WebServerService : IDisposable
                 if (ip.AddressFamily != AddressFamily.InterNetwork) continue;
                 var s = ip.ToString();
                 if (s.StartsWith("127.") || s.StartsWith("169.254.")) continue;
-                list.Add($"http://{s}:{port}/");
+                list.Add($"{(https ? "https" : "http")}://{s}:{port}/");
             }
         }
         catch { }
-        if (list.Count == 0) list.Add($"http://127.0.0.1:{port}/");
-        list.Add($"http://127.0.0.1:{port}/");
+        if (list.Count == 0) list.Add($"{(https ? "https" : "http")}://127.0.0.1:{port}/");
+        list.Add($"{(https ? "https" : "http")}://127.0.0.1:{port}/");
         return list;
     }
 
@@ -101,7 +163,7 @@ public sealed class WebServerService : IDisposable
     private sealed record Request(string Method, string Path, Dictionary<string, string> Query,
         Dictionary<string, string> Headers, byte[] Body);
 
-    private static async Task<Request?> ReadRequestAsync(NetworkStream stream, CancellationToken ct)
+    private static async Task<Request?> ReadRequestAsync(Stream stream, CancellationToken ct)
     {
         var buffer = new MemoryStream();
         var chunk = new byte[8192];
@@ -164,7 +226,7 @@ public sealed class WebServerService : IDisposable
         return -1;
     }
 
-    private static async Task WriteAsync(NetworkStream stream, int status, string statusText,
+    private static async Task WriteAsync(Stream stream, int status, string statusText,
         string contentType, byte[] body, string? extraHeaders = null, CancellationToken ct = default)
     {
         var head = new StringBuilder();
@@ -180,11 +242,11 @@ public sealed class WebServerService : IDisposable
         await stream.FlushAsync(ct);
     }
 
-    private static Task JsonAsync(NetworkStream s, object payload, string? extra = null, CancellationToken ct = default)
+    private static Task JsonAsync(Stream s, object payload, string? extra = null, CancellationToken ct = default)
         => WriteAsync(s, 200, "OK", "application/json; charset=utf-8",
             Encoding.UTF8.GetBytes(JsonSerializer.Serialize(payload)), extra, ct);
 
-    private static Task ErrorAsync(NetworkStream s, int status, string message, CancellationToken ct = default)
+    private static Task ErrorAsync(Stream s, int status, string message, CancellationToken ct = default)
         => WriteAsync(s, status, status == 401 ? "Unauthorized" : "Bad Request", "text/plain; charset=utf-8",
             Encoding.UTF8.GetBytes(message), null, ct);
 
@@ -196,7 +258,28 @@ public sealed class WebServerService : IDisposable
             {
                 client.ReceiveTimeout = 15000;
                 client.SendTimeout = 30000;
-                var stream = client.GetStream();
+                Stream stream = client.GetStream();
+                if (UseHttps && _cert != null)
+                {
+                    var ssl = new SslStream(stream, false);
+                    try
+                    {
+                        await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
+                        {
+                            ServerCertificate = _cert,
+                            EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
+                            ClientCertificateRequired = false,
+                        }, ct);
+                        stream = ssl;
+                    }
+                    catch (Exception ex)
+                    {
+                        // 手机第一次会因为自签证书报错/用户点"继续"；握手失败很正常，记一行就够
+                        AppLog.Write($"web: TLS 握手失败 {ex.Message}");
+                        ssl.Dispose();
+                        return;
+                    }
+                }
                 var req = await ReadRequestAsync(stream, ct);
                 if (req == null) return;
 
@@ -233,7 +316,7 @@ public sealed class WebServerService : IDisposable
         }
     }
 
-    private async Task RouteAsync(NetworkStream stream, Request req, string? setCookie, CancellationToken ct)
+    private async Task RouteAsync(Stream stream, Request req, string? setCookie, CancellationToken ct)
     {
         var path = req.Path;
 

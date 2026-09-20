@@ -175,7 +175,10 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 
 ### 内网网页 + 每日备份（v1.3.3 起，改动前先读这节）
 - **内网网页**（`Services/WebServerService.cs` + `Services/WebPage.cs`）：在**程序进程内**用 `TcpListener` 起一个极简 HTTP/1.1 服务（**不需要管理员、不需要 URL ACL**，便携版也能用），手机/电脑浏览器打开 `http://本机IP:端口/` 即可查看/搜索/修改/导出语录。
-  - 设置项（`HotkeyConfig`）：`WebEnabled`（默认 **false**）、`WebPort`（默认 8088）、`WebAccessCode`（默认空 = **局域网免密**；填了就要求 `?k=码`，页面响应会带 `Set-Cookie: k=…`）。
+  - 设置项（`HotkeyConfig`）：`WebEnabled`（默认 **false**）、`WebPort`（默认 8088）、`WebAccessCode`（默认空 = **局域网免密**；填了就要求 `?k=码`，页面响应会带 `Set-Cookie: k=…`）、`WebUseHttps`（默认 **true**）。
+  - **HTTPS**（用户要求）：同一端口上用 `SslStream`（TLS1.2/1.3）+ **自签证书**；证书首次启动自动生成到 `<数据目录>\web-cert.pfx`（CN=Gal Quote Collector Web，SAN = 机器名 + localhost + 127.0.0.1 + 所有本机 IPv4，5 年有效）。设置里有「导出证书（给手机安装）」→ 导出 `.cer` 并用 explorer `/select` 定位；Android 装到「CA 证书」、iPhone 装描述文件后到「证书信任设置」里打开开关。
+  - **注意**：开 HTTPS 后该端口只讲 TLS，浏览器必须写 `https://`（写 `http://` 会 ERR_EMPTY_RESPONSE）；不想用时设置里关掉即可回到明文 HTTP。
+  - 连接排障（实测踩过）：本机 `http(s)://本机IP:端口` 通、防火墙规则也允许（`Gal-quote-tool` Allow + Profile=Private，WLAN 是 Private）时，手机连不上通常是**网络层**：AP 隔离/客户端隔离、访客网络、手机侧 VPN/代理（用户手机也装了代理类工具）、或电脑侧 FlClash 的 TUN 模式。设置界面已写这些提示。
   - 路由：`GET /`（内嵌单页）、`GET /api/meta`、`GET /api/quotes?q=&game=&group=&tag=&offset=&limit=`、`GET /api/quotes/{id}`、`PUT /api/quotes/{id}`（改 text/gameName/notes/capturedAt + groups/tags/newNames，按名字自动建分组标签）、`DELETE /api/quotes/{id}`、`GET /api/shot/{id}`（原图）、`GET /api/export?format=json|md`（复用 `ExportService`）。
   - **只改语录**（用户选定）：不暴露设置、映射、黑名单、游戏名规则。
   - 数据库安全：直接复用程序自己的 `StorageService`（它内部有 `_sync` 锁，线程安全），**不要**另外开第二个进程/连接写库。

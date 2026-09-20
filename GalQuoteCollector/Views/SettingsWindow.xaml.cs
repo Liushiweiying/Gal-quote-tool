@@ -37,6 +37,7 @@ public partial class SettingsWindow : Window
         BackupCheckBox.IsChecked = cfg.BackupEnabled;
         BackupDirBox.Text = cfg.BackupDirectory ?? "";
         WebCheckBox.IsChecked = cfg.WebEnabled;
+        WebHttpsCheckBox.IsChecked = cfg.WebUseHttps;
         WebPortBox.Text = (cfg.WebPort >= 1024 && cfg.WebPort <= 65535 ? cfg.WebPort : 8088).ToString();
         WebCodeBox.Text = cfg.WebAccessCode ?? "";
         UpdateWebUrls();
@@ -541,6 +542,7 @@ public partial class SettingsWindow : Window
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
         _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
         _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
+        _newConfig.WebUseHttps = WebHttpsCheckBox.IsChecked == true;
         var (ok, path, message) = Services.BackupService.BackupNow(_newConfig, _dataDir);
         BackupHintText.Text = message + (path.Length > 0 ? $"\n{path}" : "");
         if (!ok)
@@ -580,11 +582,50 @@ public partial class SettingsWindow : Window
         UpdateWebUrls();
     }
 
+    private void OnExportCert(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            // 证书要先生成/取出：起一次服务再导出（不实际占用端口就生成不了证书）
+            Services.WebServerService? tmp = null;
+            try
+            {
+                var storage = new Services.StorageService(System.IO.Path.Combine(_dataDir, "quotes.db"));
+                tmp = new Services.WebServerService(storage, _dataDir);
+                var (ok, msg) = tmp.Start(int.TryParse(WebPortBox.Text.Trim(), out var pp) && pp >= 1024 && pp <= 65535 ? pp : 8088,
+                    WebCodeBox.Text.Trim(), true);
+                if (!ok) { Views.InfoDialog.Show(this, "导出证书", msg, icon: Views.InfoDialogIcon.Warning); return; }
+                var path = tmp.ExportCertificate();
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = $"/select,\"{path}\"",
+                });
+                Views.InfoDialog.Show(this, "证书已导出",
+                    $"文件：{path}\n\n" +
+                    "手机安装方法：\n" +
+                    "· Android：设置 → 安全 → 加密与凭据 → 安装证书 → CA 证书 → 选择这个 .cer\n" +
+                    "· iPhone：用 AirDrop/邮件把这个 .cer 发过去 → 安装描述文件 → 设置 → 通用 → 关于本机 → 证书信任设置 → 打开开关\n\n" +
+                    "装好之后再访问 https 就不会提示不安全了。");
+            }
+            finally
+            {
+                tmp?.Stop();
+                tmp?.Dispose();
+            }
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "导出证书失败", ex.Message, icon: Views.InfoDialogIcon.Warning);
+        }
+    }
+
     private void OnOpenWebPage(object sender, RoutedEventArgs e)
     {
         int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
         var code = WebCodeBox.Text.Trim();
-        var url = $"http://127.0.0.1:{port}/" + (code.Length > 0 ? $"?k={Uri.EscapeDataString(code)}" : "");
+        var scheme = WebHttpsCheckBox.IsChecked == true ? "https" : "http";
+        var url = $"{scheme}://127.0.0.1:{port}/" + (code.Length > 0 ? $"?k={Uri.EscapeDataString(code)}" : "");
         try
         {
             System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo { FileName = url, UseShellExecute = true });
@@ -601,7 +642,7 @@ public partial class SettingsWindow : Window
         int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
         var code = WebCodeBox.Text.Trim();
         var suffix = code.Length > 0 ? $"?k={code}" : "";
-        var urls = Services.WebServerService.LocalUrls(port).Take(3).Select(u => u + suffix);
+        var urls = Services.WebServerService.LocalUrls(port, WebHttpsCheckBox.IsChecked == true).Take(3).Select(u => u + suffix);
         WebUrlText.Text = "局域网地址：" + string.Join("    ", urls);
     }
 
@@ -614,6 +655,7 @@ public partial class SettingsWindow : Window
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
         _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
         _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
+        _newConfig.WebUseHttps = WebHttpsCheckBox.IsChecked == true;
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         _newConfig.SlideshowLoop = SlideshowLoopCheckBox.IsChecked == true;

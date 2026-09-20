@@ -104,10 +104,19 @@
                 <Button Grid.Column="4" Content="打开网页" Click="OnOpenWebPage" Margin="6,0,0,0"
                         Padding="10,5" FontSize="12"/>
             </Grid>
+            <CheckBox x:Name="WebHttpsCheckBox" Content="使用 HTTPS（自签证书）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,4"
+                      ToolTip="开启后网址是 https://IP:端口 。证书是首次运行时自动生成的自签名证书，
+手机/电脑第一次访问会提示「不安全 / 证书无效」，选择「继续访问」即可；
+也可以点下面的「导出证书」把它装到手机上，之后就不再提示。"/>
             <TextBlock x:Name="WebHintText" Text="访问码留空 = 局域网免密（同一 WiFi 下谁都能改）；"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,2" TextWrapping="Wrap"/>
+            <Button Content="导出证书（给手机安装）" Click="OnExportCert" HorizontalAlignment="Left"
+                    Padding="10,5" FontSize="12" Margin="0,4,0,4"/>
             <TextBlock x:Name="WebUrlText" Text="" Foreground="#5B6ABF" FontSize="11"
-                       Margin="0,0,0,14" TextWrapping="Wrap"/>
+                       Margin="0,0,0,2" TextWrapping="Wrap"/>
+            <TextBlock Text="手机连不上？① 手机要和电脑在同一个 WiFi（手机 IP 应为 192.168.2.x）；② 关掉手机上的 VPN / 代理；③ 路由器若开了「AP 隔离 / 客户端隔离」或用了访客网络，局域网设备之间互不可见；④ 开启 HTTPS 后网址必须写 https:// 开头。"
+                       Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
             <TextBlock Text="采集延迟" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <Grid Margin="0,0,0,14">

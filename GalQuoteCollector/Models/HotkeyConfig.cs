@@ -21,6 +21,8 @@ public class HotkeyConfig
     public bool WebEnabled { get; set; }
     public int WebPort { get; set; } = 8088;
     public string WebAccessCode { get; set; } = "";
+    // 用 HTTPS（自签证书，手机第一次会提示不安全，继续访问即可；也可导出发到手机安装）
+    public bool WebUseHttps { get; set; } = true;
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public bool SlideshowLoop { get; set; }
     public string FontFamily { get; set; } = "Segoe UI";
@@ -180,6 +182,7 @@ public class HotkeyConfig
             WebEnabled = WebEnabled,
             WebPort = WebPort,
             WebAccessCode = WebAccessCode,
+            WebUseHttps = WebUseHttps,
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
             FontFamily = FontFamily,
