@@ -34,6 +34,7 @@ public partial class SettingsWindow : Window
         _newConfig = cfg.Clone();
         AutoStartCheckBox.IsChecked = cfg.AutoStart;
         SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
+        CropBlackBarsCheckBox.IsChecked = cfg.CropBlackBars;
         BackupCheckBox.IsChecked = cfg.BackupEnabled;
         BackupDirBox.Text = cfg.BackupDirectory ?? "";
         WebCheckBox.IsChecked = cfg.WebEnabled;
@@ -537,6 +538,7 @@ public partial class SettingsWindow : Window
 
     private void OnBackupNow(object sender, RoutedEventArgs e)
     {
+        _newConfig.CropBlackBars = CropBlackBarsCheckBox.IsChecked == true;
         _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
         _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
@@ -580,6 +582,27 @@ public partial class SettingsWindow : Window
         WebCodeBox.Text = new string(Enumerable.Range(0, 6).Select(_ => alphabet[rnd.Next(alphabet.Length)]).ToArray());
         WebHintText.Text = "已生成访问码：手机第一次打开用 http://IP:端口/?k=这个码（之后浏览器会记住）";
         UpdateWebUrls();
+    }
+
+    private void OnTrustCert(object sender, RoutedEventArgs e)
+    {
+        Services.WebServerService? tmp = null;
+        try
+        {
+            var storage = new Services.StorageService(System.IO.Path.Combine(_dataDir, "quotes.db"));
+            tmp = new Services.WebServerService(storage, _dataDir);
+            var port = int.TryParse(WebPortBox.Text.Trim(), out var pp) && pp >= 1024 && pp <= 65535 ? pp : 8088;
+            var (started, startMsg) = tmp.Start(port, WebCodeBox.Text.Trim(), true);
+            if (!started) { Views.InfoDialog.Show(this, "信任证书", startMsg, icon: Views.InfoDialogIcon.Warning); return; }
+            var (ok, msg) = tmp.TrustOnThisMachine();
+            Views.InfoDialog.Show(this, ok ? "已信任" : "信任失败", msg,
+                icon: ok ? Views.InfoDialogIcon.Information : Views.InfoDialogIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "信任失败", ex.Message, icon: Views.InfoDialogIcon.Warning);
+        }
+        finally { tmp?.Stop(); tmp?.Dispose(); }
     }
 
     private void OnExportCert(object sender, RoutedEventArgs e)
@@ -650,6 +673,7 @@ public partial class SettingsWindow : Window
     {
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.SwallowCaptureHotkey = SwallowHotkeyCheckBox.IsChecked == true;
+        _newConfig.CropBlackBars = CropBlackBarsCheckBox.IsChecked == true;
         _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
         _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;

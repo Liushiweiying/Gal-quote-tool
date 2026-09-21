@@ -55,6 +55,13 @@
             <TextBlock Text="如果你确实需要游戏里的这个键，就关掉它，或者把截图热键换成不冲突的组合（如 Ctrl+Alt+E）"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
+            <CheckBox x:Name="CropBlackBarsCheckBox"
+                      Content="截图自动裁掉黑边（游戏比例和显示器不一致时的左右/上下黑框）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,6"
+                      ToolTip="按「当前显示器」截图时，游戏画面往往只占中间一块，四周是黑边。
+开启后自动把纯黑边裁掉，只保留游戏画面；画面本身偏暗时会自动跳过，不会误裁。
+已有截图可以在主界面「···」→「裁掉截图黑边（全部）」批量处理。"/>
+
             <CheckBox x:Name="BackupCheckBox"
                       Content="每天首次启动自动备份（语录库 / 使用记录 / 设置），只保留最近 3 天"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"
@@ -111,8 +118,10 @@
 也可以点下面的「导出证书」把它装到手机上，之后就不再提示。"/>
             <TextBlock x:Name="WebHintText" Text="访问码留空 = 局域网免密（同一 WiFi 下谁都能改）；"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,2" TextWrapping="Wrap"/>
-            <Button Content="导出证书（给手机安装）" Click="OnExportCert" HorizontalAlignment="Left"
-                    Padding="10,5" FontSize="12" Margin="0,4,0,4"/>
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,4">
+                <Button Content="在本机信任（消除浏览器警告）" Click="OnTrustCert" Padding="10,5" FontSize="12"/>
+                <Button Content="导出证书（给手机安装）" Click="OnExportCert" Padding="10,5" FontSize="12" Margin="6,0,0,0"/>
+            </StackPanel>
             <TextBlock x:Name="WebUrlText" Text="" Foreground="#5B6ABF" FontSize="11"
                        Margin="0,0,0,2" TextWrapping="Wrap"/>
             <TextBlock Text="手机连不上？① 手机要和电脑在同一个 WiFi（手机 IP 应为 192.168.2.x）；② 关掉手机上的 VPN / 代理；③ 路由器若开了「AP 隔离 / 客户端隔离」或用了访客网络，局域网设备之间互不可见；④ 开启 HTTPS 后网址必须写 https:// 开头。"

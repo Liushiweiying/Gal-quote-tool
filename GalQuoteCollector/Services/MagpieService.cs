@@ -488,6 +488,74 @@ public static class MagpieService
         catch { return false; }
     }
 
+    /// <summary>
+    /// Magpie 现在是否开着缩放窗口（实时、可靠）。
+    /// **不要只靠日志判断**：Magpie 的日志是缓冲写盘的，实测"缩放开始"那行可能几秒后才落盘，
+    /// 于是我们误判成"没开始"→ 补发一次热键 → 反而把刚开起来的会话停掉（"要点两次"的真凶）。
+    /// 缩放窗口的类名以 Window_Magpie_ 开头，且会覆盖整个屏幕（我们是全屏时）。
+    /// </summary>
+    public static bool IsScalingWindowVisible(out string detail)
+    {
+        detail = "";
+        try
+        {
+            var screenW = 0; var screenH = 0;
+            try
+            {
+                screenW = GetSystemMetrics(0);  // SM_CXSCREEN
+                screenH = GetSystemMetrics(1);  // SM_CYSCREEN
+            }
+            catch { }
+
+            IntPtr found = IntPtr.Zero;
+            int fw = 0, fh = 0;
+            EnumWindows((h, _) =>
+            {
+                if (!IsWindowVisible(h)) return true;
+                var cls = new System.Text.StringBuilder(256);
+                GetClassName(h, cls, cls.Capacity);
+                var name = cls.ToString();
+                if (!name.StartsWith("Window_Magpie_", StringComparison.Ordinal)) return true;
+                GetWindowRect(h, out var r);
+                int w = r.Right - r.Left, hh = r.Bottom - r.Top;
+                // 太小的窗口（工具栏之类）不算缩放会话
+                if (w < 320 || hh < 240) return true;
+                if (screenW > 0 && w < screenW * 0.6) return true;
+                found = h; fw = w; fh = hh;
+                return false;
+            }, IntPtr.Zero);
+
+            if (found == IntPtr.Zero) return false;
+            detail = $"Magpie 缩放窗口 {fw}x{fh}";
+            return true;
+        }
+        catch (Exception ex)
+        {
+            detail = "检测缩放窗口失败: " + ex.Message;
+            return false;
+        }
+    }
+
+    private delegate bool EnumWindowsProc(IntPtr hWnd, IntPtr lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool EnumWindows(EnumWindowsProc lpEnumFunc, IntPtr lParam);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool IsWindowVisible(IntPtr hWnd);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern int GetClassName(IntPtr hWnd, System.Text.StringBuilder lpClassName, int nMaxCount);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern int GetSystemMetrics(int nIndex);
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool GetWindowRect(IntPtr hWnd, out RECT lpRect);
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct RECT { public int Left, Top, Right, Bottom; }
+
     // ── SendInput ──
 
     private const ushort VK_SHIFT = 0x10;

@@ -36,5 +36,11 @@ public partial class Quote : ObservableObject
 
     public string CapturedAtDisplay => CapturedAt.ToString("yyyy-MM-dd HH:mm:ss");
 
-    public string PreviewText => Text.Length > 50 ? Text[..50] + "..." : Text;
+    /// <summary>OCR 没识别出文字时的占位串；界面上不显示这几个字，只显示截图。</summary>
+    public const string UnrecognizedText = "[未识别到文字]";
+
+    public bool IsUnrecognized => Text.Contains(UnrecognizedText);
+
+    // 预览里不显示「[未识别到文字]」这几个字（语录本身照常显示，需要的话用上面的开关隐藏整条）
+    public string PreviewText => IsUnrecognized ? "" : (Text.Length > 50 ? Text[..50] + "..." : Text);
 }

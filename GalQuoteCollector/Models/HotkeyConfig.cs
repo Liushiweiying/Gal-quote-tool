@@ -14,6 +14,8 @@ public class HotkeyConfig
     public int CaptureDelayMs { get; set; } = 200;
     // 触发截图热键时是否吞掉这次按键（很多游戏引擎也用 Alt+E 之类的键，不吞会同时弹出游戏窗口）
     public bool SwallowCaptureHotkey { get; set; } = true;
+    // 截图后自动裁掉四周纯黑边（游戏比例和显示器不一致时的左右/上下黑框）
+    public bool CropBlackBars { get; set; } = true;
     // 每天首次启动自动备份（quotes.db / usage.json / settings.json），只保留最近 3 天
     public bool BackupEnabled { get; set; } = true;
     public string BackupDirectory { get; set; } = ""; // 留空 = 数据目录下的 backups
@@ -25,6 +27,11 @@ public class HotkeyConfig
     public bool WebUseHttps { get; set; } = true;
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public bool SlideshowLoop { get; set; }
+    /// <summary>
+    /// 回想显示时的黑边处理：0=原样, 1=裁掉黑边, 2=黑边涂白。
+    /// 只在显示时生效，**不修改文件**；回想窗口里按 B 键循环切换。
+    /// </summary>
+    public int SlideshowBarsMode { get; set; }
     public string FontFamily { get; set; } = "Segoe UI";
     public string SlideshowChineseFont { get; set; } = "Microsoft YaHei";
     public string SlideshowEnglishFont { get; set; } = "Segoe UI";
@@ -177,6 +184,7 @@ public class HotkeyConfig
             AutoStart = AutoStart,
             CaptureDelayMs = CaptureDelayMs,
             SwallowCaptureHotkey = SwallowCaptureHotkey,
+            CropBlackBars = CropBlackBars,
             BackupEnabled = BackupEnabled,
             BackupDirectory = BackupDirectory,
             WebEnabled = WebEnabled,
@@ -185,6 +193,7 @@ public class HotkeyConfig
             WebUseHttps = WebUseHttps,
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
+            SlideshowBarsMode = SlideshowBarsMode,
             FontFamily = FontFamily,
             SlideshowChineseFont = SlideshowChineseFont,
             SlideshowEnglishFont = SlideshowEnglishFont,

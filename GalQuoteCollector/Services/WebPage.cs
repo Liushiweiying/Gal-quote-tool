@@ -29,7 +29,14 @@ button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
 button.danger{color:var(--danger)}
 button:disabled{opacity:.5}
 main{padding:12px;max-width:1100px;margin:0 auto}
-.filters{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px}
+.filters{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:8px}
+.filters select{min-width:0}
+.filters select{max-width:100%}
+.exrow{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin:0 2px 10px;font-size:12px;color:var(--muted)}
+.exrow button.ex{padding:6px 12px;font-size:12px;color:var(--ink2)}
+.exrow button.ex.on{background:var(--danger);border-color:var(--danger);color:#fff}
+.chk{display:flex;align-items:center;gap:6px;color:var(--muted);font-size:13px;margin:0 2px 10px}
+.chk input{width:auto}
 .count{color:var(--muted);font-size:13px;margin:2px 2px 8px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin-bottom:10px}
 .card .txt{white-space:pre-wrap;word-break:break-word;font-size:15px}
@@ -55,8 +62,29 @@ main{padding:12px;max-width:1100px;margin:0 auto}
 #zoom{position:fixed;inset:0;background:rgba(0,0,0,.9);display:none;align-items:center;justify-content:center;z-index:80;padding:10px}
 #zoom.on{display:flex}
 #zoom img{max-width:100%;max-height:100%}
+
+/* 回想模式 */
+#viewer{position:fixed;inset:0;display:none;flex-direction:column;align-items:center;justify-content:center;z-index:90;background:#000}
+#viewer.on{display:flex}
+#viewer.white{background:#fff}
+#viewer img{max-width:100%;max-height:100%;object-fit:contain;flex:1;min-height:0;width:100%}
+#viewer #vText{position:absolute;left:0;right:0;bottom:58px;padding:14px 16px;color:#fff;
+  background:linear-gradient(to top,rgba(0,0,0,.72),rgba(0,0,0,0));pointer-events:none;max-height:42vh;overflow:hidden}
+#viewer.white #vText{color:#1D1D1F;background:linear-gradient(to top,rgba(255,255,255,.92),rgba(255,255,255,0))}
+#vGame{font-size:13px;opacity:.85;margin-bottom:4px}
+#vQuote{font-size:16px;line-height:1.55;white-space:pre-wrap;word-break:break-word}
+#vBar{position:absolute;left:0;right:0;bottom:0;height:58px;display:flex;gap:8px;align-items:center;
+  justify-content:center;padding:8px 12px;background:rgba(0,0,0,.55);backdrop-filter:blur(6px)}
+#viewer.white #vBar{background:rgba(255,255,255,.86)}
+#vBar button{min-width:56px;padding:9px 12px;border-radius:10px;border:1px solid rgba(255,255,255,.25);
+  background:rgba(255,255,255,.14);color:#fff;font-size:14px}
+#viewer.white #vBar button{background:#fff;border-color:#E5E5EA;color:#1D1D1F}
+#vPrev{font-size:20px;line-height:1}
+#vPos{position:absolute;top:calc(env(safe-area-inset-top, 0px) + 10px);right:14px;color:#fff;
+  font-size:12px;background:rgba(0,0,0,.45);padding:4px 10px;border-radius:999px}
+#viewer.white #vPos{color:#1D1D1F;background:rgba(255,255,255,.8)}
 @media (max-width:720px){
-  .filters{grid-template-columns:1fr}
+  .filters{grid-template-columns:minmax(0,1fr)}
   main{padding:10px}
   #mask{padding:0;align-items:flex-end}
   #dialog{border-radius:16px 16px 0 0;max-height:94vh}
@@ -67,7 +95,7 @@ main{padding:12px;max-width:1100px;margin:0 auto}
 @media (max-width:520px){
   h1{flex:1 0 100%;margin-bottom:2px}
   header .row{flex-wrap:wrap}
-  header .row button{flex:1 1 30%;padding:10px 6px;font-size:13px}
+  header .row button{flex:1 1 44%;padding:10px 6px;font-size:13px}
 }
 </style>
 </head>
@@ -77,6 +105,8 @@ main{padding:12px;max-width:1100px;margin:0 auto}
     <h1>语录收藏</h1>
     <button id="btnJson">导出 JSON</button>
     <button id="btnMd">导出 Markdown</button>
+    <button id="btnImport">导入</button>
+    <button id="btnSlideshow">回想</button>
     <button id="btnReload">刷新</button>
   </div>
   <div class="row" style="margin-top:8px">
@@ -89,6 +119,14 @@ main{padding:12px;max-width:1100px;margin:0 auto}
     <select id="fGroup"><option value="">全部分组</option></select>
     <select id="fTag"><option value="">全部标签</option></select>
   </div>
+  <div class="exrow">
+    <span>反选（排除选中的）：</span>
+    <button class="ex" id="exGame" title="排除选中的游戏">游戏</button>
+    <button class="ex" id="exGroup" title="排除选中的分组">分组</button>
+    <button class="ex" id="exTag" title="排除选中的标签">标签</button>
+  </div>
+
+  <input type="file" id="fileImport" accept=".json,application/json" style="display:none">
   <div class="count" id="count"></div>
   <div id="list"></div>
   <button class="more" id="more" style="display:none">加载更多</button>
@@ -102,7 +140,8 @@ main{padding:12px;max-width:1100px;margin:0 auto}
   <div class="field"><label>时间</label><input id="dTime" type="datetime-local" step="1"></div>
   <div class="field"><label>分组</label><div class="picker" id="dGroups"></div></div>
   <div class="field"><label>标签</label><div class="picker" id="dTags"></div></div>
-  <div class="field"><label>新建分组 / 标签（逗号分隔）</label><input id="dNew" placeholder="例如：共通线, 名场面"></div>
+  <div class="field"><label>新建分组（不存在就创建）</label><input id="dNewGroup" placeholder="例如：共通线"></div>
+  <div class="field"><label>新建标签（不存在就创建）</label><input id="dNewTag" placeholder="例如：名场面"></div>
   <div class="row" style="margin-top:14px;justify-content:flex-end">
     <button class="danger" id="dDelete">删除</button>
     <button id="dCancel">取消</button>
@@ -111,10 +150,24 @@ main{padding:12px;max-width:1100px;margin:0 auto}
 </div></div>
 
 <div id="zoom"><img id="zoomImg" alt=""></div>
+
+<!-- 回想模式（手机/电脑都能用）：全屏看图 + 上一条/下一条 + 自动播放 + 黑边处理（不改文件） -->
+<div id="viewer" class="white">
+  <img id="vImg" alt="">
+  <div id="vText"><div id="vGame"></div><div id="vQuote"></div></div>
+  <div id="vBar">
+    <button id="vPrev">‹</button>
+    <button id="vPlay">▶ 自动</button>
+    <button id="vBars">原样</button>
+    <button id="vClose">×</button>
+  </div>
+  <div id="vPos"></div>
+</div>
 <div id="toast"></div>
 
 <script>
-const S={q:'',game:'',group:'',tag:'',offset:0,limit:20,total:0,meta:null,edit:null};
+const S={q:'',game:'',group:'',tag:'',offset:0,limit:20,total:0,meta:null,edit:null,
+         ex:{game:false,group:false,tag:false}};
 const $=id=>document.getElementById(id);
 const esc=s=>(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 function toast(msg){const t=$('toast');t.textContent=msg;t.classList.add('on');clearTimeout(t._h);t._h=setTimeout(()=>t.classList.remove('on'),1800);}
@@ -130,20 +183,23 @@ async function loadMeta(){
   $('games').innerHTML=S.meta.games.map(g=>`<option value="${esc(g)}">`).join('');
 }
 
+const UNKNOWN='[未识别到文字]';
 function card(it){
+  const body=(it.text||'').includes(UNKNOWN)?'':it.text;
   const chips=[...(it.groups||[]).map(g=>`<span class="chip">${esc(g)}</span>`),...(it.tags||[]).map(t=>`<span class="chip">#${esc(t)}</span>`)].join(' ');
   return `<div class="card" data-id="${it.id}">
-    <div class="txt">${esc(it.text)}</div>
+    ${body?`<div class="txt">${esc(body)}</div>`:''}
     ${it.notes?`<div class="notes">${esc(it.notes)}</div>`:''}
     ${it.hasShot?`<img class="thumb" loading="lazy" src="/api/shot/${it.id}" alt="">`:''}
     <div class="meta"><span class="game">${esc(it.gameName||'未标注')}</span><span>${fmt(it.capturedAt)}</span>${chips}</div>
-    <div class="acts"><button data-act="edit">编辑</button><button data-act="del" class="danger">删除</button></div>
+    <div class="acts"><button data-act="edit">编辑</button><button data-act="exp">导出</button><button data-act="del" class="danger">删除</button></div>
   </div>`;
 }
 
 async function load(reset){
   if(reset){S.offset=0;$('list').innerHTML='';}
-  const p=new URLSearchParams({q:S.q,game:S.game,group:S.group,tag:S.tag,offset:S.offset,limit:S.limit});
+  const ex=Object.keys(S.ex).filter(k=>S.ex[k]).join(',');
+  const p=new URLSearchParams({q:S.q,game:S.game,group:S.group,tag:S.tag,offset:S.offset,limit:S.limit,ex:ex});
   const data=await api('/api/quotes?'+p);
   S.total=data.total;
   $('count').textContent=`共 ${data.total} 条${data.items.length?`，已显示 ${Math.min(S.offset+data.items.length,data.total)} 条`:''}`;
@@ -164,7 +220,7 @@ function openEdit(it){
   $('dTitle').textContent='编辑语录 #'+it.id;
   $('dText').value=it.text||'';$('dGame').value=it.gameName||'';$('dNotes').value=it.notes||'';
   $('dTime').value=(it.capturedAt||'').slice(0,19);
-  $('dNew').value='';
+  $('dNewGroup').value='';$('dNewTag').value='';
   picker($('dGroups'),S.meta.groups.map(g=>g.name),it.groups||[]);
   picker($('dTags'),S.meta.tags.map(t=>t.name),it.tags||[]);
   $('mask').classList.add('on');
@@ -173,9 +229,10 @@ function closeEdit(){$('mask').classList.remove('on');S.edit=null;}
 
 async function save(){
   const it=S.edit;if(!it)return;
+  const splitNames=v=>(v||'').split(/[,，]/).map(s=>s.trim()).filter(Boolean);
   const body={text:$('dText').value,gameName:$('dGame').value,notes:$('dNotes').value,
     capturedAt:$('dTime').value,groups:picked($('dGroups')),tags:picked($('dTags')),
-    newNames:($('dNew').value||'').split(/[,，]/).map(s=>s.trim()).filter(Boolean)};
+    newGroups:splitNames($('dNewGroup').value),newTags:splitNames($('dNewTag').value)};
   try{await api('/api/quotes/'+it.id,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
     toast('已保存');closeEdit();await loadMeta();await load(true);}catch(e){toast('保存失败：'+e.message);}
 }
@@ -190,8 +247,9 @@ $('list').addEventListener('click',async e=>{
   if(e.target.dataset.act==='edit'){
     try{openEdit(await api('/api/quotes/'+id));}catch(err){toast('打开失败');}
   }else if(e.target.dataset.act==='del'){del(id);}
+  else if(e.target.dataset.act==='exp'){location.href='/api/quotes/'+id+'/export';}
 });
-$('list').addEventListener('click',e=>{if(e.target.classList.contains('thumb')){$('zoomImg').src=e.target.src;$('zoom').classList.add('on');}});
+$('list').addEventListener('click',e=>{if(e.target.classList.contains('thumb')){const c=e.target.closest('.card');openViewer(c?+c.dataset.id:0);}});
 $('zoom').onclick=()=>$('zoom').classList.remove('on');
 $('more').onclick=()=>load(false);
 $('dSave').onclick=save;$('dCancel').onclick=closeEdit;
@@ -200,13 +258,80 @@ $('mask').onclick=e=>{if(e.target.id==='mask')closeEdit();};
 $('btnReload').onclick=()=>load(true);
 $('btnJson').onclick=()=>location.href='/api/export?format=json';
 $('btnMd').onclick=()=>location.href='/api/export?format=md';
+
+['game','group','tag'].forEach(k=>{
+  const btn=$('ex'+k[0].toUpperCase()+k.slice(1));
+  btn.onclick=()=>{S.ex[k]=!S.ex[k];btn.classList.toggle('on',S.ex[k]);btn.title=(S.ex[k]?'取消排除':'排除选中的')+({game:'游戏',group:'分组',tag:'标签'}[k]);load(true);};
+});
+$('btnImport').onclick=()=>$('fileImport').click();
+$('btnSlideshow').onclick=()=>openViewer(0);
+$('fileImport').onchange=async e=>{
+  const f=e.target.files[0];if(!f)return;
+  try{
+    const text=await f.text();
+    const res=await api('/api/import',{method:'POST',headers:{'Content-Type':'application/json'},body:text});
+    toast('已导入 #'+res.id);await loadMeta();await load(true);
+  }catch(err){toast('导入失败：'+err.message);}
+  e.target.value='';
+};
 let deb;const onSearch=()=>{clearTimeout(deb);deb=setTimeout(()=>{S.q=$('q').value.trim();load(true);},250);};
+
+/* ── 回想模式 ── */
+const V={list:[],i:0,bars:0,timer:null,timerOn:false};
+async function openViewer(startId){
+  const ex=Object.keys(S.ex).filter(k=>S.ex[k]).join(',');
+  const p=new URLSearchParams({q:S.q,game:S.game,group:S.group,tag:S.tag,offset:0,limit:200,ex:ex});
+  const data=await api('/api/quotes?'+p);
+  V.list=data.items.filter(x=>x.hasShot||x.text);
+  if(!V.list.length){toast('没有可回想的语录');return;}
+  V.i=Math.max(0,V.list.findIndex(x=>x.id===startId));
+  document.addEventListener('keydown',onViewerKey);
+  $('viewer').classList.add('on');
+  showSlide();
+}
+function closeViewer(){
+  $('viewer').classList.remove('on');
+  stopAuto();
+  document.removeEventListener('keydown',onViewerKey);
+}
+function showSlide(){
+  const it=V.list[V.i];if(!it)return;
+  $('vImg').src=it.hasShot?('/api/shot/'+it.id+'?bars='+V.bars):'';
+  $('vImg').style.display=it.hasShot?'block':'none';
+  $('vQuote').textContent=(it.text||'').includes(UNKNOWN)?'':it.text;
+  $('vGame').textContent=(it.gameName||'')+(it.capturedAt?('　'+it.capturedAt.replace('T',' ').slice(0,16)):'');
+  $('vPos').textContent=(V.i+1)+' / '+V.list.length;
+  $('vBars').textContent=['原样','裁掉黑边','黑边涂白'][V.bars];
+  $('viewer').classList.toggle('white',V.bars!==0);
+}
+const vNext=d=>{if(!V.list.length)return;V.i=(V.i+d+V.list.length)%V.list.length;showSlide();};
+function startAuto(){V.timer=setInterval(()=>vNext(1),5000);V.timerOn=true;$('vPlay').textContent='⏸ 暂停';}
+function stopAuto(){if(V.timer)clearInterval(V.timer);V.timer=null;V.timerOn=false;if($('vPlay'))$('vPlay').textContent='▶ 自动';}
+function onViewerKey(e){
+  if(e.key==='ArrowRight'||e.key===' '){vNext(1);e.preventDefault();}
+  else if(e.key==='ArrowLeft'){vNext(-1);}
+  else if(e.key==='Escape'){closeViewer();}
+}
+$('vPrev').onclick=e=>{e.stopPropagation();vNext(-1);};
+$('vPlay').onclick=e=>{e.stopPropagation();V.timerOn?stopAuto():startAuto();};
+$('vBars').onclick=e=>{e.stopPropagation();V.bars=(V.bars+1)%3;showSlide();};
+$('vClose').onclick=e=>{e.stopPropagation();closeViewer();};
+$('viewer').onclick=e=>{if(e.target.closest('#vBar'))return;vNext(e.clientX<window.innerWidth*0.35?-1:1);};
+let vTouchX=null;
+$('viewer').addEventListener('touchstart',e=>{vTouchX=e.changedTouches[0].clientX;},{passive:true});
+$('viewer').addEventListener('touchend',e=>{
+  if(vTouchX===null)return;const dx=e.changedTouches[0].clientX-vTouchX;vTouchX=null;
+  if(Math.abs(dx)>50){vNext(dx<0?1:-1);}
+},{passive:true});
 $('q').oninput=onSearch;
 $('fGame').onchange=()=>{S.game=$('fGame').value;load(true);};
 $('fGroup').onchange=()=>{S.group=$('fGroup').value;load(true);};
 $('fTag').onchange=()=>{S.tag=$('fTag').value;load(true);};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeEdit();$('zoom').classList.remove('on');}});
-(async()=>{try{await loadMeta();await load(true);}catch(e){document.body.insertAdjacentHTML('afterbegin','<div style="padding:12px;color:#D9534F">加载失败：'+esc(e.message)+'</div>');}})();
+(async()=>{try{await loadMeta();await load(true);
+  // ?view=1 → 直接进回想（手机上可以收藏这个链接）
+  if(/[?&]view=1/.test(location.search))setTimeout(()=>openViewer(0),300);
+}catch(e){document.body.insertAdjacentHTML('afterbegin','<div style="padding:12px;color:#D9534F">加载失败：'+esc(e.message)+'</div>');}})();
 </script>
 </body>
 </html>

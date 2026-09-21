@@ -365,8 +365,24 @@ public partial class MainViewModel : ObservableObject
                 forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality,
                 captureMode: EffectiveCaptureMode());
             var screenshotPath = shot.FilePath;
-
             var ocrConfig = _settingsService.LoadHotkeyConfig();
+
+            // 自动裁掉四周纯黑边（游戏比例和显示器不一致时会产生黑框）
+            if (ocrConfig.CropBlackBars)
+            {
+                var (cropped, cropDetail) = Services.BlackBarCropper.Crop(screenshotPath);
+                AppLog.Write($"capture crop: {cropDetail}");
+                if (cropped)
+                {
+                    try
+                    {
+                        using var fixedShot = System.Drawing.Image.FromFile(screenshotPath);
+                        shot.Width = fixedShot.Width;
+                        shot.Height = fixedShot.Height;
+                    }
+                    catch { }
+                }
+            }
             var text = ocrConfig.OcrEngine switch
             {
                 "local" => await _ocrService.RecognizeLocalTextAsync(
@@ -665,7 +681,18 @@ public partial class MainViewModel : ObservableObject
             groupsByQuote, screenshotsByQuote, allGroups, allTags, slideshowMode, slideshowLoop,
             cfg.SlideshowChineseFont, cfg.SlideshowEnglishFont,
             forceMagpieUpscale || cfg.MagpieUpscaleSlideshow, cfg.MagpieScaleHotkey, cfg.MagpiePath,
-            forceMagpieUpscale);
+            forceMagpieUpscale, cfg.SlideshowBarsMode, mode =>
+            {
+                // 记住用户在回想里按 B 选的黑边模式（只影响显示，不改文件）
+                try
+                {
+                    var c = _settingsService.LoadHotkeyConfig();
+                    if (c.SlideshowBarsMode == mode) return;
+                    c.SlideshowBarsMode = mode;
+                    _settingsService.SaveHotkeyConfig(c);
+                }
+                catch (Exception ex) { AppLog.Write($"slideshow bars mode save failed: {ex.Message}"); }
+            });
         win.ShowDialog();
     }
 
@@ -784,6 +811,53 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
+    /// <summary>把已有截图里的黑边统一裁掉（就地覆盖，先弹确认）。</summary>
+    [RelayCommand]
+    private async Task CropAllBlackBars()
+    {
+        var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var q in _allQuotes)
+            if (!string.IsNullOrWhiteSpace(q.ScreenshotPath) && File.Exists(q.ScreenshotPath))
+                files.Add(q.ScreenshotPath);
+        try
+        {
+            foreach (var p in _storageService.GetAllScreenshotPaths())
+                if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) files.Add(p);
+        }
+        catch { }
+
+        if (files.Count == 0)
+        {
+            InfoDialog.Show(_window, "提示", "没有找到截图文件");
+            return;
+        }
+
+        var confirm = InfoDialog.Show(_window, "裁掉黑边",
+            $"将检查 {files.Count} 张截图，把四周的纯黑边裁掉（就地覆盖原文件）。\n\n" +
+            "只裁「整行 / 整列几乎全黑」的边缘；画面本身偏暗、或黑边占比过大的会自动跳过。\n\n继续吗？",
+            InfoDialogButtons.YesNo, InfoDialogIcon.Question);
+        if (confirm != InfoDialogResult.Yes) return;
+
+        int cropped = 0, skipped = 0, failed = 0;
+        StatusText = "正在裁掉黑边…";
+        await Task.Run(() =>
+        {
+            foreach (var f in files)
+            {
+                var (ok, detail) = Services.BlackBarCropper.Crop(f);
+                AppLog.Write($"crop all: {detail}");
+                if (ok) cropped++;
+                else if (detail.Contains("失败")) failed++;
+                else skipped++;
+            }
+        });
+        StatusText = $"裁掉黑边完成：裁了 {cropped} 张，跳过 {skipped} 张，失败 {failed} 张";
+        RefreshQuotes();
+        InfoDialog.Show(_window, "完成",
+            $"裁了 {cropped} 张，跳过 {skipped} 张（没有黑边或画面偏暗），失败 {failed} 张。\n\n" +
+            "截图已被就地替换，可点「修复截图关联」让列表刷新缩略图。",
+            icon: InfoDialogIcon.Information);
+    }
     private void ImportItems(List<ImportItem> items)
     {
         if (items.Count == 0)
@@ -2408,7 +2482,7 @@ public partial class MainViewModel : ObservableObject
                     || q.GameName.Contains(k, StringComparison.OrdinalIgnoreCase)));
         }
 
-        // Exclude unrecognized from search results only
+        // Exclude unrecognized from search results only（"隐藏语录"开关，默认关；显示时只是不渲染占位文字）
         if (_hideUnrecognized && keywords.Length > 0)
         {
             source = source.Where(q => !q.Text.Contains("[未识别到文字]"));

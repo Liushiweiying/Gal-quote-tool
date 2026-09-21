@@ -74,7 +74,14 @@ public sealed class WebServerService : IDisposable
     {
         if (File.Exists(CertPath))
         {
-            try { return new X509Certificate2(CertPath, "galquote", X509KeyStorageFlags.Exportable); }
+            try
+            {
+                var loaded = new X509Certificate2(CertPath, "galquote", X509KeyStorageFlags.Exportable);
+                // 旧版本生成的是 CA:FALSE 的证书，装进"受信任的根"后浏览器仍会警告 → 重新生成
+                var bc = loaded.Extensions.OfType<X509BasicConstraintsExtension>().FirstOrDefault();
+                if (bc != null && bc.CertificateAuthority) return loaded;
+                AppLog.Write("web: 旧证书不是根证书，重新生成（消除浏览器「不安全」提示）");
+            }
             catch (Exception ex) { AppLog.Write($"web: 读取证书失败，重新生成（{ex.Message}）"); }
         }
 
@@ -93,9 +100,10 @@ public sealed class WebServerService : IDisposable
             if (IPAddress.TryParse(host, out var ip)) san.AddIpAddress(ip);
         }
         req.CertificateExtensions.Add(san.Build());
-        req.CertificateExtensions.Add(new X509BasicConstraintsExtension(false, false, 0, false));
+        // CA=TRUE：这样把它装进"受信任的根证书颁发机构"后，浏览器才会真的信任它
+        req.CertificateExtensions.Add(new X509BasicConstraintsExtension(true, false, 0, true));
         req.CertificateExtensions.Add(new X509KeyUsageExtension(
-            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment, false));
+            X509KeyUsageFlags.DigitalSignature | X509KeyUsageFlags.KeyEncipherment | X509KeyUsageFlags.KeyCertSign, true));
         req.CertificateExtensions.Add(new X509EnhancedKeyUsageExtension(
             new OidCollection { new Oid("1.3.6.1.5.5.7.3.1") }, false)); // serverAuth
 
@@ -104,6 +112,30 @@ public sealed class WebServerService : IDisposable
         File.WriteAllBytes(CertPath, bytes);
         AppLog.Write($"web: 已生成自签证书 {CertPath}");
         return new X509Certificate2(bytes, "galquote", X509KeyStorageFlags.Exportable);
+    }
+
+    /// <summary>
+    /// 把证书装进「当前用户 → 受信任的根证书颁发机构」，之后本机浏览器（Edge/Chrome）就不再提示不安全。
+    /// 会弹一次 Windows 确认框，但**不需要管理员权限**。
+    /// </summary>
+    public (bool ok, string message) TrustOnThisMachine()
+    {
+        try
+        {
+            var cert = _cert ?? (_cert = GetOrCreateCertificate());
+            using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
+            store.Open(OpenFlags.ReadWrite);
+            var found = store.Certificates.Find(X509FindType.FindByThumbprint, cert.Thumbprint, false);
+            if (found.Count > 0) return (true, "本机已经信任过这个证书了");
+            store.Add(cert);
+            AppLog.Write($"web: 已把证书装进本机受信任根 {cert.Thumbprint}");
+            return (true, "已装进「受信任的根证书颁发机构」：本机浏览器不会再提示不安全（手机仍需安装导出的 .cer）");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"web: 信任证书失败 {ex.Message}");
+            return (false, "信任失败（可能是你在确认框里点了「否」）：" + ex.Message);
+        }
     }
 
     /// <summary>把证书导出成 .cer（给手机安装用），返回文件路径。</summary>
@@ -349,6 +381,10 @@ public sealed class WebServerService : IDisposable
             string game = Get(req, "game").Trim();
             string group = Get(req, "group").Trim();
             string tag = Get(req, "tag").Trim();
+            // ex=game,group,tag → 这几项按"排除"处理（反选）
+            var excluded = (Get(req, "ex") ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries)
+                .Select(s => s.Trim().ToLowerInvariant()).ToHashSet();
+
             int offset = Math.Max(0, ParseInt(Get(req, "offset"), 0));
             int limit = Math.Clamp(ParseInt(Get(req, "limit"), 20), 1, 200);
 
@@ -364,11 +400,26 @@ public sealed class WebServerService : IDisposable
                     x.Text.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                     x.GameName.Contains(q, StringComparison.OrdinalIgnoreCase) ||
                     x.Notes.Contains(q, StringComparison.OrdinalIgnoreCase));
-            if (game.Length > 0) filtered = filtered.Where(x => x.GameName == game);
+
+            if (game.Length > 0)
+            {
+                bool ex = excluded.Contains("game");
+                filtered = filtered.Where(x => ex ? x.GameName != game : x.GameName == game);
+            }
             if (group.Length > 0 && int.TryParse(group, out var gid))
-                filtered = filtered.Where(x => groupMap.GetValueOrDefault(x.Id, new List<int>()).Contains(gid));
+            {
+                bool ex = excluded.Contains("group");
+                filtered = filtered.Where(x => ex
+                    ? !groupMap.GetValueOrDefault(x.Id, new List<int>()).Contains(gid)
+                    : groupMap.GetValueOrDefault(x.Id, new List<int>()).Contains(gid));
+            }
             if (tag.Length > 0 && int.TryParse(tag, out var tid))
-                filtered = filtered.Where(x => tagMap.GetValueOrDefault(x.Id, new List<int>()).Contains(tid));
+            {
+                bool ex = excluded.Contains("tag");
+                filtered = filtered.Where(x => ex
+                    ? !tagMap.GetValueOrDefault(x.Id, new List<int>()).Contains(tid)
+                    : tagMap.GetValueOrDefault(x.Id, new List<int>()).Contains(tid));
+            }
 
             var list = filtered.ToList();
             var page = list.Skip(offset).Take(limit).Select(x => new
@@ -389,7 +440,8 @@ public sealed class WebServerService : IDisposable
             return;
         }
 
-        if (path.StartsWith("/api/quotes/") && req.Method == "GET")
+        // 注意：/api/quotes/{id}/export 必须先于这条通用的单条查询匹配，否则会被它吃掉
+        if (path.StartsWith("/api/quotes/") && req.Method == "GET" && !path.EndsWith("/export"))
         {
             int id = ParseInt(path[12..], -1);
             var quote = _storage.GetAllQuotes().FirstOrDefault(x => x.Id == id);
@@ -426,8 +478,10 @@ public sealed class WebServerService : IDisposable
             _storage.UpdateQuote(quote);
 
             // 分组 / 标签：按名字同步（不存在就新建）
-            var wantedGroups = ReadNames(node, "groups").Concat(ReadNames(node, "newNames")).Distinct().ToList();
-            var wantedTags = ReadNames(node, "tags").Concat(ReadNames(node, "newNames")).Distinct().ToList();
+            var wantedGroups = ReadNames(node, "groups").Concat(ReadNames(node, "newGroups"))
+                .Concat(ReadNames(node, "newNames")).Distinct().ToList();
+            var wantedTags = ReadNames(node, "tags").Concat(ReadNames(node, "newTags"))
+                .Concat(ReadNames(node, "newNames")).Distinct().ToList();
 
             foreach (var existing in _storage.GetGroupsForQuote(id))
                 if (!wantedGroups.Contains(existing.Name)) _storage.RemoveQuoteFromGroup(id, existing.Id);
@@ -471,6 +525,45 @@ public sealed class WebServerService : IDisposable
                 await ErrorAsync(stream, 404, "没有截图", ct);
                 return;
             }
+            // bars=0 原样 / 1 裁掉黑边 / 2 黑边涂白（只在内存里处理，**不改文件**）
+            int bars = ParseInt(Get(req, "bars"), 0);
+            if (bars is 1 or 2)
+            {
+                try
+                {
+                    using var src = new System.Drawing.Bitmap(file);
+                    var rect = BlackBarCropper.Detect(src);
+                    bool hasBars = !(rect.Left == 0 && rect.Top == 0 &&
+                                     rect.Right == src.Width - 1 && rect.Bottom == src.Height - 1);
+                    if (hasBars)
+                    {
+                        using var dst = new System.Drawing.Bitmap(
+                            bars == 1 ? rect.Width : src.Width,
+                            bars == 1 ? rect.Height : src.Height,
+                            System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                        using (var g = System.Drawing.Graphics.FromImage(dst))
+                        {
+                            g.DrawImage(src, new System.Drawing.Rectangle(0, 0, dst.Width, dst.Height),
+                                new System.Drawing.Rectangle(rect.Left, rect.Top, rect.Width, rect.Height),
+                                System.Drawing.GraphicsUnit.Pixel);
+                            if (bars == 2)
+                            {
+                                using var white = new System.Drawing.SolidBrush(System.Drawing.Color.White);
+                                if (rect.Left > 0) g.FillRectangle(white, 0, 0, rect.Left, dst.Height);
+                                if (rect.Right < dst.Width - 1) g.FillRectangle(white, rect.Right + 1, 0, dst.Width - rect.Right - 1, dst.Height);
+                                if (rect.Top > 0) g.FillRectangle(white, 0, 0, dst.Width, rect.Top);
+                                if (rect.Bottom < dst.Height - 1) g.FillRectangle(white, 0, rect.Bottom + 1, dst.Width, dst.Height - rect.Bottom - 1);
+                            }
+                        }
+                        using var ms = new MemoryStream();
+                        dst.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                        await WriteAsync(stream, 200, "OK", "image/png", ms.ToArray(), setCookie, ct);
+                        return;
+                    }
+                }
+                catch (Exception ex) { AppLog.Write($"web: 处理黑边失败，返回原图（{ex.Message}）"); }
+            }
+
             var bytes = await File.ReadAllBytesAsync(file, ct);
             var ext = Path.GetExtension(file).ToLowerInvariant();
             var type = ext switch
@@ -481,6 +574,104 @@ public sealed class WebServerService : IDisposable
                 _ => "image/png",
             };
             await WriteAsync(stream, 200, "OK", type, bytes, setCookie, ct);
+            return;
+        }
+
+        // 单条导出（含图片，base64 内嵌，方便手机/电脑之间搬运）
+        if (path.StartsWith("/api/quotes/") && path.EndsWith("/export") && req.Method == "GET")
+        {
+            var idText = path[12..^7];
+            int id = ParseInt(idText, -1);
+            var quote = _storage.GetAllQuotes().FirstOrDefault(x => x.Id == id);
+            if (quote == null) { await ErrorAsync(stream, 404, "没有这条语录", ct); return; }
+
+            string? imageName = null;
+            string? imageBase64 = null;
+            if (!string.IsNullOrWhiteSpace(quote.ScreenshotPath) && File.Exists(quote.ScreenshotPath))
+            {
+                imageName = Path.GetFileName(quote.ScreenshotPath);
+                imageBase64 = Convert.ToBase64String(await File.ReadAllBytesAsync(quote.ScreenshotPath, ct));
+            }
+
+            var bundle = new
+            {
+                type = "galquote.single",
+                version = 1,
+                text = quote.Text,
+                gameName = quote.GameName,
+                notes = quote.Notes,
+                windowTitle = quote.WindowTitle,
+                capturedAt = quote.CapturedAt.ToString("yyyy-MM-ddTHH:mm:ss"),
+                groups = _storage.GetGroupsForQuote(id).Select(g => g.Name).ToList(),
+                tags = _storage.GetTagsForQuote(id).Select(t => t.Name).ToList(),
+                imageName,
+                imageBase64,
+            };
+            var json = JsonSerializer.Serialize(bundle, new JsonSerializerOptions { WriteIndented = true });
+            var fileName = $"quote-{id}-{quote.CapturedAt:yyyyMMdd-HHmm}.json";
+            var header = $"Content-Disposition: attachment; filename=\"{fileName}\"\r\n" + setCookie;
+            await WriteAsync(stream, 200, "OK", "application/json; charset=utf-8",
+                Encoding.UTF8.GetBytes(json), header, ct);
+            return;
+        }
+
+        // 单条导入（含图片）
+        if (path == "/api/import" && req.Method == "POST")
+        {
+            JsonNode? node;
+            try { node = JsonNode.Parse(Encoding.UTF8.GetString(req.Body)); }
+            catch { await ErrorAsync(stream, 400, "JSON 解析失败", ct); return; }
+            if (node is not JsonObject obj) { await ErrorAsync(stream, 400, "内容格式不对", ct); return; }
+
+            var text = obj["text"]?.GetValue<string>() ?? "";
+            if (string.IsNullOrWhiteSpace(text)) { await ErrorAsync(stream, 400, "缺少 text 字段", ct); return; }
+
+            var imageBase64 = obj["imageBase64"]?.GetValue<string>();
+            string savedImage = "";
+            if (!string.IsNullOrWhiteSpace(imageBase64))
+            {
+                try
+                {
+                    var bytes = Convert.FromBase64String(imageBase64);
+                    var ext = Path.GetExtension(obj["imageName"]?.GetValue<string>() ?? "").ToLowerInvariant();
+                    if (ext.Length is 0 or > 6) ext = ".png";
+                    var shots = ResolveScreenshotDir();
+                    Directory.CreateDirectory(shots);
+                    savedImage = Path.Combine(shots, $"import-{DateTime.Now:yyyyMMdd-HHmmssfff}{ext}");
+                    await File.WriteAllBytesAsync(savedImage, bytes, ct);
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"web: 导入图片失败 {ex.Message}");
+                    savedImage = "";
+                }
+            }
+
+            var quote = new Quote
+            {
+                Text = text,
+                GameName = obj["gameName"]?.GetValue<string>() ?? "",
+                Notes = obj["notes"]?.GetValue<string>() ?? "",
+                WindowTitle = obj["windowTitle"]?.GetValue<string>() ?? "",
+                ScreenshotPath = savedImage,
+                CapturedAt = DateTime.TryParse(obj["capturedAt"]?.GetValue<string>(), out var when) ? when : DateTime.Now,
+            };
+            _storage.InsertQuote(quote);
+            if (savedImage.Length > 0) _storage.AddScreenshot(quote.Id, savedImage, 0);
+
+            foreach (var name in ReadNames(obj, "groups"))
+            {
+                var grp = _storage.GetAllGroups().FirstOrDefault(x => x.Name == name) ?? _storage.AddGroup(name);
+                _storage.AddQuoteToGroup(quote.Id, grp.Id);
+            }
+            foreach (var name in ReadNames(obj, "tags"))
+            {
+                var tag = _storage.GetAllTags().FirstOrDefault(x => x.Name == name) ?? _storage.AddTag(name);
+                _storage.AddTagToQuote(quote.Id, tag.Id);
+            }
+
+            AppLog.Write($"web: 已导入语录 #{quote.Id}（图片={(savedImage.Length > 0 ? "有" : "无")}）");
+            await JsonAsync(stream, new { ok = true, id = quote.Id }, setCookie, ct);
             return;
         }
 
@@ -525,6 +716,18 @@ public sealed class WebServerService : IDisposable
         }
 
         await ErrorAsync(stream, 404, "没有这个地址: " + path, ct);
+    }
+
+    /// <summary>导入图片时用的截图目录（跟设置里的保持一致）。</summary>
+    private string ResolveScreenshotDir()
+    {
+        try
+        {
+            var cfg = new SettingsService(_dataDir).LoadHotkeyConfig();
+            if (!string.IsNullOrWhiteSpace(cfg.ScreenshotDirectory)) return cfg.ScreenshotDirectory.Trim();
+        }
+        catch { }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "GalQuoteCollector");
     }
 
     private static string Get(Request req, string key) => req.Query.TryGetValue(key, out var v) ? v : "";

@@ -88,6 +88,7 @@
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
 
                     <Button Grid.Column="0" Content="← 上一条" x:Name="PrevOrCloseBtn"
@@ -141,15 +142,21 @@
                                    VerticalAlignment="Center" Margin="10,0,0,0"/>
                     </StackPanel>
 
-                    <Button Grid.Column="4" Content="━" x:Name="MinimizeBtn"
+                    <Button Grid.Column="4" Content="原样" x:Name="BarsModeBtn"
+                            Click="OnBarsMode" Height="28" MinWidth="52" Padding="6,0" FontSize="11"
+                            Background="Transparent" Foreground="Gray" BorderThickness="0" Cursor="Hand"
+                            Margin="0,0,6,0"
+                            ToolTip="黑边处理（只影响显示，不改文件）：原样 → 裁掉黑边 → 黑边涂白　快捷键 B"/>
+
+                    <Button Grid.Column="5" Content="━" x:Name="MinimizeBtn"
                             Click="OnMinimize" Width="28" Height="28" FontSize="14"
                             Background="Transparent" Foreground="#555" BorderThickness="0" Cursor="Hand"/>
 
-                    <Button Grid.Column="5" Content="⛶" x:Name="FullscreenBtn"
+                    <Button Grid.Column="6" Content="⛶" x:Name="FullscreenBtn"
                             Click="OnToggleFullscreen" Width="28" Height="28" FontSize="14"
                             Background="Transparent" Foreground="#555" BorderThickness="0" Cursor="Hand"/>
 
-                    <Button Grid.Column="6" Content="×" x:Name="CloseBtn"
+                    <Button Grid.Column="7" Content="×" x:Name="CloseBtn"
                             Click="OnCloseClick" Width="28" Height="28" FontSize="14" FontWeight="Bold"
                             Background="Transparent" Foreground="#888" BorderThickness="0" Cursor="Hand"/>
                 </Grid>
@@ -197,7 +204,9 @@
         </Grid>
 
         <!-- Fullscreen Layout -->
-        <Grid x:Name="FullscreenLayout" Visibility="Collapsed" Background="Black">
+        <Grid x:Name="FullscreenLayout" Visibility="Collapsed">
+            <!-- 背景色由「黑边处理」模式决定：原样=黑，白底=白（见 SlideshowWindow.xaml.cs） -->
+            <Grid x:Name="FsBackground" Background="Black"/>
             <Image x:Name="FsScreenshotImage" Stretch="Uniform" HorizontalAlignment="Center" VerticalAlignment="Center"
                    RenderOptions.BitmapScalingMode="HighQuality"
                    MaxWidth="{Binding ActualWidth, RelativeSource={RelativeSource AncestorType=Grid}}"

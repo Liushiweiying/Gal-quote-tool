@@ -19,6 +19,10 @@ public partial class SlideshowWindow : Window
     private readonly Random _random = new();
     private readonly int _mode;
     private bool _loop;
+    /// <summary>回想显示时的黑边处理：0 原样 / 1 裁掉 / 2 涂白（只影响显示，不改文件）。</summary>
+    private int _barsMode;
+    /// <summary>模式变化时回调（用于把选择写回设置）。</summary>
+    private readonly Action<int>? _barsModeChanged;
 
     private List<Quote> _filtered = new();          // currently filtered quotes
     private int[] _order = Array.Empty<int>();      // quote order indices into _filtered
@@ -33,6 +37,7 @@ public partial class SlideshowWindow : Window
     private readonly string _magpieHotkey;
     private readonly string _magpiePath;
     private bool _magpieActive;
+    private bool _magpieBusy; // 正在处理超分开关（防重入：重复发键会把刚开起来的会话停掉）
     private bool _magpieClosing;
     private bool _closed;
 
@@ -45,7 +50,7 @@ public partial class SlideshowWindow : Window
         int slideshowMode, bool slideshowLoop,
         string chineseFont = "Microsoft YaHei", string englishFont = "Segoe UI",
         bool magpieUpscale = false, string magpieHotkey = "", string magpiePath = "",
-        bool diagnosticsAutoFullscreen = false)
+        bool diagnosticsAutoFullscreen = false, int barsMode = 0, Action<int>? barsModeChanged = null)
     {
         InitializeComponent();
         Owner = owner;
@@ -57,6 +62,8 @@ public partial class SlideshowWindow : Window
         _availableTags = availableTags;
         _mode = slideshowMode;
         _loop = slideshowLoop;
+        _barsMode = barsMode;
+        _barsModeChanged = barsModeChanged;
         _chineseFont = chineseFont;
         _englishFont = englishFont;
         _magpieUpscale = magpieUpscale;
@@ -111,6 +118,24 @@ public partial class SlideshowWindow : Window
     private async Task EnableMagpieUpscaleAsync()
     {
         if (!_magpieUpscale || _closed || _magpieActive) return;
+        // 防重入：⛶ 按钮 / F11 / 双击可能几乎同时触发两次，
+        // 第二次发键会把第一次刚开起来的会话停掉——这正是"要点两次才成功"的元凶之一
+        if (_magpieBusy)
+        {
+            AppLog.Write("slideshow magpie: enable already in progress, skipped duplicate");
+            return;
+        }
+        _magpieBusy = true;
+        try
+        {
+            await EnableMagpieUpscaleCoreAsync();
+        }
+        finally { _magpieBusy = false; }
+    }
+
+    private async Task EnableMagpieUpscaleCoreAsync()
+    {
+        if (!_magpieUpscale || _closed || _magpieActive) return;
 
         // 等全屏切换完成、窗口拿到前台
         await Task.Delay(500);
@@ -140,12 +165,14 @@ public partial class SlideshowWindow : Window
 
         Activate();
         WindowState = WindowState.Maximized;
-        await Task.Delay(250);
+        await EnsureForegroundAsync();
         if (_closed || !_isFullscreen) return;
 
-        var logPath = MagpieService.TryFindLogPath(_magpiePath);
-        bool othersWereScaling = MagpieService.IsScalingActive(logPath);
-        long sendOffset = MagpieService.LogSize(logPath); // 发送前的日志长度
+        // 简化策略（用户要求）：Magpie 在跑就只发热键，不做多余的放大与轮询。
+        // 唯一需要的判断是"按之前是不是正在缩放别的窗口"——是的话，第一下只会把它停掉，
+        // 必须再补一次才会缩放到我们的全屏窗口（Magpie 热键是开关语义）。
+        bool othersWereScaling = MagpieService.IsScalingWindowVisible(out var scaleWinDetail);
+        AppLog.Write($"slideshow magpie: scalingWindowBefore={othersWereScaling} {scaleWinDetail}");
 
         if (!await MagpieService.SendHotkeyAsync(hotkey))
         {
@@ -153,42 +180,50 @@ public partial class SlideshowWindow : Window
             return;
         }
 
-        // 用日志确认是否真的开始了缩放：正在缩放别的窗口时，这一下只是把它停掉
-        bool scaled;
-        if (logPath != null)
+        if (othersWereScaling)
         {
-            await Task.Delay(1300);
-            scaled = MagpieService.LogHasScalingStartedSince(logPath, sendOffset, out _);
-            if (!scaled && !_closed && _isFullscreen)
-            {
-                AppLog.Write(othersWereScaling
-                    ? "slideshow magpie: stopped the other window's scaling, sending again for this window"
-                    : "slideshow magpie: no scaling start seen, retrying once");
-                sendOffset = MagpieService.LogSize(logPath);
-                await MagpieService.SendHotkeyAsync(hotkey);
-                await Task.Delay(1300);
-                scaled = MagpieService.LogHasScalingStartedSince(logPath, sendOffset, out _);
-            }
-        }
-        else
-        {
-            scaled = true; // 没日志可查时不妄下结论，按成功处理
+            AppLog.Write("slideshow magpie: stopped the other window's scaling, sending again for this window");
+            await Task.Delay(600);
+            await EnsureForegroundAsync();
+            await MagpieService.SendHotkeyAsync(hotkey);
         }
 
-        _magpieActive = scaled;
-        if (scaled)
-        {
-            MagpieStatusText.Text = othersWereScaling
-                ? $"Magpie 超分已切到全屏回想：{hotkey}（原窗口的超分已停止）"
-                : $"Magpie 超分：{hotkey}（{source}）";
-            AppLog.Write($"slideshow magpie: scaling fullscreen window with {hotkey} ({source}), othersWereScaling={othersWereScaling}");
-        }
-        else
-        {
-            MagpieStatusText.Text = $"Magpie 未响应热键 {hotkey}（可在设置里点「测试」排查）";
-            AppLog.Write($"slideshow magpie: no scaling detected after sending {hotkey}");
-        }
+        _magpieActive = true;
+        MagpieStatusText.Text = othersWereScaling
+            ? $"Magpie 超分已切到全屏回想：{hotkey}（原窗口的超分已停止）"
+            : $"Magpie 超分：{hotkey}（{source}）";
+        AppLog.Write($"slideshow magpie: scaling fullscreen window with {hotkey} ({source}), othersWereScaling={othersWereScaling}");
     }
+
+    /// <summary>轮询"Magpie 缩放窗口是否出现/消失"，最多 timeoutMs 毫秒（实时可靠，不依赖日志）。</summary>
+    private static async Task<bool> WaitForScalingWindowAsync(bool expectVisible, int timeoutMs)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.ElapsedMilliseconds < timeoutMs)
+        {
+            if (MagpieService.IsScalingWindowVisible(out _) == expectVisible) return true;
+            await Task.Delay(200);
+        }
+        return MagpieService.IsScalingWindowVisible(out _) == expectVisible;
+    }
+
+    /// <summary>确保本窗口真的在前台（Magpie 缩放的是当前前台窗口）。</summary>
+    private async Task EnsureForegroundAsync()
+    {
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        for (int i = 0; i < 3; i++)
+        {
+            if (CaptureService.GetForegroundWindowHandle() == hwnd) return;
+            Activate();
+            SetForegroundWindow(hwnd);
+            await Task.Delay(220);
+        }
+        if (CaptureService.GetForegroundWindowHandle() != hwnd)
+            AppLog.Write("slideshow magpie: 窗口可能不在前台，Magpie 可能缩放了别的窗口");
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     /// <summary>
     /// 退出全屏时解除超分。Magpie 在源窗口状态改变/销毁时会**自己**结束缩放
@@ -201,14 +236,17 @@ public partial class SlideshowWindow : Window
         _magpieActive = false;
 
         var logPath = MagpieService.TryFindLogPath(_magpiePath);
-        if (logPath != null)
+        // 实时信号优先：Magpie 已经在源窗口状态改变/销毁时自己结束了缩放，就别再补发（会把会话又开起来）。
+        // 缩放窗口通常会比日志"缩放结束"晚一两秒消失，所以这里多等一会儿再决定。
+        if (!await WaitForScalingWindowAsync(false, 2500))
         {
-            await Task.Delay(800);
-            if (!MagpieService.IsScalingActive(logPath))
-            {
-                AppLog.Write("slideshow magpie: scaling already ended by Magpie itself");
-                return;
-            }
+            AppLog.Write("slideshow magpie: scaling already ended by Magpie itself");
+            return;
+        }
+        if (logPath != null && !MagpieService.IsScalingActive(logPath))
+        {
+            AppLog.Write("slideshow magpie: scaling already ended by Magpie itself (log)");
+            return;
         }
 
         try
@@ -344,10 +382,38 @@ public partial class SlideshowWindow : Window
             catch { }
         }
 
-        ScreenshotImage.Source = bitmap;
-        ScreenshotBox.Visibility = bitmap != null ? Visibility.Visible : Visibility.Collapsed;
-        FsScreenshotImage.Source = bitmap;
+        // 白底模式：显示时裁掉黑边 / 把黑边涂白（**不修改文件**）
+        var shown = bitmap == null ? null : Controls.SlideshowImageBars.Apply(bitmap, _barsMode);
+        ScreenshotImage.Source = shown;
+        ScreenshotBox.Visibility = shown != null ? Visibility.Visible : Visibility.Collapsed;
+        FsScreenshotImage.Source = shown;
+        if (FsBackground != null)
+            FsBackground.Background = _barsMode == Controls.SlideshowImageBars.ModeNone
+                ? System.Windows.Media.Brushes.Black
+                : System.Windows.Media.Brushes.White;
     }
+
+    /// <summary>按 B 键 / 点顶栏按钮：原样 → 裁掉黑边 → 黑边涂白 → 原样（只影响显示，不动文件）。</summary>
+    private void CycleBarsMode()
+    {
+        _barsMode = (_barsMode + 1) % 3;
+        UpdateBarsModeUi();
+        _barsModeChanged?.Invoke(_barsMode);
+        ShowCurrent();
+    }
+
+    private void UpdateBarsModeUi()
+    {
+        if (BarsModeBtn == null) return;
+        BarsModeBtn.Content = Controls.SlideshowImageBars.ModeName(_barsMode);
+        BarsModeBtn.Foreground = _barsMode == Controls.SlideshowImageBars.ModeNone
+            ? System.Windows.Media.Brushes.Gray
+            : System.Windows.Media.Brushes.SeaGreen;
+        ToolTipService.SetToolTip(BarsModeBtn, "黑边处理（只影响显示，不改文件）：" +
+            Controls.SlideshowImageBars.ModeName(_barsMode) + "　按 B 切换");
+    }
+
+    private void OnBarsMode(object sender, RoutedEventArgs e) => CycleBarsMode();
 
     private void GoPrev()
     {
@@ -450,6 +516,7 @@ public partial class SlideshowWindow : Window
             case Key.Enter:         GoRandom(); break;
             case Key.F11:           ToggleFullscreen(); break;
             case Key.F2:            ToggleSlideshowTopmost(); break;
+            case Key.B:             CycleBarsMode(); break;
             case Key.Escape:
                 if (_isFullscreen) ToggleFullscreen(); else Close();
                 break;

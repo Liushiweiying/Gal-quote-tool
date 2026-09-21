@@ -153,6 +153,7 @@
                             <MenuItem Header="重新关联截图" Command="{Binding RematchScreenshotsCommand}"/>
                             <MenuItem Header="修复截图关联" Command="{Binding RepairScreenshotsCommand}"/>
                             <MenuItem Header="删除未关联截图" Command="{Binding DeleteUnassociatedScreenshotsCommand}"/>
+                            <MenuItem Header="裁掉截图黑边（全部）" Command="{Binding CropAllBlackBarsCommand}"/>
                             <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                             <Separator/>
@@ -216,7 +217,7 @@
                                 <DataTemplate>
                                     <Border Background="#FAFAFA" Padding="8,6"
                                             BorderBrush="#F0F0F0" BorderThickness="1"
-                                            ToolTip="{Binding Text}">
+                                            ToolTip="{Binding PreviewText}">
                                         <Border.ContextMenu>
                                             <ContextMenu Background="White" Foreground="#333">
                                                 <MenuItem Header="复制文本" Click="OnQuoteMenuCopy"/>

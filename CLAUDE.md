@@ -94,7 +94,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 应用侧（C#）的用户内容文件删除**均已**走 `FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin)`（MainViewModel.cs 的 DeleteScreenshots/DeleteScreenshot/DeleteUnassociatedScreenshots/MigrateScreenshots），无需改动；自启 VBS/lnk、临时文件、日志截断为永久删除属合理范围。
 
 ### 发布约定（用户要求，2026-08-13）
-- 版本号走 **1.2.x / 1.3.x**（当前 v1.3.2，2026-09-19 发布；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v132` 形式（去掉小数点）。
+- 版本号走 **1.2.x / 1.3.x**（当前 v1.3.3，2026-09-21 发布；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v133` 形式（去掉小数点）。
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
@@ -204,6 +204,20 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
   - 已知小瑕疵：`--fix-lock` 在目标应用当天没有记录时会新建一条、显示名直接用 key 原文（`Xxx.exe`），不像 `--move-usage` 会去别的日期沿用显示名——用完手工改一下 Name 即可（或用「应用名 / 锁屏进程」窗口改）。
   - 2026-09-18 实测数据（用户确认过的正确拆分）：夏空カナタ_chs.exe 151 分 + Hollow Knight Silksong 84 分 + 其他 ≈ 工具运行 269 分，锁屏 0。
 
+### Magpie 日志是缓冲写盘的（v1.3.3 实测，重要）
+- **不要用 Magpie 日志判断"超分是否已开始"**：`缩放开始` 那行可能几秒后才落盘，实测 4 秒轮询也读不到 → 误判成"没开始" → 补发热键 → 恰好把刚开起来的会话**停掉**（这就是"要点两次 / ⛶ 按钮没反应"的真凶）。
+- 改用**实时信号** `MagpieService.IsScalingWindowVisible()`：枚举顶层窗口，找可见的 `Window_Magpie_*` 且尺寸 ≥60% 屏幕（工具栏之类小窗不算）。
+- 逻辑（用户要求，保持简单）：Magpie 在跑 → 直接发超分热键；**按之前若正在缩放别的窗口**（窗口枚举可见）→ 再补发一次（热键是开关语义，第一下只会停掉原会话）；Magpie 没跑 → 只提示一句，不做别的放大。
+- 退出全屏：先等缩放窗口消失（Magpie 会自己结束），再决定是否补发；`WaitForScalingWindowAsync(false, 2500)`。
+
+### 截图黑边 + 回想白底（v1.3.3 起）
+- `Services/BlackBarCropper.cs`：检测四周"整行/整列 ≥98.5% 像素 RGB<34"的黑边；裁掉面积 >45% 或剩余过小 → 判定暗色画面，放弃。
+  - 文件级：`Crop(path)`（就地，先写 `.crop.tmp` 再替换）、`WhiteFill(path)`（涂白、尺寸不变）；采集后自动裁（配置 `CropBlackBars`，默认开）；「···」→「裁掉截图黑边（全部）」批量；诊断开关 `--crop-bars <文件|目录>`。
+- 回想显示级（**不改文件**）：`Views/Controls/SlideshowImageBars.Apply(bitmap, mode)`，mode 0 原样 / 1 `CroppedBitmap` / 2 复制像素把黑边写成白；顶栏按钮或 `B` 键切换，配置 `SlideshowBarsMode` 记忆；全屏背景随模式黑/白。诊断开关 `--bars-test <文件> <0|1|2>`。
+- 网页端同样有：`GET /api/shot/{id}?bars=0|1|2` 在内存里处理（手机回想模式用这个）。
+
+### 内网网页的回想模式（v1.3.3）
+- `WebPage.cs` 里的 `#viewer` 全屏层：左右滑动/点击两侧切换、自动播放（5s）、显示游戏名+正文+位置、`原样/裁掉黑边/黑边涂白` 切换；`?view=1` 直接进回想（手机可收藏书签）；服务端 `GET /api/quotes/{id}/export|POST /api/import` 支持单条含图导入导出。
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
 - 代码签名：自签名证书 `CN=Gal Quote Collector`（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。

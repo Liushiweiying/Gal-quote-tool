@@ -222,6 +222,75 @@ public partial class App : Application
                 Log($"--move-usage: ok={ok2} {detail2}");
             }
 
+            // Diagnostic: --crop-bars <文件或目录> [输出目录] 测试裁黑边（不改原文件，输出 *-crop.png）
+            int cropIdx = Array.IndexOf(e.Args, "--crop-bars");
+            if (cropIdx >= 0 && e.Args.Length > cropIdx + 1)
+            {
+                var src = e.Args[cropIdx + 1];
+                var outDir = e.Args.Length > cropIdx + 2 ? e.Args[cropIdx + 2] : null;
+                var files = Directory.Exists(src)
+                    ? Directory.GetFiles(src, "*.png").Concat(Directory.GetFiles(src, "*.jpg")).ToArray()
+                    : new[] { src };
+                foreach (var f in files)
+                {
+                    var target = outDir == null
+                        ? Path.Combine(Path.GetDirectoryName(f) ?? ".", Path.GetFileNameWithoutExtension(f) + "-crop.png")
+                        : Path.Combine(outDir, Path.GetFileNameWithoutExtension(f) + "-crop.png");
+                    var (cropped, detail) = Services.BlackBarCropper.Crop(f, target);
+                    Log($"--crop-bars: {detail}");
+                }
+            }
+
+            // Diagnostic: --bars-test <文件> <模式0/1/2> [输出目录] 验证回想的白底显示处理（不改原文件）
+            int barsIdx = Array.IndexOf(e.Args, "--bars-test");
+            if (barsIdx >= 0 && e.Args.Length > barsIdx + 2)
+            {
+                try
+                {
+                    var file = e.Args[barsIdx + 1];
+                    int mode = int.Parse(e.Args[barsIdx + 2]);
+                    var outDir = e.Args.Length > barsIdx + 3 ? e.Args[barsIdx + 3] : Path.GetDirectoryName(file)!;
+                    var bmp = new System.Windows.Media.Imaging.BitmapImage();
+                    bmp.BeginInit();
+                    bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+                    bmp.UriSource = new Uri(file);
+                    bmp.EndInit();
+                    var result = Views.Controls.SlideshowImageBars.Apply(bmp, mode);
+                    var name = $"{Path.GetFileNameWithoutExtension(file)}-bars{mode}.png";
+                    var target = Path.Combine(outDir, name);
+                    var encoder = new System.Windows.Media.Imaging.PngBitmapEncoder();
+                    encoder.Frames.Add(System.Windows.Media.Imaging.BitmapFrame.Create(result));
+                    using (var fs = File.Create(target)) encoder.Save(fs);
+                    Log($"--bars-test: {Path.GetFileName(file)} mode={Views.Controls.SlideshowImageBars.ModeName(mode)} " +
+                        $"{bmp.PixelWidth}x{bmp.PixelHeight} → {result.PixelWidth}x{result.PixelHeight} 保存 {name}");
+                }
+                catch (Exception ex) { Log($"--bars-test failed: {ex.Message}"); }
+            }
+
+            // Diagnostic: --magpie-log-test 打印程序读到的 Magpie 日志尾部与判定结果
+            if (e.Args.Contains("--magpie-log-test"))
+            {
+                try
+                {
+                    var lp = Services.MagpieService.TryFindLogPath(null);
+                    Log($"--magpie-log-test: log={lp ?? "<null>"} size={Services.MagpieService.LogSize(lp)} " +
+                        $"active={Services.MagpieService.IsScalingActive(lp)}");
+                    if (lp != null && File.Exists(lp))
+                    {
+                        using var fsx = new FileStream(lp, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+                        long start = Math.Max(0, fsx.Length - 256 * 1024);
+                        fsx.Seek(start, SeekOrigin.Begin);
+                        using var rdr = new StreamReader(fsx, System.Text.Encoding.UTF8);
+                        var text = rdr.ReadToEnd();
+                        Log($"   readLen={text.Length} lastStart={text.LastIndexOf("缩放开始", StringComparison.Ordinal)} " +
+                            $"lastEnd={text.LastIndexOf("缩放结束", StringComparison.Ordinal)}");
+                        var tail = text.Length > 260 ? text[^260..] : text;
+                        Log("   tail=" + tail.Replace("\r", "").Replace("\n", " ⏎ "));
+                    }
+                }
+                catch (Exception ex) { Log($"--magpie-log-test failed: {ex.Message}"); }
+            }
+
             Log("=== Startup complete ===");
         }
         catch (Exception ex)

@@ -105,6 +105,18 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.3 (2026-09-21)
+- **New built-in LAN web page (phone / desktop browser)**: the app serves a small web UI (optional HTTPS), so any device on the same Wi-Fi can open `http://PC-IP:8088/` to **browse, search, edit, import and export** quotes; the layout adapts to phone and desktop
+  - **Slideshow mode**: tap "回想" or a card thumbnail for a full-screen viewer with swipe/tap navigation, auto-play, game name and text
+  - **Black-bar handling without touching files**: switch between "as-is / crop bars / paint bars white" in the viewer — processed in memory on the server
+  - **Single-quote import/export (with image)**: export one quote as JSON with the image embedded as base64, then import it on any device
+  - **Inverted filters**: exclude a game / group / tag; quotes without OCR text now show only the screenshot (the placeholder text is not rendered)
+  - **HTTPS** on by default with a self-signed certificate (generated on first run); trust it on this PC with one button, or export it for phones
+- **New daily auto-backup on first launch**: quotes DB, usage data, settings **and screenshots**, once a day, keeping the last 3 days in a folder you choose
+- **New black-bar handling for captures**: screenshots are auto-cropped on capture (toggleable) and there is a batch "crop all screenshots" command; mostly-dark images are skipped
+- **Improved Magpie upscaling in the slideshow**: one hotkey does it — if Magpie is running the hotkey is sent (with one extra press when it was scaling another window); the log-based check is gone (Magpie buffers its log, which caused the old "press twice" bug)
+- **Improved slideshow window**: toggle "as-is / crop / paint white" with the top-bar button or the `B` key (**files are never modified**); the fullscreen background turns white too
+- **Fix** the per-app "average per day" now divides by **days that actually have records**
 ### v1.3.2 (2026-09-19)
 - **Fix** lock-screen time was heavily over-counted (a v1.3.0/v1.3.1 bug)
   - Cause: the old rule treated "input desktop is not Default" as locked; without any real lock event this still fired, crediting a whole evening of gaming to the lock bucket (about 145 of 229 minutes on one day)
