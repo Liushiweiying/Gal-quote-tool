@@ -139,14 +139,20 @@
                         <TextBlock x:Name="ProgressText" FontSize="13" Foreground="#999"
                                    VerticalAlignment="Center"/>
                         <TextBlock x:Name="MagpieStatusText" FontSize="11" Foreground="#5B6ABF"
-                                   VerticalAlignment="Center" Margin="10,0,0,0"/>
+                                   VerticalAlignment="Center" Margin="10,0,8,0"
+                                   TextTrimming="CharacterEllipsis"/>
+                        <!-- 黑边 + 回想设置：放进星号列里，避免被窗口右侧裁掉 -->
+                        <Button Content="原样" x:Name="BarsModeBtn"
+                                Click="OnBarsMode" Height="26" MinWidth="50" Padding="6,0" FontSize="11"
+                                Background="Transparent" Foreground="Gray" BorderThickness="0" Cursor="Hand"
+                                VerticalAlignment="Center"
+                                ToolTip="黑边处理（只影响显示，不改文件）：原样 → 裁掉黑边 → 黑边涂白　快捷键 B"/>
+                        <Button Content="⚙" x:Name="SettingsBtn" Click="OnSlideshowSettings"
+                                Width="26" Height="26" FontSize="14" Padding="0"
+                                Background="Transparent" Foreground="#555" BorderThickness="0" Cursor="Hand"
+                                VerticalAlignment="Center" Margin="2,0,0,0"
+                                ToolTip="回想设置（黑边 / 循环 / 字体 / Magpie 超分）"/>
                     </StackPanel>
-
-                    <Button Grid.Column="4" Content="原样" x:Name="BarsModeBtn"
-                            Click="OnBarsMode" Height="28" MinWidth="52" Padding="6,0" FontSize="11"
-                            Background="Transparent" Foreground="Gray" BorderThickness="0" Cursor="Hand"
-                            Margin="0,0,6,0"
-                            ToolTip="黑边处理（只影响显示，不改文件）：原样 → 裁掉黑边 → 黑边涂白　快捷键 B"/>
 
                     <Button Grid.Column="5" Content="━" x:Name="MinimizeBtn"
                             Click="OnMinimize" Width="28" Height="28" FontSize="14"

@@ -8,11 +8,61 @@
         Background="#F5F5F7"
         FontFamily="Segoe UI"
         PreviewKeyDown="Window_PreviewKeyDown">
-    <ScrollViewer Padding="24,20">
+    <Window.Resources>
+        <Style x:Key="NavButton" TargetType="Button">
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#3C3C43"/>
+            <Setter Property="FontSize" Value="13"/>
+            <Setter Property="Padding" Value="10,7"/>
+            <Setter Property="Margin" Value="0,0,0,2"/>
+            <Setter Property="Cursor" Value="Hand"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="Bd" Background="{TemplateBinding Background}" CornerRadius="7"
+                                Padding="{TemplateBinding Padding}">
+                            <ContentPresenter HorizontalAlignment="Left" VerticalAlignment="Center"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="#EEF0FA"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="150"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- 左侧分类导航：点了跳到对应分组 -->
+        <Border Grid.Column="0" Background="White" BorderBrush="#E5E5EA" BorderThickness="0,0,1,0">
+            <StackPanel Margin="10,20,10,10">
+                <TextBlock Text="分类" FontSize="11" Foreground="#999" Margin="6,0,0,8"/>
+                <Button Content="快捷键" Click="OnJumpHotkey" Style="{StaticResource NavButton}"/>
+                <Button Content="常规" Click="OnJumpGeneral" Style="{StaticResource NavButton}"/>
+                <Button Content="回想 / 超分" Click="OnJumpSlideshow" Style="{StaticResource NavButton}"/>
+                <Button Content="截图与黑边" Click="OnJumpCapture" Style="{StaticResource NavButton}"/>
+                <Button Content="数据与备份" Click="OnJumpBackup" Style="{StaticResource NavButton}"/>
+                <Button Content="网页与手机" Click="OnJumpWeb" Style="{StaticResource NavButton}"/>
+                <Button Content="OCR 识别" Click="OnJumpOcr" Style="{StaticResource NavButton}"/>
+                <Button Content="游戏名规则" Click="OnJumpRules" Style="{StaticResource NavButton}"/>
+                <TextBlock Text="（点击可跳到对应分类）" FontSize="10" Foreground="#BBB"
+                           Margin="6,10,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+        </Border>
+
+        <ScrollViewer Grid.Column="1" x:Name="SettingsScroll" Padding="24,20">
         <StackPanel>
 
             <!-- ═══ Hotkey ═══ -->
-            <TextBlock Text="快捷键" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
+            <TextBlock x:Name="SecHeaderHotkey" Text="快捷键" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
             <TextBlock Text="在此窗口打开时，直接按下你想用的快捷键组合"
                        Foreground="#888" FontSize="12" Margin="0,0,0,10"/>
             <Border x:Name="HotkeyBox"
@@ -41,7 +91,7 @@
             <Separator Margin="0,18,0,16"/>
 
             <!-- ═══ General ═══ -->
-            <TextBlock Text="常规" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,12"/>
+            <TextBlock x:Name="SecHeaderGeneral" Text="常规" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,12"/>
 
             <CheckBox x:Name="AutoStartCheckBox" Content="开机时自动启动（最小化到任务栏）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
@@ -55,39 +105,40 @@
             <TextBlock Text="如果你确实需要游戏里的这个键，就关掉它，或者把截图热键换成不冲突的组合（如 Ctrl+Alt+E）"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-            <CheckBox x:Name="CropBlackBarsCheckBox"
+            <TextBlock x:Name="SecHeaderCapture" Text="截图与黑边" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,6,0,8"/><CheckBox x:Name="CropBlackBarsCheckBox"
                       Content="截图自动裁掉黑边（游戏比例和显示器不一致时的左右/上下黑框）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"
                       ToolTip="按「当前显示器」截图时，游戏画面往往只占中间一块，四周是黑边。
 开启后自动把纯黑边裁掉，只保留游戏画面；画面本身偏暗时会自动跳过，不会误裁。
 已有截图可以在主界面「···」→「裁掉截图黑边（全部）」批量处理。"/>
 
-            <CheckBox x:Name="BackupCheckBox"
-                      Content="每天首次启动自动备份（语录库 / 使用记录 / 设置），只保留最近 3 天"
+            <TextBlock x:Name="SecHeaderBackup" Text="数据与备份" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,6,0,8"/><CheckBox x:Name="BackupCheckBox"
+                      Content="每天首次启动自动备份（有变动才备份）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"
-                      ToolTip="备份 quotes.db、usage.json、settings.json 到下面这个目录。
-每天只备份一次；超过 3 天的旧备份会自动删除。截图不参与备份。"/>
+                      ToolTip="备份 quotes.db、usage.json、settings.json + 截图目录。
+每天只备份一次；如果数据与上次备份完全相同就跳过。
+位置默认是「安装目录上一级\Gal Quote Tool Backup」。"/>
             <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
-                    <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" x:Name="BackupDirBox" FontSize="12" Padding="6,4"
+                <TextBlock Grid.Column="0" Text="最多保留" FontSize="12" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox Grid.Column="1" x:Name="BackupKeepBox" Width="54" FontSize="12" Padding="6,4"
                          Background="White" BorderBrush="#DDD" VerticalContentAlignment="Center"
-                         ToolTip="留空 = 数据目录下的 backups 文件夹"/>
-                <Button Grid.Column="1" Content="浏览…" Click="OnBrowseBackupDir" Margin="6,0,0,0"
-                        Padding="10,5" FontSize="12"/>
-                <Button Grid.Column="2" Content="打开" Click="OnOpenBackupDir" Margin="6,0,0,0"
+                         ToolTip="最多保留几份备份（默认 3，范围 1-30）"/>
+                <Button Grid.Column="2" Content="打开目录" Click="OnOpenBackupDir" Margin="6,0,0,0"
                         Padding="10,5" FontSize="12"/>
                 <Button Grid.Column="3" Content="立即备份" Click="OnBackupNow" Margin="6,0,0,0"
                         Padding="10,5" FontSize="12"/>
             </Grid>
-            <TextBlock x:Name="BackupHintText" Text="留空 = 使用默认目录（数据目录下的 backups）"
+            <TextBlock x:Name="BackupDirBox" Visibility="Collapsed"/>
+            <TextBlock x:Name="BackupHintText" Text=""
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
-            <CheckBox x:Name="WebCheckBox"
+            <TextBlock x:Name="SecHeaderWeb" Text="网页与手机" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,6,0,8"/><CheckBox x:Name="WebCheckBox"
                       Content="开启内网网页（手机 / 电脑浏览器查看、搜索、修改、导出语录）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,6"
                       ToolTip="在程序里起一个极简网页服务，同一局域网内的手机/电脑打开下面的网址即可访问。
@@ -139,7 +190,7 @@
                            Width="90" FontSize="13" Foreground="#5B6ABF" FontWeight="SemiBold"/>
             </Grid>
 
-            <TextBlock Text="回想模式" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
+            <TextBlock x:Name="SecHeaderSlideshow" Text="回想模式" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <ComboBox x:Name="SlideshowModeCombo" FontSize="13" Margin="0,0,0,4"
                       Background="White" BorderBrush="#DDD">
                 <ComboBoxItem Content="按时间顺序"/>
@@ -270,7 +321,7 @@
             <Separator Margin="0,12,0,16"/>
 
             <!-- ═══ OCR ═══ -->
-            <TextBlock Text="OCR 识别" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
+            <TextBlock x:Name="SecHeaderOcr" Text="OCR 识别" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
             <TextBlock Text="采集时用哪个引擎识别截图文字" Foreground="#888" FontSize="12" Margin="0,0,0,8"/>
 
             <TextBlock Text="识别引擎" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
@@ -316,7 +367,7 @@
             <Separator Margin="0,12,0,16"/>
 
             <!-- ═══ Game Name Rules ═══ -->
-            <TextBlock Text="游戏名匹配规则" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
+            <TextBlock x:Name="SecHeaderRules" Text="游戏名匹配规则" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,0,0,6"/>
             <TextBlock Text="窗口标题包含关键词时，自动映射到指定游戏名。匹配优先级：关键词最长的优先。"
                        Foreground="#888" FontSize="12" TextWrapping="Wrap" Margin="0,0,0,4"/>
             <TextBlock Text="Ctrl+点击某条规则可直接删除它"
@@ -389,5 +440,6 @@
                         FontSize="13" Cursor="Hand"/>
             </StackPanel>
         </StackPanel>
-    </ScrollViewer>
+        </ScrollViewer>
+    </Grid>
 </Window>

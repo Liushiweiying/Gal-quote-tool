@@ -18,7 +18,8 @@ public class HotkeyConfig
     public bool CropBlackBars { get; set; } = true;
     // 每天首次启动自动备份（quotes.db / usage.json / settings.json），只保留最近 3 天
     public bool BackupEnabled { get; set; } = true;
-    public string BackupDirectory { get; set; } = ""; // 留空 = 数据目录下的 backups
+    public string BackupDirectory { get; set; } = ""; // 留空 = 安装目录上一级的 Gal Quote Tool Backup
+    public int BackupKeepCount { get; set; } = 3; // 最多保留几份备份
     // 内网网页（手机/电脑访问）：默认关闭，端口可改，访问码留空 = 局域网免密
     public bool WebEnabled { get; set; }
     public int WebPort { get; set; } = 8088;
@@ -32,6 +33,10 @@ public class HotkeyConfig
     /// 只在显示时生效，**不修改文件**；回想窗口里按 B 键循环切换。
     /// </summary>
     public int SlideshowBarsMode { get; set; }
+    /// <summary>回想文字底样式：0=黑底白字（默认），1=白底黑字。</summary>
+    public int SlideshowTextStyle { get; set; }
+    /// <summary>回想文字底透明度 0.0-1.0（默认 0.5）。</summary>
+    public double SlideshowTextOpacity { get; set; } = 0.5;
     public string FontFamily { get; set; } = "Segoe UI";
     public string SlideshowChineseFont { get; set; } = "Microsoft YaHei";
     public string SlideshowEnglishFont { get; set; } = "Segoe UI";
@@ -187,6 +192,7 @@ public class HotkeyConfig
             CropBlackBars = CropBlackBars,
             BackupEnabled = BackupEnabled,
             BackupDirectory = BackupDirectory,
+            BackupKeepCount = BackupKeepCount,
             WebEnabled = WebEnabled,
             WebPort = WebPort,
             WebAccessCode = WebAccessCode,
@@ -194,6 +200,8 @@ public class HotkeyConfig
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
             SlideshowBarsMode = SlideshowBarsMode,
+            SlideshowTextStyle = SlideshowTextStyle,
+            SlideshowTextOpacity = SlideshowTextOpacity,
             FontFamily = FontFamily,
             SlideshowChineseFont = SlideshowChineseFont,
             SlideshowEnglishFont = SlideshowEnglishFont,

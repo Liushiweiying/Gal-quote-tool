@@ -295,6 +295,19 @@ public partial class MainWindow : Window
         if (DataContext is MainViewModel vm)
             vm.CopyQuoteMarkdownCommand.Execute(null);
     }
+
+    private void OnQuoteMenuExportZip(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem mi && mi.DataContext is Quote q && DataContext is MainViewModel vm)
+        {
+            vm.SelectedQuote = q; // 右键的那一条
+            vm.ExportSelectedZipCommand.Execute(null);
+        }
+        else if (DataContext is MainViewModel vm2)
+        {
+            vm2.ExportSelectedZipCommand.Execute(null);
+        }
+    }
     private void OnQuoteMenuDelete(object sender, RoutedEventArgs e)
     {
         if (sender is MenuItem mi && mi.DataContext is Quote q && DataContext is MainViewModel vm)

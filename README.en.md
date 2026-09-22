@@ -105,6 +105,14 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.4 (2026-09-21)
+- **Improved auto-backup rules**: backups go to `Gal Quote Tool Backup` next to the install folder; one backup per day and **only when the quote database content actually changed** (content hash, because SQLite touches the file timestamp on every open); **retention count is configurable** (default 3); **settings are not backed up and settings changes do not trigger a backup**
+- **New settings sidebar**: quick navigation to sections (hotkeys / general / slideshow & upscaling / capture & bars / data & backup / web / OCR / game rules)
+- **New slideshow settings button (⚙, icon only)**: black-bar handling, **text panel style (black-on-white / white-on-black) with adjustable opacity and restore-default**, loop, fonts, Magpie upscaling and its hotkey
+- **New single-quote ZIP export/import** (image included as a real file, compatible with the existing bundled export/import)
+- **Fix** Magpie re-scaling briefly after leaving fullscreen (no more extra hotkey; a fast 200 ms poll stops Magpie's own restart)
+- **Fix** the ⚙ button being clipped in the slideshow top bar
+
 ### v1.3.3 (2026-09-21)
 - **New built-in LAN web page (phone / desktop browser)**: the app serves a small web UI (optional HTTPS), so any device on the same Wi-Fi can open `http://PC-IP:8088/` to **browse, search, edit, import and export** quotes; the layout adapts to phone and desktop
   - **Slideshow mode**: tap "回想" or a card thumbnail for a full-screen viewer with swipe/tap navigation, auto-play, game name and text

@@ -692,6 +692,11 @@ public partial class MainViewModel : ObservableObject
                     _settingsService.SaveHotkeyConfig(c);
                 }
                 catch (Exception ex) { AppLog.Write($"slideshow bars mode save failed: {ex.Message}"); }
+            }, cfg, updated =>
+            {
+                // 回想窗口里改了设置（⚙）→ 立刻落盘
+                try { _settingsService.SaveHotkeyConfig(updated); }
+                catch (Exception ex) { AppLog.Write($"slideshow settings save failed: {ex.Message}"); }
             });
         win.ShowDialog();
     }
@@ -720,9 +725,45 @@ public partial class MainViewModel : ObservableObject
         DoExport([SelectedQuote]);
     }
 
-    private void DoExport(List<Quote> quotes, string? suggestedName = null)
+    /// <summary>把选中这条语录导出成 ZIP（含截图文件本身），可直接用「打包导入」读回。</summary>
+    [RelayCommand]
+    private void ExportSelectedZip()
     {
+        var quote = SelectedQuote;
+        if (quote == null)
+        {
+            InfoDialog.Show(_window, "提示", "请先选择一条语录");
+            return;
+        }
+
         var dialog = new Microsoft.Win32.SaveFileDialog
+        {
+            Filter = "压缩包 (*.zip)|*.zip",
+            DefaultExt = ".zip",
+            FileName = Services.QuoteZipExporter.SuggestFileName(quote),
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        try
+        {
+            var shots = new List<string>();
+            if (!string.IsNullOrWhiteSpace(quote.ScreenshotPath)) shots.Add(quote.ScreenshotPath);
+            try { foreach (var s in _storageService.GetScreenshots(quote.Id)) shots.Add(s.FilePath); } catch { }
+
+            var bytes = Services.QuoteZipExporter.BuildZip(quote, _storageService.GetTagsForQuote(quote.Id),
+                _storageService.GetGroupsForQuote(quote.Id), shots);
+            File.WriteAllBytes(dialog.FileName, bytes);
+            int imgCount = shots.Count(File.Exists);
+            StatusText = $"已导出这条语录（含 {imgCount} 张截图）到 {dialog.FileName}";
+        }
+        catch (Exception ex)
+        {
+            InfoDialog.Show(_window, "错误", $"导出失败: {ex.Message}", icon: InfoDialogIcon.Error);
+        }
+    }
+
+    private void DoExport(List<Quote> quotes, string? suggestedName = null)
+    {        var dialog = new Microsoft.Win32.SaveFileDialog
         {
             Filter = "Markdown 文件 (*.md)|*.md|JSON 文件 (*.json)|*.json",
             DefaultExt = ".md",

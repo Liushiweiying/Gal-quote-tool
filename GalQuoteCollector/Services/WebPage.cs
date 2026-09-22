@@ -126,7 +126,7 @@ main{padding:12px;max-width:1100px;margin:0 auto}
     <button class="ex" id="exTag" title="排除选中的标签">标签</button>
   </div>
 
-  <input type="file" id="fileImport" accept=".json,application/json" style="display:none">
+  <input type="file" id="fileImport" accept=".json,.zip,application/json,application/zip" style="display:none">
   <div class="count" id="count"></div>
   <div id="list"></div>
   <button class="more" id="more" style="display:none">加载更多</button>
@@ -192,7 +192,7 @@ function card(it){
     ${it.notes?`<div class="notes">${esc(it.notes)}</div>`:''}
     ${it.hasShot?`<img class="thumb" loading="lazy" src="/api/shot/${it.id}" alt="">`:''}
     <div class="meta"><span class="game">${esc(it.gameName||'未标注')}</span><span>${fmt(it.capturedAt)}</span>${chips}</div>
-    <div class="acts"><button data-act="edit">编辑</button><button data-act="exp">导出</button><button data-act="del" class="danger">删除</button></div>
+    <div class="acts"><button data-act="edit">编辑</button><button data-act="exp">导出JSON</button><button data-act="expzip">导出ZIP</button><button data-act="del" class="danger">删除</button></div>
   </div>`;
 }
 
@@ -248,6 +248,7 @@ $('list').addEventListener('click',async e=>{
     try{openEdit(await api('/api/quotes/'+id));}catch(err){toast('打开失败');}
   }else if(e.target.dataset.act==='del'){del(id);}
   else if(e.target.dataset.act==='exp'){location.href='/api/quotes/'+id+'/export';}
+  else if(e.target.dataset.act==='expzip'){location.href='/api/quotes/'+id+'/export-zip';}
 });
 $('list').addEventListener('click',e=>{if(e.target.classList.contains('thumb')){const c=e.target.closest('.card');openViewer(c?+c.dataset.id:0);}});
 $('zoom').onclick=()=>$('zoom').classList.remove('on');

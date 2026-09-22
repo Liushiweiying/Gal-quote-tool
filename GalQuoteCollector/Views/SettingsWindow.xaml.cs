@@ -36,7 +36,8 @@ public partial class SettingsWindow : Window
         SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
         CropBlackBarsCheckBox.IsChecked = cfg.CropBlackBars;
         BackupCheckBox.IsChecked = cfg.BackupEnabled;
-        BackupDirBox.Text = cfg.BackupDirectory ?? "";
+        BackupKeepBox.Text = (cfg.BackupKeepCount <= 0 ? 3 : cfg.BackupKeepCount).ToString();
+        UpdateBackupHint(cfg);
         WebCheckBox.IsChecked = cfg.WebEnabled;
         WebHttpsCheckBox.IsChecked = cfg.WebUseHttps;
         WebPortBox.Text = (cfg.WebPort >= 1024 && cfg.WebPort <= 65535 ? cfg.WebPort : 8088).ToString();
@@ -517,10 +518,49 @@ public partial class SettingsWindow : Window
         if (!string.IsNullOrWhiteSpace(picked)) BackupDirBox.Text = picked;
     }
 
+    /// <summary>把备份目录和最近一次备份情况写在界面下方。</summary>
+    private void UpdateBackupHint(HotkeyConfig cfg)
+    {
+        try
+        {
+            var dir = Services.BackupService.DefaultDirectory(_dataDir);
+            int count = 0;
+            try { if (Directory.Exists(dir)) count = Directory.GetDirectories(dir, "backup-*").Length; } catch { }
+            BackupHintText.Text = $"备份位置：{dir}（现有 {count} 份）\n" +
+                                  "每天首次启动时，如果数据较上次备份有变动才备份；截图也会一起备份。";
+        }
+        catch (Exception ex) { BackupHintText.Text = "备份目录不可用：" + ex.Message; }
+    }
+
+    // ── 左侧分类跳转 ──
+
+    private void OnJumpHotkey(object sender, RoutedEventArgs e) => Jump(SecHeaderHotkey);
+    private void OnJumpGeneral(object sender, RoutedEventArgs e) => Jump(SecHeaderGeneral);
+    private void OnJumpSlideshow(object sender, RoutedEventArgs e) => Jump(SecHeaderSlideshow);
+    private void OnJumpCapture(object sender, RoutedEventArgs e) => Jump(SecHeaderCapture);
+    private void OnJumpBackup(object sender, RoutedEventArgs e) => Jump(SecHeaderBackup);
+    private void OnJumpWeb(object sender, RoutedEventArgs e) => Jump(SecHeaderWeb);
+    private void OnJumpOcr(object sender, RoutedEventArgs e) => Jump(SecHeaderOcr);
+    private void OnJumpRules(object sender, RoutedEventArgs e) => Jump(SecHeaderRules);
+
+    /// <summary>把某个分组标题滚到可视区域（顺带闪一下，知道跳哪了）。</summary>
+    private void Jump(System.Windows.FrameworkElement target)
+    {
+        try
+        {
+            // 精确计算：目标相对 ScrollViewer 视口的位置 + 当前偏移 = 内容里的纵坐标
+            var pos = target.TransformToAncestor(SettingsScroll).Transform(new System.Windows.Point(0, 0));
+            double wanted = SettingsScroll.VerticalOffset + pos.Y - 8;
+            SettingsScroll.ScrollToVerticalOffset(Math.Max(0, wanted));
+        }
+        catch
+        {
+            try { target.BringIntoView(); } catch { }
+        }
+    }
     private void OnOpenBackupDir(object sender, RoutedEventArgs e)
     {
-        var dir = BackupDirBox.Text.Trim();
-        if (string.IsNullOrWhiteSpace(dir)) dir = Services.BackupService.DefaultDirectory(_dataDir);
+        var dir = Services.BackupService.DefaultDirectory(_dataDir);
         try
         {
             System.IO.Directory.CreateDirectory(dir);
@@ -540,7 +580,10 @@ public partial class SettingsWindow : Window
     {
         _newConfig.CropBlackBars = CropBlackBarsCheckBox.IsChecked == true;
         _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
-        _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
+        _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var k2) ? Math.Clamp(k2, 1, 30) : 3;
+        _newConfig.BackupDirectory = ""; // 固定用"安装目录上一级\Gal Quote Tool Backup"
+        _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var keep)
+            ? Math.Clamp(keep, 1, 30) : 3;
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
         _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
         _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
@@ -675,7 +718,10 @@ public partial class SettingsWindow : Window
         _newConfig.SwallowCaptureHotkey = SwallowHotkeyCheckBox.IsChecked == true;
         _newConfig.CropBlackBars = CropBlackBarsCheckBox.IsChecked == true;
         _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
-        _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
+        _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var k2) ? Math.Clamp(k2, 1, 30) : 3;
+        _newConfig.BackupDirectory = ""; // 固定用"安装目录上一级\Gal Quote Tool Backup"
+        _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var keep)
+            ? Math.Clamp(keep, 1, 30) : 3;
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
         _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
         _newConfig.WebAccessCode = WebCodeBox.Text.Trim();

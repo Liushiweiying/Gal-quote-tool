@@ -440,8 +440,9 @@ public sealed class WebServerService : IDisposable
             return;
         }
 
-        // 注意：/api/quotes/{id}/export 必须先于这条通用的单条查询匹配，否则会被它吃掉
-        if (path.StartsWith("/api/quotes/") && req.Method == "GET" && !path.EndsWith("/export"))
+        // 注意：/api/quotes/{id}/export 与 /export-zip 必须先于这条通用的单条查询匹配，否则会被它吃掉
+        if (path.StartsWith("/api/quotes/") && req.Method == "GET"
+            && !path.EndsWith("/export") && !path.EndsWith("/export-zip"))
         {
             int id = ParseInt(path[12..], -1);
             var quote = _storage.GetAllQuotes().FirstOrDefault(x => x.Id == id);
@@ -615,9 +616,83 @@ public sealed class WebServerService : IDisposable
             return;
         }
 
-        // 单条导入（含图片）
+        // 单条导出成 ZIP（含截图文件本身），结构与「打包导出」一致，可被桌面端「打包导入」读回
+        if (path.StartsWith("/api/quotes/") && path.EndsWith("/export-zip") && req.Method == "GET")
+        {
+            int id = ParseInt(path[12..^11], -1);
+            var quote = _storage.GetAllQuotes().FirstOrDefault(x => x.Id == id);
+            if (quote == null) { await ErrorAsync(stream, 404, "没有这条语录", ct); return; }
+
+            var shots = new List<string>();
+            if (!string.IsNullOrWhiteSpace(quote.ScreenshotPath)) shots.Add(quote.ScreenshotPath);
+            try { foreach (var s in _storage.GetScreenshots(id)) shots.Add(s.FilePath); } catch { }
+
+            var zipBytes = QuoteZipExporter.BuildZip(quote, _storage.GetTagsForQuote(id),
+                _storage.GetGroupsForQuote(id), shots);
+            var zipName = QuoteZipExporter.SuggestFileName(quote) + ".zip";
+            var zipHeader = $"Content-Disposition: attachment; filename*=UTF-8''{Uri.EscapeDataString(zipName)}\r\n" + setCookie;
+            await WriteAsync(stream, 200, "OK", "application/zip", zipBytes, zipHeader, ct);
+            return;
+        }
+
+        // 单条导入（含图片）：接受 JSON（base64 内嵌）或 ZIP（含截图文件，与「打包导出」同格式）
         if (path == "/api/import" && req.Method == "POST")
         {
+            // ZIP：PK 开头 → 解包后读 quotes.json，再把 screenshots/ 里的图片落到截图目录
+            if (req.Body.Length > 4 && req.Body[0] == 0x50 && req.Body[1] == 0x4B)
+            {
+                try
+                {
+                    var dir = QuoteZipExporter.ExtractToTemp(req.Body);
+                    try
+                    {
+                        var jsonPath = Path.Combine(dir, "quotes.json");
+                        if (!File.Exists(jsonPath)) { await ErrorAsync(stream, 400, "压缩包里没有 quotes.json", ct); return; }
+                        var items = new ExportService().ParseJson(await File.ReadAllTextAsync(jsonPath, ct));
+                        int imported = 0;
+                        var shotsDir = ResolveScreenshotDir();
+                        Directory.CreateDirectory(shotsDir);
+                        foreach (var item in items)
+                        {
+                            var saved = "";
+                            foreach (var rel in item.Screenshots)
+                            {
+                                var candidate = Path.Combine(dir, rel.Replace('/', Path.DirectorySeparatorChar));
+                                if (!File.Exists(candidate)) continue;
+                                saved = Path.Combine(shotsDir, $"import-{DateTime.Now:yyyyMMdd-HHmmssfff}{Path.GetExtension(candidate)}");
+                                File.Copy(candidate, saved, true);
+                                break;
+                            }
+                            var q = new Quote
+                            {
+                                Text = item.Text,
+                                GameName = item.GameName,
+                                Notes = item.Notes,
+                                ScreenshotPath = saved,
+                                CapturedAt = item.CapturedAt,
+                            };
+                            _storage.InsertQuote(q);
+                            if (saved.Length > 0) _storage.AddScreenshot(q.Id, saved, 0);
+                            foreach (var name in item.Groups)
+                                _storage.AddQuoteToGroup(q.Id, (_storage.GetAllGroups().FirstOrDefault(x => x.Name == name) ?? _storage.AddGroup(name)).Id);
+                            foreach (var name in item.Tags)
+                                _storage.AddTagToQuote(q.Id, (_storage.GetAllTags().FirstOrDefault(x => x.Name == name) ?? _storage.AddTag(name)).Id);
+                            imported++;
+                        }
+                        AppLog.Write($"web: 已从 ZIP 导入 {imported} 条语录");
+                        await JsonAsync(stream, new { ok = true, imported }, setCookie, ct);
+                        return;
+                    }
+                    finally { try { Directory.Delete(dir, true); } catch { } }
+                }
+                catch (Exception ex)
+                {
+                    AppLog.Write($"web: ZIP 导入失败 {ex.Message}");
+                    await ErrorAsync(stream, 400, "ZIP 导入失败: " + ex.Message, ct);
+                    return;
+                }
+            }
+
             JsonNode? node;
             try { node = JsonNode.Parse(Encoding.UTF8.GetString(req.Body)); }
             catch { await ErrorAsync(stream, 400, "JSON 解析失败", ct); return; }

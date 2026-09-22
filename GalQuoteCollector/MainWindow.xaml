@@ -222,6 +222,7 @@
                                             <ContextMenu Background="White" Foreground="#333">
                                                 <MenuItem Header="复制文本" Click="OnQuoteMenuCopy"/>
                                                 <MenuItem Header="复制为 Markdown" Click="OnQuoteMenuCopyMd"/>
+                                                <MenuItem Header="导出这条（含截图 ZIP）" Click="OnQuoteMenuExportZip"/>
                                                 <MenuItem Header="删除" Click="OnQuoteMenuDelete"/>
                                             </ContextMenu>
                                         </Border.ContextMenu>

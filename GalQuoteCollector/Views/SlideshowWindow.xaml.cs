@@ -23,6 +23,10 @@ public partial class SlideshowWindow : Window
     private int _barsMode;
     /// <summary>模式变化时回调（用于把选择写回设置）。</summary>
     private readonly Action<int>? _barsModeChanged;
+    private int _textStyle;
+    private double _textOpacity = 0.5;
+    private HotkeyConfig? _cfg;
+    private Action<HotkeyConfig>? _cfgSaver;
 
     private List<Quote> _filtered = new();          // currently filtered quotes
     private int[] _order = Array.Empty<int>();      // quote order indices into _filtered
@@ -31,10 +35,10 @@ public partial class SlideshowWindow : Window
     private bool _ready;
     private bool _isFullscreen;
     private bool _isTopmost;
-    private readonly string _chineseFont;
-    private readonly string _englishFont;
-    private readonly bool _magpieUpscale;
-    private readonly string _magpieHotkey;
+    private string _chineseFont;
+    private string _englishFont;
+    private bool _magpieUpscale;
+    private string _magpieHotkey;
     private readonly string _magpiePath;
     private bool _magpieActive;
     private bool _magpieBusy; // 正在处理超分开关（防重入：重复发键会把刚开起来的会话停掉）
@@ -50,7 +54,8 @@ public partial class SlideshowWindow : Window
         int slideshowMode, bool slideshowLoop,
         string chineseFont = "Microsoft YaHei", string englishFont = "Segoe UI",
         bool magpieUpscale = false, string magpieHotkey = "", string magpiePath = "",
-        bool diagnosticsAutoFullscreen = false, int barsMode = 0, Action<int>? barsModeChanged = null)
+        bool diagnosticsAutoFullscreen = false, int barsMode = 0, Action<int>? barsModeChanged = null,
+        HotkeyConfig? cfg = null, Action<HotkeyConfig>? cfgSaver = null)
     {
         InitializeComponent();
         Owner = owner;
@@ -63,7 +68,10 @@ public partial class SlideshowWindow : Window
         _mode = slideshowMode;
         _loop = slideshowLoop;
         _barsMode = barsMode;
+        if (cfg != null) { _textStyle = cfg.SlideshowTextStyle; _textOpacity = cfg.SlideshowTextOpacity; }
         _barsModeChanged = barsModeChanged;
+        _cfg = cfg;
+        _cfgSaver = cfgSaver;
         _chineseFont = chineseFont;
         _englishFont = englishFont;
         _magpieUpscale = magpieUpscale;
@@ -235,17 +243,27 @@ public partial class SlideshowWindow : Window
         if (!_magpieActive) return;
         _magpieActive = false;
 
-        var logPath = MagpieService.TryFindLogPath(_magpiePath);
-        // 实时信号优先：Magpie 已经在源窗口状态改变/销毁时自己结束了缩放，就别再补发（会把会话又开起来）。
-        // 缩放窗口通常会比日志"缩放结束"晚一两秒消失，所以这里多等一会儿再决定。
-        if (!await WaitForScalingWindowAsync(false, 2500))
+        // 用户实测：退出全屏时**不要**再发热键——Magpie 会在源窗口状态改变时自己结束缩放，
+        // 补发那一下反而会把缩放重新开到窗口化的回看上（表现为"退出全屏后又被超分一次"）。
+        // 所以这里只等一下确认它自己结束了，日志留痕；确实没结束才补发（兜底，正常不会走到）。
+        bool ended = await WaitForScalingWindowAsync(false, 4000);
+        AppLog.Write(ended
+            ? "slideshow magpie: 退出全屏，Magpie 已自行结束缩放（未补发热键）"
+            : "slideshow magpie: 缩放窗口仍在，补发一次热键收尾");
+        if (ended)
         {
-            AppLog.Write("slideshow magpie: scaling already ended by Magpie itself");
-            return;
-        }
-        if (logPath != null && !MagpieService.IsScalingActive(logPath))
-        {
-            AppLog.Write("slideshow magpie: scaling already ended by Magpie itself (log)");
+            // Magpie 有时会在源窗口状态变化时**自己**再开一次缩放（实测退出全屏后约 0.1s 又开、1s 后自己结束，
+            // 表现为"退出全屏后又被超分闪一下"）。这里等一下，若真又开了就按一次热键收掉。
+            // 200ms 轮询、最多 2 秒：它一冒头就立刻收掉（不要再干等一大截，那样反而"超分一会才退出"）
+            for (int i = 0; i < 10; i++)
+            {
+                await Task.Delay(200);
+                if (!MagpieService.IsScalingWindowVisible(out _)) continue;
+                var hk = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
+                await MagpieService.SendHotkeyAsync(hk);
+                AppLog.Write($"slideshow magpie: 收掉 Magpie 自己又开的一次缩放（第 {i + 1} 次检查）");
+                break;
+            }
             return;
         }
 
@@ -383,6 +401,7 @@ public partial class SlideshowWindow : Window
         }
 
         // 白底模式：显示时裁掉黑边 / 把黑边涂白（**不修改文件**）
+        ApplyTextStyle();
         var shown = bitmap == null ? null : Controls.SlideshowImageBars.Apply(bitmap, _barsMode);
         ScreenshotImage.Source = shown;
         ScreenshotBox.Visibility = shown != null ? Visibility.Visible : Visibility.Collapsed;
@@ -414,6 +433,54 @@ public partial class SlideshowWindow : Window
     }
 
     private void OnBarsMode(object sender, RoutedEventArgs e) => CycleBarsMode();
+    /// <summary>文字底：黑底白字 / 白底黑字 + 透明度（只影响显示）。</summary>
+    private void ApplyTextStyle()
+    {
+        try
+        {
+            var alpha = (byte)Math.Clamp((int)Math.Round(_textOpacity * 255), 0, 255);
+            var bg = _textStyle == 1
+                ? System.Windows.Media.Color.FromArgb(alpha, 255, 255, 255)
+                : System.Windows.Media.Color.FromArgb(alpha, 0, 0, 0);
+            var fg = _textStyle == 1
+                ? System.Windows.Media.Brushes.Black
+                : System.Windows.Media.Brushes.White;
+            var brush = new System.Windows.Media.SolidColorBrush(bg);
+            if (FsOverlay != null)
+            {
+                FsOverlay.Background = brush;
+                FsQuoteText.Foreground = fg;
+                FsGameNameText.Foreground = _textStyle == 1
+                    ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x55, 0x55, 0x55))
+                    : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0xCC, 0xCC, 0xCC));
+                FsNotesText.Foreground = FsGameNameText.Foreground;
+            }
+            // 窗口化时的文字框也一起换（原来固定浅灰底深色字）
+            if (QuoteText != null) QuoteText.Foreground = fg;
+        }
+        catch { }
+    }
+    /// <summary>⚙ 按钮：调整回想设置（黑边 / 循环 / 字体 / Magpie 超分），应用后立刻生效并写回设置。</summary>
+    private void OnSlideshowSettings(object sender, RoutedEventArgs e)
+    {
+        if (_cfg == null) return;
+        _cfg.SlideshowBarsMode = _barsMode; // 把当前（可能刚按 B 切过的）状态带进对话框
+        var dlg = new SlideshowSettingsDialog(this, _cfg);
+        if (dlg.ShowDialog() != true || dlg.Result == null) return;
+
+        _cfg = dlg.Result;
+        _barsMode = Math.Clamp(_cfg.SlideshowBarsMode, 0, 2);
+        _loop = _cfg.SlideshowLoop;
+        _chineseFont = _cfg.SlideshowChineseFont;
+        _englishFont = _cfg.SlideshowEnglishFont;
+        _textStyle = _cfg.SlideshowTextStyle;
+        _textOpacity = _cfg.SlideshowTextOpacity;
+        _magpieUpscale = _cfg.MagpieUpscaleSlideshow;
+        _magpieHotkey = _cfg.MagpieScaleHotkey ?? "";
+        _cfgSaver?.Invoke(_cfg);
+        UpdateBarsModeUi();
+        ShowCurrent();
+    }
 
     private void GoPrev()
     {
