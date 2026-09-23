@@ -105,6 +105,10 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.5 (2026-09-23)
+- **Improved** Magpie re-scaling briefly after leaving fullscreen: instead of guessing whether Magpie already stopped, the app now sends one upscaling hotkey on exit to clean the state (the flash drops from ~1.5 s to ~0.4 s), plus one extra stop if it reappears within 2 s
+- **Fixed** settings sidebar navigation scrolling too far (section heading pushed out of view)
+
 ### v1.3.4 (2026-09-21)
 - **Improved auto-backup rules**: backups go to `Gal Quote Tool Backup` next to the install folder; one backup per day and **only when the quote database content actually changed** (content hash, because SQLite touches the file timestamp on every open); **retention count is configurable** (default 3); **settings are not backed up and settings changes do not trigger a backup**
 - **New settings sidebar**: quick navigation to sections (hotkeys / general / slideshow & upscaling / capture & bars / data & backup / web / OCR / game rules)
