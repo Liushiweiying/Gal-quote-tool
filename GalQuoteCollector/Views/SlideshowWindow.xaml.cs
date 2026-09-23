@@ -250,36 +250,23 @@ public partial class SlideshowWindow : Window
         AppLog.Write(ended
             ? "slideshow magpie: 退出全屏，Magpie 已自行结束缩放（未补发热键）"
             : "slideshow magpie: 缩放窗口仍在，补发一次热键收尾");
-        if (ended)
+        // 用户要求（v1.3.5）：不再纠结"Alpie 是否已经自己结束"，**直接补发一次热键**把状态收干净；
+        // 之后再快速看两秒，若又冒头就再收一次（最多两次，避免按来按去）。
+        var hotkeyToStop = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
+        await Task.Delay(350); // 等窗口状态切换落定，这时按才作用在"又开起来的那次"上
+        await MagpieService.SendHotkeyAsync(hotkeyToStop);
+        AppLog.Write($"slideshow magpie: 退出全屏补发 {hotkeyToStop}（直接收状态）");
+        for (int i = 0; i < 8; i++)
         {
-            // Magpie 有时会在源窗口状态变化时**自己**再开一次缩放（实测退出全屏后约 0.1s 又开、1s 后自己结束，
-            // 表现为"退出全屏后又被超分闪一下"）。这里等一下，若真又开了就按一次热键收掉。
-            // 200ms 轮询、最多 2 秒：它一冒头就立刻收掉（不要再干等一大截，那样反而"超分一会才退出"）
-            for (int i = 0; i < 10; i++)
-            {
-                await Task.Delay(200);
-                if (!MagpieService.IsScalingWindowVisible(out _)) continue;
-                var hk = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
-                await MagpieService.SendHotkeyAsync(hk);
-                AppLog.Write($"slideshow magpie: 收掉 Magpie 自己又开的一次缩放（第 {i + 1} 次检查）");
-                break;
-            }
-            return;
+            await Task.Delay(250);
+            if (!MagpieService.IsScalingWindowVisible(out _)) continue;
+            await MagpieService.SendHotkeyAsync(hotkeyToStop);
+            AppLog.Write($"slideshow magpie: 又冒头，再收一次（第 {i + 1} 次检查）");
+            break;
         }
-
-        try
-        {
-            var hotkey = MagpieService.ResolveScaleHotkey(_magpieHotkey, out _);
-            await MagpieService.SendHotkeyAsync(hotkey);
-            AppLog.Write($"slideshow magpie: release {hotkey}");
-        }
-        catch (Exception ex)
-        {
-            AppLog.Write($"slideshow magpie: release failed: {ex.Message}");
-        }
+        return;
     }
-
-    /// <summary>关闭前解除超分（同样是先看日志，避免多按一次把会话重新开起来）。</summary>
+    /// <summary>关闭前解除超分    /// <summary>关闭前解除超分（同样是先看日志，避免多按一次把会话重新开起来）。</summary>
     private async void OnSlideshowClosing(object? sender, System.ComponentModel.CancelEventArgs e)
     {
         _closed = true;

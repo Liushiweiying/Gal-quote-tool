@@ -548,15 +548,15 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            // 精确计算：目标相对 ScrollViewer 视口的位置 + 当前偏移 = 内容里的纵坐标
-            var pos = target.TransformToAncestor(SettingsScroll).Transform(new System.Windows.Point(0, 0));
-            double wanted = SettingsScroll.VerticalOffset + pos.Y - 8;
-            SettingsScroll.ScrollToVerticalOffset(Math.Max(0, wanted));
+            // 用框架自带的 BringIntoView（它知道滚动条/布局的真实偏移），再往上留 6px 空
+            target.BringIntoView();
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try { SettingsScroll.ScrollToVerticalOffset(Math.Max(0, SettingsScroll.VerticalOffset - 6)); }
+                catch { }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
-        catch
-        {
-            try { target.BringIntoView(); } catch { }
-        }
+        catch { }
     }
     private void OnOpenBackupDir(object sender, RoutedEventArgs e)
     {
