@@ -182,11 +182,11 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
   - 路由：`GET /`（内嵌单页）、`GET /api/meta`、`GET /api/quotes?q=&game=&group=&tag=&offset=&limit=`、`GET /api/quotes/{id}`、`PUT /api/quotes/{id}`（改 text/gameName/notes/capturedAt + groups/tags/newNames，按名字自动建分组标签）、`DELETE /api/quotes/{id}`、`GET /api/shot/{id}`（原图）、`GET /api/export?format=json|md`（复用 `ExportService`）。
   - **只改语录**（用户选定）：不暴露设置、映射、黑名单、游戏名规则。
   - 数据库安全：直接复用程序自己的 `StorageService`（它内部有 `_sync` 锁，线程安全），**不要**另外开第二个进程/连接写库。
-  - `DELETE` **只删数据行，不删截图文件**（有意为之：截图更宝贵，误删可从「未关联截图」找回）。
+  - `DELETE` **只删数据行，不删截图文件**（有意为之：截图更宝贵，误删可从「未关联截图」找回；2026-09-23 实测救回过一条误删语录——**每日备份真的有用**）。
   - 网页是单文件内嵌 HTML/CSS/JS（内网可能没外网，**不能用 CDN**）；响应式断点 720px（单列、弹窗贴底、缩略图 200px）与 520px（标题独占一行、按钮换行不裁切）；缩略图 `max-height` 桌面 280px / 手机 200px + 点击放大。
   - 安装版在 `installer.iss` 的 `[Run]` 里用 `netsh advfirewall` 放行 **8088**（profile=private）；用户改端口需要自己放行，便携版第一次启动 Windows 会弹防火墙允许框。
   - 想让公网访问：让用户**自己设访问码**（当前无 HTTPS/双因素），并建议走路由器端口映射 + 反向代理加 HTTPS。
-- **每日首次启动自动备份**（`Services/BackupService.cs`）：`HotkeyConfig.BackupEnabled`（默认 **true**）/`BackupDirectory`（留空 = 数据目录下 `backups`）。
+- **每日首次启动自动备份**（`Services/BackupService.cs`，v1.3.4 起按用户要求改规则）：`BackupEnabled`（默认 true）/`BackupDirectory`（留空 = **安装目录上一级**的 `Gal Quote Tool Backup`，写不进去退回数据目录）/`BackupKeepCount`（默认 3）。**只有语录库内容变了才备份**（内容哈希，不能用时间戳——SQLite 每次打开都会刷新它）；**不含设置，设置变动也不触发**；截图整份一起备份。
   - 内容：`quotes.db` + `usage.json` + `settings.json`，**外加截图目录整份复制**到 `backups\backup-yyyy-MM-dd_HHmmss\screenshots\`（用户要求含截图，体积大；截图复制失败只写日志、不影响数据文件）。
   - 每天只备份一次（同一天再启动跳过）；`PruneOldBackups` 只保留**最近 3 天**（按目录名日期判断，删不掉就忽略）。
   - 设置界面有「浏览…/打开/立即备份」按钮（`BrowseForFolder` 复用 Shell.Application 那套）。
@@ -223,7 +223,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 代码签名：自签名证书 `CN=Gal Quote Collector`（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。
 - **发布顺序（重要）**：打包 → 先签 `publish-installer\Gal-quote-tool.exe` → 再 Compress-Archive 生成 zip → 再跑 ISCC → 再签三个 exe（FDD/SCD/Setup）→ curl 上传（curl 需 `--ssl-no-revoke`；180MB 文件上传慢，后台任务 + 大超时）。
 - 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；**GitHub 令牌用 CredRead 从 Windows 凭据管理器读**（target `git:https://github.com`，用户 `Liushiweiying`，令牌 40 位）：`Advapi32!CredRead(target, 1, 0, out ptr)` + `CREDENTIAL.CredentialBlob`（Unicode）。**不要用 `"protocol=https..." | git credential fill`**——PowerShell 把字符串管道喂给 native exe 的 stdin 现在会失败，git 报 `refusing to work with credential missing protocol field`（v1.3.1 发布时踩过；`cmd /c "git credential fill < file"` 也可用，但 CredRead 更省事）。
-- **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
+- **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法（**路径必须用正斜杠**：2026-09-23 实测 `"@D:\\a\\b.exe"` 的反斜杠被 curl 当转义吃掉，报 `Failed to open D:ab.exe`，之前"传上去的还是旧字节"就是这个原因）：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
 ### 已修的坑（避免重复踩）
 - **网络**：用户平时挂加速器（代理）才能稳定访问 GitHub；**加速器没开时**会出现 `git credential fill` 报 `refusing to work with credential missing protocol field`、GitHub API/上传超时等怪现象。遇到这类报错先问一句是不是没开加速器，再考虑改代码/换方案。
