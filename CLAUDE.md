@@ -277,7 +277,18 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；**GitHub 令牌用 CredRead 从 Windows 凭据管理器读**（target `git:https://github.com`，用户 `Liushiweiying`，令牌 40 位）：`Advapi32!CredRead(target, 1, 0, out ptr)` + `CREDENTIAL.CredentialBlob`（Unicode）。**不要用 `"protocol=https..." | git credential fill`**——PowerShell 把字符串管道喂给 native exe 的 stdin 现在会失败，git 报 `refusing to work with credential missing protocol field`（v1.3.1 发布时踩过；`cmd /c "git credential fill < file"` 也可用，但 CredRead 更省事）。
 - **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法（**路径必须用正斜杠**：2026-09-23 实测 `"@D:\\a\\b.exe"` 的反斜杠被 curl 当转义吃掉，报 `Failed to open D:ab.exe`，之前"传上去的还是旧字节"就是这个原因）：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
-### 网页版（WebPage.cs）改动的两条硬规矩（2026-09-26 踩过）
+### 待发：正式版 v1.3.6（用户 2026-09-26 定：网页修复攒着和正式版一起发）
+- **正式版要包含的内容** = `v1.3.6-beta.2` 的全部 + 之后提交的这些：
+  - `6b6f35b` 网页顶栏去掉残留的 `${S.canEdit?...}` 字面量 + 恢复卡片「编辑 / 删除」入口（`S.canEdit` 为真才渲染）+ 只读时隐藏「导入」。
+  - TLS 握手失败日志改成可操作提示（origin 填 http://127.0.0.1:8088 或开 No TLS Verify）。
+- **发布时必须注意**：
+  1. **不要**再传 `-p:InformationalVersion=...`（那是预发布专供）。正式版发布命令不带它，程序自报 `v1.3.6`，这样已经装了 `1.3.6-beta.2` 的人（包括用户自己）才会收到「有正式版」的提醒（`1.3.6` > `1.3.6-beta.2`）。
+  2. tag/名用 **`v1.3.6`**、`prerelease: false` —— 这样它才会成为 GitHub 的 `releases/latest`，被所有老用户的自动更新看到。
+  3. README 三种语言里 v1.3.6 那段把「· beta」和那句"自动更新只推正式版"的说明改成正式版口径。
+  4. 四个产物照旧（记得 `publish-v136\plugins\` 要在）+ 签名 + curl 上传 + 逐个核对 digest。
+- 网页版修完的**验证方式**（发之前可以再跑一遍）：`GalQuoteCollector.Server` 起 8098（`--lan --code X` / 再加 `--read-only` 对照），`msedge --headless=new --dump-dom`，**先把 `<script>` 剥掉**再判断卡片里有没有 `data-act="edit"`。
+
+
 - **静态 HTML 区（`<script>` 之前）里绝对不能出现 `${...}`**：C# 原样字符串不会求值它，但浏览器会把 `${S.canEdit?`<button id="btnImport">导入</button>`:''}` **当成"一段文字 + 一个真按钮 + 一段文字"**解析出来 —— 于是页面顶栏就明晃晃地显示 `${S.canEdit?` 和 `:''}` 两截字面量（顶栏那个 bug 存在了很久，2026-09-26 才修）。模板占位符只能写在 `<script>` 里的 JS 模板字符串中。
 - **每张卡片的操作栏必须有「编辑 / 删除」入口**（`card()` 里的 `editActs`，`S.canEdit` 为真才渲染）：服务端 `PUT/DELETE /api/quotes/{id}` 和前端 `openEdit/del` 一直都在，但按钮从来没渲染过，等于"网页能改"这个功能一直是死的（2026-09-26 恢复）。只读模式（公网 / `--read-only`）下不渲染，且「导入」按钮也会 `display:none`。
 - 验证方法：`msedge --headless=new --dump-dom "http://127.0.0.1:8098/?k=码"` **必须先把 `<script>…</script>` 剥掉再看**——否则内联 JS 源码里的字符串会让"有没有这个按钮"之类的正则全部误判（第一次验证就踩了这个坑）。
