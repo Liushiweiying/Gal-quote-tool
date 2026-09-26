@@ -43,6 +43,9 @@ public class UpdateService
 
     private const string LatestApi =
         "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases/latest";
+    /// <summary>含预发布的列表端点（GitHub 的 /releases/latest 不含预发布，所以「接收测试版」要走这个）。</summary>
+    private const string ReleasesApi =
+        "https://api.github.com/repos/Liushiweiying/Gal-quote-tool/releases?per_page=20";
 
     public static string FormLabel(InstallForm form) => form switch
     {
@@ -112,15 +115,43 @@ public class UpdateService
         return false;
     }
 
-    /// <summary>Returns update info when a newer version exists, otherwise null.</summary>
-    public async Task<UpdateInfo?> CheckAsync(string currentVersion, int timeoutSec = 10)
+    /// <summary>Returns update info when a newer version exists, otherwise null.
+    /// <paramref name="includePrerelease"/> = true 时改用 releases 列表端点，把测试版（beta）也算进来。</summary>
+    public async Task<UpdateInfo?> CheckAsync(string currentVersion, bool includePrerelease = false, int timeoutSec = 10)
     {
         using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(timeoutSec) };
         http.DefaultRequestHeaders.UserAgent.ParseAdd($"Gal-quote-tool/{currentVersion}");
-        var jsonStr = await http.GetStringAsync(LatestApi);
+        var jsonStr = await http.GetStringAsync(includePrerelease ? ReleasesApi : LatestApi);
 
         using var doc = JsonDocument.Parse(jsonStr);
-        var root = doc.RootElement;
+        JsonElement root;
+
+        if (doc.RootElement.ValueKind == JsonValueKind.Array)
+        {
+            // 列表端点：跳过草稿，挑版本号最高的那个——注意要把同号的正式版排在 beta 前面
+            JsonElement? best = null;
+            string? bestTag = null;
+            foreach (var rel in doc.RootElement.EnumerateArray())
+            {
+                if (rel.TryGetProperty("draft", out var draft) && draft.GetBoolean()) continue;
+                var t = rel.TryGetProperty("tag_name", out var te) ? te.GetString() : null;
+                if (string.IsNullOrWhiteSpace(t)) continue;
+                if (!IsNewer(t!, currentVersion)) continue;
+                if (bestTag == null || CompareVersions(t!, bestTag) > 0)
+                {
+                    best = rel;
+                    bestTag = t;
+                }
+            }
+            if (best == null) return null;
+            root = best.Value;
+            AppLog.Write($"update: 含测试版检查 → 选中 {bestTag}（当前 {currentVersion}）");
+        }
+        else
+        {
+            root = doc.RootElement;
+        }
+
         var tag = root.GetProperty("tag_name").GetString();
         if (string.IsNullOrWhiteSpace(tag)) return null;
         if (!IsNewer(tag, currentVersion)) return null;
@@ -167,11 +198,39 @@ public class UpdateService
         return info;
     }
 
-    public static bool IsNewer(string latestTag, string currentVersion)
+    public static bool IsNewer(string latestTag, string currentVersion) => CompareVersions(latestTag, currentVersion) > 0;
+
+    /// <summary>
+    /// 比较两个版本标签（支持 `v1.3.6`、`1.3.6-beta`、`v1.3.6-beta.2` 这种写法）：
+    /// 先比数字，数字相同则**正式版 &gt; 预发布**（"1.3.6" 比 "1.3.6-beta" 新），
+    /// 两个都是预发布就按后缀字符串比（beta &lt; beta.2）。返回 &gt;0 表示 a 更新。
+    /// </summary>
+    public static int CompareVersions(string a, string b)
     {
-        var l = TryParseVersion(latestTag);
-        var c = TryParseVersion(currentVersion);
-        return l != null && c != null && l > c;
+        var pa = ParseRelease(a);
+        var pb = ParseRelease(b);
+        if (pa == null || pb == null) return 0;
+        var cmp = pa.Value.num.CompareTo(pb.Value.num);
+        if (cmp != 0) return cmp;
+        var sa = pa.Value.pre;
+        var sb = pb.Value.pre;
+        if (sa.Length == 0 && sb.Length == 0) return 0;
+        if (sa.Length == 0) return 1;   // 正式版 > 同号预发布
+        if (sb.Length == 0) return -1;
+        return string.Compare(sa, sb, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>把 "v1.3.6-beta.2+abc" 拆成 (1.3.6, "beta.2")；解析不了返回 null。</summary>
+    private static (Version num, string pre)? ParseRelease(string v)
+    {
+        v = (v ?? "").Trim().TrimStart('v', 'V');
+        if (v.Length == 0) return null;
+        var plus = v.IndexOf('+');
+        if (plus >= 0) v = v[..plus];
+        var dash = v.IndexOf('-');
+        var numPart = dash >= 0 ? v[..dash] : v;
+        var pre = dash >= 0 ? v[(dash + 1)..] : "";
+        return Version.TryParse(numPart, out var ver) ? (ver, pre) : null;
     }
 
     private static Version? TryParseVersion(string v)

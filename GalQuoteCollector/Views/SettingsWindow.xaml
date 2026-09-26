@@ -107,6 +107,12 @@
             <TextBlock Text="如果你确实需要游戏里的这个键，就关掉它，或者把截图热键换成不冲突的组合（如 Ctrl+Alt+E）"
                        Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
 
+            <CheckBox x:Name="UpdatePrereleaseCheck" Content="检查更新时包含测试版（beta）"
+                      FontSize="13" Foreground="#333" Margin="0,0,0,4"
+                      ToolTip="默认只推正式版。打开后，预发布（tag 带 -beta）也会参与检查，并在「···」菜单 → 检查更新 / 启动时自动检查里提示。
+适合想第一时间试新功能的情况；测试版可能还有小问题。"/>
+            <TextBlock x:Name="UpdateChannelHint" Text="" Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
+
             <Border Height="1" Background="#E5E5EA" Margin="0,22,0,0"/><TextBlock x:Name="SecHeaderSlideshow" Text="回想" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,16,0,12"/>
             <TextBlock Text="回想模式" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
             <ComboBox x:Name="SlideshowModeCombo" FontSize="13" Margin="0,0,0,4"

@@ -58,6 +58,8 @@ public class HotkeyConfig
     /// <summary>强制整个网页只读（连局域网也不能改）。放在电视盒子/NAS 上当"镜像"时打开，
     /// 保证同一时刻只有一个写入方（避免 SQLite 两边同时写、同步冲突）。</summary>
     public bool WebReadOnly { get; set; }
+    /// <summary>检查更新时把测试版（beta / pre-release）也算进来。默认关：只推正式版。</summary>
+    public bool UpdateIncludePrerelease { get; set; }
     /// <summary>实际生效的 TOTP 密钥（没打开两步验证就是空 = 不要求动态码）。</summary>
     [JsonIgnore]
     public string EffectiveTotpSecret =>
@@ -245,6 +247,7 @@ public class HotkeyConfig
             WebTotpSecret = WebTotpSecret,
             WebTotpSessionHours = WebTotpSessionHours,
             WebReadOnly = WebReadOnly,
+            UpdateIncludePrerelease = UpdateIncludePrerelease,
             WebAllowLan = WebAllowLan,
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,

@@ -34,6 +34,11 @@ public partial class SettingsWindow : Window
         _newConfig = cfg.Clone();
         AutoStartCheckBox.IsChecked = cfg.AutoStart;
         SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
+        UpdatePrereleaseCheck.IsChecked = cfg.UpdateIncludePrerelease;
+        UpdateChannelHint.Text = $"当前版本 {ViewModels.MainViewModel.AppVersion}"
+            + (ViewModels.MainViewModel.AppVersion.Contains("-beta", StringComparison.OrdinalIgnoreCase)
+                ? "（测试版）：正式版发布后会自动提示升级。"
+                : "（正式版）。");
         BarModeCombo.SelectedIndex = Math.Clamp(cfg.CaptureBarMode, 0, 3);
         BarAdjLBox.Text = cfg.BarAdjustLeft.ToString();
         BarAdjRBox.Text = cfg.BarAdjustRight.ToString();
@@ -45,8 +50,7 @@ public partial class SettingsWindow : Window
         BackupZipCheck.IsChecked = cfg.BackupAsZip;
         _originalBackupDir = Services.BackupService.ResolveDirectory(cfg, _dataDir);
         UpdateBackupHint(cfg);
-        WebCheckBox.IsChecked = cfg.WebEnabled;
-        WebTlsCombo.SelectedIndex = cfg.EffectiveTlsMode;
+        WebCheckBox.IsChecked = cfg.WebEnabled;        WebTlsCombo.SelectedIndex = cfg.EffectiveTlsMode;
         WebAllowLanCheck.IsChecked = cfg.WebAllowLan;
         WebAllowExternalCheck.IsChecked = cfg.WebAllowExternal;
         WebTotpCheck.IsChecked = cfg.WebTotpEnabled;
@@ -960,6 +964,7 @@ public partial class SettingsWindow : Window
         EnsureWebSafety();
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.SwallowCaptureHotkey = SwallowHotkeyCheckBox.IsChecked == true;
+        _newConfig.UpdateIncludePrerelease = UpdatePrereleaseCheck.IsChecked == true;
         _newConfig.CaptureBarMode = Math.Max(0, BarModeCombo.SelectedIndex);
         _newConfig.CropBlackBars = _newConfig.CaptureBarMode != 0; // 兼容旧字段
         _newConfig.BarAdjustLeft = int.TryParse(BarAdjLBox.Text.Trim(), out var bl) ? bl : 0;

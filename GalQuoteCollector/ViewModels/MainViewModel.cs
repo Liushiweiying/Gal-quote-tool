@@ -16,8 +16,24 @@ namespace GalQuoteCollector.ViewModels;
 public partial class MainViewModel : ObservableObject
 {
     // Single source of truth for the version: read from the assembly (csproj <Version>).
-    public static string AppVersion =>
-        "v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version?.ToString(3);
+    // 预发布（beta）构建会用 -p:InformationalVersion=1.3.6-beta 覆盖，这样程序自己知道在 beta 频道上，
+    // 将来正式版发布时也能正确判断「1.3.6（正式）比 1.3.6-beta 新」。
+    public static string AppVersion
+    {
+        get
+        {
+            var asm = System.Reflection.Assembly.GetExecutingAssembly();
+            var info = asm.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                          .OfType<System.Reflection.AssemblyInformationalVersionAttribute>()
+                          .FirstOrDefault()?.InformationalVersion;
+            if (!string.IsNullOrWhiteSpace(info))
+            {
+                var v = info.Split('+')[0].Trim();
+                if (v.Length > 0 && v.Any(char.IsDigit)) return "v" + v;
+            }
+            return "v" + asm.GetName().Version?.ToString(3);
+        }
+    }
     private readonly HotkeyService _hotkeyService;
     private CaptureService _captureService;
     private readonly OcrService _ocrService;
@@ -2397,7 +2413,8 @@ public partial class MainViewModel : ObservableObject
     {
         try
         {
-            var info = await _updateService.CheckAsync(AppVersion);
+            var cfg = _settingsService.LoadHotkeyConfig();
+            var info = await _updateService.CheckAsync(AppVersion, cfg.UpdateIncludePrerelease);
             if (info == null) return;
             if (IsUpdateSkipped(info.Tag)) return;
             ShowUpdateDialog(info);
@@ -2414,11 +2431,15 @@ public partial class MainViewModel : ObservableObject
         try
         {
             StatusText = "正在检查更新...";
-            var info = await _updateService.CheckAsync(AppVersion);
+            var cfg = _settingsService.LoadHotkeyConfig();
+            var info = await _updateService.CheckAsync(AppVersion, cfg.UpdateIncludePrerelease);
             if (info == null)
             {
                 StatusText = $"已是最新版本 {AppVersion}";
-                InfoDialog.Show(_window, "检查更新", $"当前已是最新版本 {AppVersion}", icon: InfoDialogIcon.Information);
+                InfoDialog.Show(_window, "检查更新",
+                    $"当前已是最新版本 {AppVersion}" +
+                    (cfg.UpdateIncludePrerelease ? "\n（已开启「接收测试版」，测试版也会一起检查）" : "\n（只检查正式版；想收测试版请在设置 → 常规里打开开关）"),
+                    icon: InfoDialogIcon.Information);
                 return;
             }
             if (IsUpdateSkipped(info.Tag))

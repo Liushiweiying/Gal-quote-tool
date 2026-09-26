@@ -121,7 +121,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 应用侧（C#）的用户内容文件删除**均已**走 `FileSystem.DeleteFile(..., RecycleOption.SendToRecycleBin)`（MainViewModel.cs 的 DeleteScreenshots/DeleteScreenshot/DeleteUnassociatedScreenshots/MigrateScreenshots），无需改动；自启 VBS/lnk、临时文件、日志截断为永久删除属合理范围。
 
 ### 发布约定（用户要求，2026-08-13）
-- 版本号走 **1.2.x / 1.3.x**（当前 v1.3.5，2026-09-23 发布；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v135` 形式（去掉小数点）。
+- 版本号走 **1.2.x / 1.3.x**（当前 **v1.3.6-beta**（2026-09-26，预发布，tag `v1.3.6-beta`）= 正式版 v1.3.5（2026-09-23）；勿再使用 1.4.x 命名）。安装包输出目录用 `publish-v136` 形式（去掉小数点）。
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
@@ -284,7 +284,12 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **主程序项目的 `ImplicitUsings` 在 WPF 编译用的临时项目（`*_wpftmp.csproj`）里不生效**（2026-09-26 踩过）：新建的 .cs 文件**必须自己写 `using System; / System.IO; / System.Collections.Generic; / System.Linq;`**，否则 `Path`/`Directory`/`List<>` 会报 CS0103（现有文件都是显式 using，照抄它们的开头即可）。
 - **自测 TOTP / 网页认证的做法**（不碰用户设置、不用重启主程序）：在 `%TEMP%` 下建一个控制台项目 `ProjectReference` 主程序，直接 `new WebServerService(storage, 临时目录).Start(new WebServerService.Options(...))`，用 `HttpClient` 打各种组合（带 `CF-Connecting-IP` 模拟 tunnel、`AllowAutoRedirect=false` 看 303 与 `Set-Cookie`）。`TotpService` 的正确性用 RFC 6238 六组向量（`Base32Encode(ASCII("12345678901234567890"))` = `GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ`，`T=59` → `94287082`）。二维码用 QRCoder 生成后交给 **ZXing.Net** 解码比对原文。
 - **内嵌网页的 JS 改完要过 `node --check`**：`Get-Content WebPage.cs -Raw -Encoding UTF8`（**必须带 `-Encoding UTF8`**，否则中文会被按 GBK 读成乱码，误报语法错误）→ 截出 `<script>…</script>` → `node --check`。想验证运行期效果可以用 `msedge --headless=new --dump-dom "http://127.0.0.1:8088/?k=码&tv=1"`，看 `<body class="tv focusnav">` 与渲染出的卡片。
-- **网络**：用户平时挂加速器（代理）才能稳定访问 GitHub；**加速器没开时**会出现 `git credential fill` 报 `refusing to work with credential missing protocol field`、GitHub API/上传超时等怪现象。遇到这类报错先问一句是不是没开加速器，再考虑改代码/换方案。
+- **上传/发布一律走 curl，连 GitHub API 调用也一样（2026-09-26 踩过）**：`Invoke-RestMethod -Headers @{Authorization="token …"}` 在本机**会把 Authorization 丢掉**（系统代理插了一脚），POST 建 Release 直接 401 `Requires authentication`，而 GET 公共端点看起来"正常"（其实靠的是免鉴权 + GitHub 对旧仓库名的重定向）。
+  - 正确姿势：`curl.exe --ssl-no-revoke -sS -K xxx.cfg`，cfg 里写 `url / request / header / data|data-binary`；返回的 JSON 再交给 `ConvertFrom-Json` 解析。
+  - **仓库名有坑**：真实仓库是 **`Liushiweiying/Gal-quote-tool`**（不是 `Galgame-quote-tool`）。写错名字时 GET 会被 GitHub 301 重定向到新名（PowerShell 自动跟随，看不出问题），但 **POST 会 401/`Moved Permanently`**。查真名：`GET https://api.github.com/repositories/<id>`（release 响应里的 `repository.id`）。
+  - **PowerShell 5.1 读写脚本/配置的编码坑**：`.ps1` 含中文且**无 BOM** 时会被按 ANSI 解析 → 语法错误。发布脚本一律写成**纯 ASCII**（发布说明那类中文内容放到单独的 `.md`，用 `[IO.File]::ReadAllText(path, UTF8)` 读）。
+- **beta 发布约定（2026-09-26 起）**：tag/名用 `vX.Y.Z-beta` + `prerelease: true`。GitHub 的 `releases/latest`（也就是 `UpdateService` 看的那个）**不含预发布**，所以 beta 不会自动推给用户，正式版发布时再打 `vX.Y.Z` 即可（不用为了"再发一次"而升版本号）。
+
 - **WPF Slider 的 `ValueChanged` 会在 `InitializeComponent()` 期间触发**（设置 `Minimum` 时把默认值 0 钳到 Minimum）。若处理器引用了 XAML 中**声明在后面**的元素 → NullReferenceException → 打开窗口即崩溃。已给 `SettingsWindow` 的 Jpeg/Delay 两个滑杆加空值保护。
 - `App.OnStartup` 已注册 `DispatcherUnhandledException` / `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException`，异常写入 `%LOCALAPPDATA%\GalQuoteCollector\startup.log`（UI 线程异常不再闪退）。
 - 诊断开关：`Gal-quote-tool.exe --open-settings` 启动后自动打开设置窗口（用于复现/排查）。
