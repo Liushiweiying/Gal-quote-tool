@@ -134,7 +134,7 @@ body.focusnav button.primary:focus{background:#4A58A8}
     <button id="btnJson">导出 JSON</button>
     <button id="btnMd">导出 Markdown</button>
     <button id="btnZip">打包导出</button>
-    ${S.canEdit?`<button id="btnImport">导入</button>`:'}
+    <button id="btnImport">导入</button>
     <button id="btnSlideshow">回想</button>
     <button id="btnTv" title="电视 / 大屏模式：字号加大、可用遥控器方向键操作">大屏：关</button>
     <button id="btnReload">刷新</button>
@@ -211,6 +211,8 @@ async function loadMeta(){
     const why=S.meta.isLan?'只读模式（这台设备设置为「只能看」）':'外网访问：只读模式';
     document.body.insertAdjacentHTML('afterbegin','<div style="padding:10px 14px;background:#FFF4E5;color:#8A5A00;font-size:13px">'+why+'（可以查看、搜索、导出；修改请在电脑上操作）</div>');
   }
+  // 只读时把「导入」藏掉（服务端本来也会 403，这里只是别让人看见）
+  const bi=$('btnImport');if(bi)bi.style.display=S.canEdit?'':'none';
   const fill=(el,arr,val,fmtf)=>{el.innerHTML='<option value="">'+val+'</option>'+arr.map(x=>`<option value="${esc(fmtf?fmtf(x):x)}">${esc(fmtf?fmtf(x):x)}</option>`).join('');};
   fill($('fGame'),S.meta.games,'全部游戏');
   $('fGroup').innerHTML='<option value="">全部分组</option>'+S.meta.groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
@@ -222,12 +224,14 @@ const UNKNOWN='[未识别到文字]';
 function card(it){
   const body=(it.text||'').includes(UNKNOWN)?'':it.text;
   const chips=[...(it.groups||[]).map(g=>`<span class="chip">${esc(g)}</span>`),...(it.tags||[]).map(t=>`<span class="chip">#${esc(t)}</span>`)].join(' ');
+  // 可编辑时才给「编辑 / 删除」入口（公网只读、只读镜像模式下服务端也会 403，这里直接不显示）
+  const editActs=S.canEdit?`<button data-act="edit">编辑</button><button class="danger" data-act="del">删除</button>`:'';
   return `<div class="card" data-id="${it.id}">
     ${body?`<div class="txt">${esc(body)}</div>`:''}
     ${it.notes?`<div class="notes">${esc(it.notes)}</div>`:''}
     ${it.hasShot?`<img class="thumb" loading="lazy" src="/api/shot/${it.id}" alt="">`:''}
     <div class="meta"><span class="game">${esc(it.gameName||'未标注')}</span><span>${fmt(it.capturedAt)}</span>${chips}</div>
-    <div class="acts"><button data-act="exp">导出JSON</button><button data-act="expzip">导出ZIP</button></div>
+    <div class="acts"><button data-act="exp">导出JSON</button><button data-act="expzip">导出ZIP</button>${editActs}</div>
   </div>`;
 }
 

@@ -277,7 +277,10 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；**GitHub 令牌用 CredRead 从 Windows 凭据管理器读**（target `git:https://github.com`，用户 `Liushiweiying`，令牌 40 位）：`Advapi32!CredRead(target, 1, 0, out ptr)` + `CREDENTIAL.CredentialBlob`（Unicode）。**不要用 `"protocol=https..." | git credential fill`**——PowerShell 把字符串管道喂给 native exe 的 stdin 现在会失败，git 报 `refusing to work with credential missing protocol field`（v1.3.1 发布时踩过；`cmd /c "git credential fill < file"` 也可用，但 CredRead 更省事）。
 - **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法（**路径必须用正斜杠**：2026-09-23 实测 `"@D:\\a\\b.exe"` 的反斜杠被 curl 当转义吃掉，报 `Failed to open D:ab.exe`，之前"传上去的还是旧字节"就是这个原因）：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
-### 已修的坑（避免重复踩）
+### 网页版（WebPage.cs）改动的两条硬规矩（2026-09-26 踩过）
+- **静态 HTML 区（`<script>` 之前）里绝对不能出现 `${...}`**：C# 原样字符串不会求值它，但浏览器会把 `${S.canEdit?`<button id="btnImport">导入</button>`:''}` **当成"一段文字 + 一个真按钮 + 一段文字"**解析出来 —— 于是页面顶栏就明晃晃地显示 `${S.canEdit?` 和 `:''}` 两截字面量（顶栏那个 bug 存在了很久，2026-09-26 才修）。模板占位符只能写在 `<script>` 里的 JS 模板字符串中。
+- **每张卡片的操作栏必须有「编辑 / 删除」入口**（`card()` 里的 `editActs`，`S.canEdit` 为真才渲染）：服务端 `PUT/DELETE /api/quotes/{id}` 和前端 `openEdit/del` 一直都在，但按钮从来没渲染过，等于"网页能改"这个功能一直是死的（2026-09-26 恢复）。只读模式（公网 / `--read-only`）下不渲染，且「导入」按钮也会 `display:none`。
+- 验证方法：`msedge --headless=new --dump-dom "http://127.0.0.1:8098/?k=码"` **必须先把 `<script>…</script>` 剥掉再看**——否则内联 JS 源码里的字符串会让"有没有这个按钮"之类的正则全部误判（第一次验证就踩了这个坑）。
 - **不要用 PowerShell 把网页 API 的返回「读出来再 PUT 回去」（2026-09-26 踩过）**：`curl.exe ... | ConvertFrom-Json` 拿到的中文没问题，但 `-d`/配置文件回传时 PowerShell 把参数按 GBK 编码喂给 curl，结果把 `[未识别到文字]` 写成了乱码 `[鏈嶈瘑鍒埌鏂囧瓧]`（真改坏了 quote 203，随后用 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` + `--data-binary @file` 修复）。要点：① body 一律写进文件再用 `--data-binary @文件`；② 命令里**不要出现非 ASCII 字面量**（用 `[char]0x672A` 这种拼）；③ 测试写操作尽量挑一条无关紧要的语录，或 PUT 回原文并立即复核。
 - **PowerShell `Set-Content -Encoding UTF8` 写 curl 配置文件会带 BOM**（curl 报 `config file option 'url' is unknown`）→ 用 `[System.IO.File]::WriteAllText(path, text, New-Object System.Text.UTF8Encoding($false))`。
 - **本机 WLAN IP 会变**（2026-09-26 实测从 192.168.2.33 变成 **192.168.2.43**，DHCP）：设置界面里的局域网地址是实时枚举的，不要照抄旧 IP 去测；手机连不上时先确认当前 IP。
@@ -288,7 +291,13 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
   - 正确姿势：`curl.exe --ssl-no-revoke -sS -K xxx.cfg`，cfg 里写 `url / request / header / data|data-binary`；返回的 JSON 再交给 `ConvertFrom-Json` 解析。
   - **仓库名有坑**：真实仓库是 **`Liushiweiying/Gal-quote-tool`**（不是 `Galgame-quote-tool`）。写错名字时 GET 会被 GitHub 301 重定向到新名（PowerShell 自动跟随，看不出问题），但 **POST 会 401/`Moved Permanently`**。查真名：`GET https://api.github.com/repositories/<id>`（release 响应里的 `repository.id`）。
   - **PowerShell 5.1 读写脚本/配置的编码坑**：`.ps1` 含中文且**无 BOM** 时会被按 ANSI 解析 → 语法错误。发布脚本一律写成**纯 ASCII**（发布说明那类中文内容放到单独的 `.md`，用 `[IO.File]::ReadAllText(path, UTF8)` 读）。
-- **beta 发布约定（2026-09-26 起）**：tag/名用 `vX.Y.Z-beta` + `prerelease: true`。GitHub 的 `releases/latest`（也就是 `UpdateService` 看的那个）**不含预发布**，所以 beta 不会自动推给用户，正式版发布时再打 `vX.Y.Z` 即可（不用为了"再发一次"而升版本号）。
+- **beta 发布约定（2026-09-26 起）**：tag/名用 `vX.Y.Z-beta[.N]` + `prerelease: true`。GitHub 的 `releases/latest`（`UpdateService` 默认看的那个）**不含预发布**，所以 beta 不会自动推给用户。
+  - **beta 构建必须自报预发布版本号**：发布时加 `-p:InformationalVersion=1.3.6-beta.2`（**和 tag 去掉 v 后完全一致**，否则会自己提示自己）。`MainViewModel.AppVersion` 优先读 InformationalVersion（会去掉 `+commit` 段），所以：`1.3.6`（正式）> `1.3.6-beta.2` > `1.3.6-beta`，beta 用户以后能正常收到正式版提醒。版本比较在 `UpdateService.CompareVersions`，有单测脚本覆盖。
+  - 已发布：`v1.3.6-beta`（**没有** beta 频道开关，自报 `1.3.6`，别用）、`v1.3.6-beta.2`（有开关，自报 `1.3.6-beta.2`，从这个开始用）。
+- **直连 github.com 被墙时用本地 FlClash 代理推 git（2026-09-26 实测）**：本机 `api.github.com` / `uploads.github.com` 直连正常（所以 API 调用、上传资产都没问题），但 **`github.com:443` 超时**（`git push` 报 `Failed to connect to github.com port 443`）。FlClash 的混合代理口在本机 **127.0.0.1:7890**，所以：
+  `git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 push origin master`
+  排查顺序：`curl -sS -o NUL -w "%{http_code}" https://github.com`（000 = 不通）→ `Get-Process | ? ProcessName -match "clash|v2ray|sing-box"` + 扫 7890/7897/10809 等端口找代理。
+
 
 - **WPF Slider 的 `ValueChanged` 会在 `InitializeComponent()` 期间触发**（设置 `Minimum` 时把默认值 0 钳到 Minimum）。若处理器引用了 XAML 中**声明在后面**的元素 → NullReferenceException → 打开窗口即崩溃。已给 `SettingsWindow` 的 Jpeg/Delay 两个滑杆加空值保护。
 - `App.OnStartup` 已注册 `DispatcherUnhandledException` / `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException`，异常写入 `%LOCALAPPDATA%\GalQuoteCollector\startup.log`（UI 线程异常不再闪退）。

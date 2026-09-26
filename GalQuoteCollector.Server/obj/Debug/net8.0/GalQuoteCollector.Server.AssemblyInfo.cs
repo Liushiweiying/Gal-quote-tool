@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("galquote-server")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.3.6.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.3.6+054daa14aefd57b54401c4563c5f4983da4a8e13")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.3.6+0fcb1b37adc8b312acb66334304bdc27cdfc1a8a")]
 [assembly: System.Reflection.AssemblyProductAttribute("galquote-server")]
 [assembly: System.Reflection.AssemblyTitleAttribute("galquote-server")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.3.6.0")]

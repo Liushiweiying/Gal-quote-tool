@@ -559,9 +559,10 @@ public sealed class WebServerService : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        // 客户端不信任自签证书就会在这里断掉（云端的 tunnel 默认会校验证书）；
-                        // 手机浏览器第一次点「继续访问」是正常的，这里记一行日志就够
-                        AppLog.Write($"web: TLS 握手失败（自签证书未通过对方的证书校验）{ex.Message}");
+                        // 客户端不信任自签证书就会在这里断掉（云端的 tunnel / 反代默认会校验证书）
+                        AppLog.Write($"web: TLS 握手失败（对方不信任自签证书）：如果这是 cloudflared/反向代理，" +
+                                     $"把 origin 改成 http://127.0.0.1:{_port}（推荐，回环上不必加密），或在那边打开 No TLS Verify；" +
+                                     $"也可以在设置里改成「仅 HTTP」。{ex.Message}");
                         ssl.Dispose();
                         return;
                     }

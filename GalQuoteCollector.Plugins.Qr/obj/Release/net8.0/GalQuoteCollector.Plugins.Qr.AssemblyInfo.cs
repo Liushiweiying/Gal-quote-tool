@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GalQuoteCollector.Plugins.Qr")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Release")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.3.6.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.3.6-beta.2+ce7f9cacf2ebaccba943f48346a15bc080350f95")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.3.6-beta.2+0fcb1b37adc8b312acb66334304bdc27cdfc1a8a")]
 [assembly: System.Reflection.AssemblyProductAttribute("GalQuoteCollector.Plugins.Qr")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GalQuoteCollector.Plugins.Qr")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.3.6.0")]
