@@ -34,12 +34,26 @@ public partial class SettingsWindow : Window
         _newConfig = cfg.Clone();
         AutoStartCheckBox.IsChecked = cfg.AutoStart;
         SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
-        CropBlackBarsCheckBox.IsChecked = cfg.CropBlackBars;
+        BarModeCombo.SelectedIndex = Math.Clamp(cfg.CaptureBarMode, 0, 3);
+        BarAdjLBox.Text = cfg.BarAdjustLeft.ToString();
+        BarAdjRBox.Text = cfg.BarAdjustRight.ToString();
+        BarAdjTBox.Text = cfg.BarAdjustTop.ToString();
+        BarAdjBBox.Text = cfg.BarAdjustBottom.ToString();
         BackupCheckBox.IsChecked = cfg.BackupEnabled;
         BackupKeepBox.Text = (cfg.BackupKeepCount <= 0 ? 3 : cfg.BackupKeepCount).ToString();
+        BackupDirBox.Text = cfg.BackupDirectory ?? "";
+        BackupZipCheck.IsChecked = cfg.BackupAsZip;
+        _originalBackupDir = Services.BackupService.ResolveDirectory(cfg, _dataDir);
         UpdateBackupHint(cfg);
         WebCheckBox.IsChecked = cfg.WebEnabled;
-        WebHttpsCheckBox.IsChecked = cfg.WebUseHttps;
+        WebTlsCombo.SelectedIndex = cfg.EffectiveTlsMode;
+        WebAllowLanCheck.IsChecked = cfg.WebAllowLan;
+        WebAllowExternalCheck.IsChecked = cfg.WebAllowExternal;
+        WebTotpCheck.IsChecked = cfg.WebTotpEnabled;
+        WebTotpSecretBox.Text = Services.TotpService.Group((cfg.WebTotpSecret ?? "").Trim().ToUpperInvariant());
+        WebTotpHoursBox.Text = (cfg.WebTotpSessionHours <= 0 ? 12 : cfg.WebTotpSessionHours).ToString();
+        UpdateTotpHint();
+        UpdateTotpPanel();
         WebPortBox.Text = (cfg.WebPort >= 1024 && cfg.WebPort <= 65535 ? cfg.WebPort : 8088).ToString();
         WebCodeBox.Text = cfg.WebAccessCode ?? "";
         UpdateWebUrls();
@@ -523,7 +537,9 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            var dir = Services.BackupService.DefaultDirectory(_dataDir);
+            var dir = string.IsNullOrWhiteSpace(BackupDirBox.Text)
+            ? Services.BackupService.DefaultDirectory(_dataDir)
+            : BackupDirBox.Text.Trim();
             int count = 0;
             try { if (Directory.Exists(dir)) count = Directory.GetDirectories(dir, "backup-*").Length; } catch { }
             BackupHintText.Text = $"备份位置：{dir}（现有 {count} 份）\n" +
@@ -537,30 +553,73 @@ public partial class SettingsWindow : Window
     private void OnJumpHotkey(object sender, RoutedEventArgs e) => Jump(SecHeaderHotkey);
     private void OnJumpGeneral(object sender, RoutedEventArgs e) => Jump(SecHeaderGeneral);
     private void OnJumpSlideshow(object sender, RoutedEventArgs e) => Jump(SecHeaderSlideshow);
+    private void OnJumpMagpie(object sender, RoutedEventArgs e) => Jump(SecHeaderMagpie);
     private void OnJumpCapture(object sender, RoutedEventArgs e) => Jump(SecHeaderCapture);
     private void OnJumpBackup(object sender, RoutedEventArgs e) => Jump(SecHeaderBackup);
     private void OnJumpWeb(object sender, RoutedEventArgs e) => Jump(SecHeaderWeb);
     private void OnJumpOcr(object sender, RoutedEventArgs e) => Jump(SecHeaderOcr);
     private void OnJumpRules(object sender, RoutedEventArgs e) => Jump(SecHeaderRules);
 
-    /// <summary>把某个分组标题滚到可视区域（顺带闪一下，知道跳哪了）。</summary>
+    /// <summary>把某个分组标题滚到可视区域。</summary>
     private void Jump(System.Windows.FrameworkElement target)
     {
         try
         {
-            // 用框架自带的 BringIntoView（它知道滚动条/布局的真实偏移），再往上留 6px 空
-            target.BringIntoView();
-            Dispatcher.BeginInvoke(new Action(() =>
-            {
-                try { SettingsScroll.ScrollToVerticalOffset(Math.Max(0, SettingsScroll.VerticalOffset - 6)); }
-                catch { }
-            }), System.Windows.Threading.DispatcherPriority.Loaded);
+            // 关键：相对**内容根**（SettingsRoot）取坐标 —— 它是滚动内容的坐标系，与当前滚动位置无关；
+            // 这样只算一次偏移就到位，不会像 BringIntoView 那样先滚再补、看起来"自己往上跳"。
+            var y = target.TransformToAncestor(SettingsRoot).Transform(new System.Windows.Point(0, 0)).Y;
+            SettingsScroll.ScrollToVerticalOffset(Math.Max(0, y - 12));
         }
-        catch { }
+        catch
+        {
+            try { target.BringIntoView(); } catch { }
+        }
     }
+    /// <summary>打开设置前的备份位置（用于判断是否需要迁移）。</summary>
+    private string _originalBackupDir = "";
+
+    /// <summary>浏览选择备份目录（支持 NAS 上的网络位置）。</summary>
+
+    /// <summary>恢复默认位置（安装目录上一级的 Gal Quote Tool Backup）。</summary>
+    private void OnResetBackupDir(object sender, RoutedEventArgs e)
+    {
+        BackupDirBox.Text = "";
+        UpdateBackupHint(new HotkeyConfig());
+    }
+
+    /// <summary>把已有备份迁移到当前填写的目录（换 NAS 时用）。</summary>
+    private void OnMigrateBackups(object sender, RoutedEventArgs e)
+    {
+        var cfg = new HotkeyConfig { BackupDirectory = BackupDirBox.Text.Trim(), BackupKeepCount = _newConfig.BackupKeepCount, BackupAsZip = BackupZipCheck.IsChecked == true };
+        var to = Services.BackupService.ResolveDirectory(cfg, _dataDir);
+        var from = string.IsNullOrWhiteSpace(_originalBackupDir) ? Services.BackupService.DefaultDirectory(_dataDir) : _originalBackupDir;
+        int count = Services.BackupService.CountBackups(from);
+        if (count == 0) { Views.InfoDialog.Show(this, "迁移备份", $"原位置没有备份：\n{from}", icon: Views.InfoDialogIcon.Information); return; }
+
+        var confirm = Views.InfoDialog.Show(this, "迁移已有备份",
+            $"把 {count} 份备份从\n{from}\n移动到\n{to}\n\n（目标已存在的同名备份会跳过；NAS 上会很慢，请耐心等）",
+            Views.InfoDialogButtons.YesNo, Views.InfoDialogIcon.Question);
+        if (confirm != Views.InfoDialogResult.Yes) return;
+
+        StatusTextForBackup("正在迁移备份…");
+        var (moved, skipped, failed, detail) = Services.BackupService.MigrateBackups(from, to);
+        AppLog.Write($"backup migrate: {detail}");
+        StatusTextForBackup(detail);
+        _originalBackupDir = to;
+        Views.InfoDialog.Show(this, "迁移备份", detail,
+            icon: failed > 0 ? Views.InfoDialogIcon.Warning : Views.InfoDialogIcon.Information);
+    }
+
+    private void StatusTextForBackup(string text)
+    {
+        try { BackupHintText.Text = text; } catch { }
+    }
+
     private void OnOpenBackupDir(object sender, RoutedEventArgs e)
     {
-        var dir = Services.BackupService.DefaultDirectory(_dataDir);
+        var dir = string.IsNullOrWhiteSpace(BackupDirBox.Text)
+            ? Services.BackupService.DefaultDirectory(_dataDir)
+            : BackupDirBox.Text.Trim();
         try
         {
             System.IO.Directory.CreateDirectory(dir);
@@ -578,16 +637,28 @@ public partial class SettingsWindow : Window
 
     private void OnBackupNow(object sender, RoutedEventArgs e)
     {
-        _newConfig.CropBlackBars = CropBlackBarsCheckBox.IsChecked == true;
+        _newConfig.CaptureBarMode = Math.Max(0, BarModeCombo.SelectedIndex);
+        _newConfig.CropBlackBars = _newConfig.CaptureBarMode != 0; // 兼容旧字段
+        _newConfig.BarAdjustLeft = int.TryParse(BarAdjLBox.Text.Trim(), out var bl) ? bl : 0;
+        _newConfig.BarAdjustRight = int.TryParse(BarAdjRBox.Text.Trim(), out var br) ? br : 0;
+        _newConfig.BarAdjustTop = int.TryParse(BarAdjTBox.Text.Trim(), out var bt) ? bt : 0;
+        _newConfig.BarAdjustBottom = int.TryParse(BarAdjBBox.Text.Trim(), out var bb) ? bb : 0;
         _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
         _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var k2) ? Math.Clamp(k2, 1, 30) : 3;
-        _newConfig.BackupDirectory = ""; // 固定用"安装目录上一级\Gal Quote Tool Backup"
+        _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
+        _newConfig.BackupAsZip = BackupZipCheck.IsChecked == true;
         _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var keep)
             ? Math.Clamp(keep, 1, 30) : 3;
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
         _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
         _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
-        _newConfig.WebUseHttps = WebHttpsCheckBox.IsChecked == true;
+        _newConfig.WebTlsMode = SelectedTlsMode;
+        _newConfig.WebUseHttps = SelectedTlsMode == 2; // 兼容旧版本读取
+        _newConfig.WebAllowLan = WebAllowLanCheck.IsChecked == true;
+        _newConfig.WebAllowExternal = WebAllowExternalCheck.IsChecked == true;
+        _newConfig.WebTotpEnabled = WebTotpCheck.IsChecked == true;
+        _newConfig.WebTotpSecret = TotpSecretValue();
+        _newConfig.WebTotpSessionHours = TotpHours();
         var (ok, path, message) = Services.BackupService.BackupNow(_newConfig, _dataDir);
         BackupHintText.Text = message + (path.Length > 0 ? $"\n{path}" : "");
         if (!ok)
@@ -622,8 +693,8 @@ public partial class SettingsWindow : Window
     {
         const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
         var rnd = new Random();
-        WebCodeBox.Text = new string(Enumerable.Range(0, 6).Select(_ => alphabet[rnd.Next(alphabet.Length)]).ToArray());
-        WebHintText.Text = "已生成访问码：手机第一次打开用 http://IP:端口/?k=这个码（之后浏览器会记住）";
+        WebCodeBox.Text = new string(Enumerable.Range(0, 24).Select(_ => alphabet[rnd.Next(alphabet.Length)]).ToArray());
+        WebHintText.Text = "已生成 24 位强访问码（推荐用于 tunnel/外网）：第一次打开用 ?k=这个码，之后浏览器会记住。外网来源一律只读、不能修改。";
         UpdateWebUrls();
     }
 
@@ -634,9 +705,8 @@ public partial class SettingsWindow : Window
         {
             var storage = new Services.StorageService(System.IO.Path.Combine(_dataDir, "quotes.db"));
             tmp = new Services.WebServerService(storage, _dataDir);
-            var port = int.TryParse(WebPortBox.Text.Trim(), out var pp) && pp >= 1024 && pp <= 65535 ? pp : 8088;
-            var (started, startMsg) = tmp.Start(port, WebCodeBox.Text.Trim(), true);
-            if (!started) { Views.InfoDialog.Show(this, "信任证书", startMsg, icon: Views.InfoDialogIcon.Warning); return; }
+            // 只要证书，不用真的起服务（避免占用端口 / 与正在运行的服务冲突）
+            tmp.EnsureCertificate();
             var (ok, msg) = tmp.TrustOnThisMachine();
             Views.InfoDialog.Show(this, ok ? "已信任" : "信任失败", msg,
                 icon: ok ? Views.InfoDialogIcon.Information : Views.InfoDialogIcon.Warning);
@@ -652,15 +722,12 @@ public partial class SettingsWindow : Window
     {
         try
         {
-            // 证书要先生成/取出：起一次服务再导出（不实际占用端口就生成不了证书）
+            // 证书要先生成/取出（不启动监听，只生成证书，避免占用端口）
             Services.WebServerService? tmp = null;
             try
             {
                 var storage = new Services.StorageService(System.IO.Path.Combine(_dataDir, "quotes.db"));
                 tmp = new Services.WebServerService(storage, _dataDir);
-                var (ok, msg) = tmp.Start(int.TryParse(WebPortBox.Text.Trim(), out var pp) && pp >= 1024 && pp <= 65535 ? pp : 8088,
-                    WebCodeBox.Text.Trim(), true);
-                if (!ok) { Views.InfoDialog.Show(this, "导出证书", msg, icon: Views.InfoDialogIcon.Warning); return; }
                 var path = tmp.ExportCertificate();
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
                 {
@@ -686,11 +753,187 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void UpdateWebUrls()
+    {
+        if (WebUrlText == null) return;
+        int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
+        var code = WebCodeBox.Text.Trim();
+        var suffix = code.Length > 0 ? $"?k={code}" : "";
+        var mode = SelectedTlsMode;
+        bool lanOn = WebAllowLanCheck.IsChecked == true;
+        bool extOn = WebAllowExternalCheck.IsChecked == true;
+
+        var lines = new List<string>();
+        if (!lanOn)
+        {
+            lines.Add("局域网访问已关闭（只有这台电脑的浏览器能连）");
+        }
+        else
+        {
+            // 自动 = 两种都列（tunnel / 反代 的 origin 填哪个都行）；仅 HTTP / 仅 HTTPS 只列一种
+            if (mode != 2)
+                lines.Add("局域网 HTTP：" + string.Join("    ", Services.WebServerService.LocalUrls(port, false).Take(3).Select(u => u + suffix)));
+            if (mode != 1)
+                lines.Add("局域网 HTTPS：" + string.Join("    ", Services.WebServerService.LocalUrls(port, true).Take(3).Select(u => u + suffix)));
+        }
+        if (extOn)
+            lines.Add("公网：" + (code.Length > 0
+                ? "tunnel 面板里那个域名 + ?k=访问码" + (WebTotpCheck.IsChecked == true ? "（还要输 6 位动态码）" : "")
+                : "⚠ 还没设访问码，保存时会自动生成一个"));
+        WebUrlText.Text = string.Join("\n", lines);
+
+        // 电视盒子 / 客厅大屏：遥控器方向键可用，收藏这个地址
+        if (WebTvUrlText == null) return;
+        if (lanOn)
+        {
+            var baseUrl = Services.WebServerService.LocalUrls(port, false).FirstOrDefault() ?? $"http://127.0.0.1:{port}/";
+            var tv = baseUrl + (baseUrl.Contains('?') ? "&" : "?") + "tv=1" + (suffix.Length > 0 ? "&" + suffix[1..] : "");
+            WebTvUrlText.Text = $"电视 / 大屏（遥控器方向键）：{tv}\n直接进回想并自动播放：{tv}&view=1&auto=1";
+        }
+        else
+        {
+            WebTvUrlText.Text = "打开「允许局域网访问」后，这里会显示电视盒子 / 大屏可以收藏的地址。";
+        }
+    }
+
+    // ── 两步验证（TOTP）──
+
+    private void UpdateTotpPanel()
+    {
+        if (WebTotpPanel == null) return;
+        WebTotpPanel.Visibility = WebTotpCheck.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void WebTotpCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        UpdateTotpPanel();
+        UpdateWebUrls();
+    }
+
+    /// <summary>局域网 / 公网开关变化时刷新地址显示。</summary>
+    private void WebNetCheck_Changed(object sender, RoutedEventArgs e)
+    {
+        if (WebUrlText != null) UpdateWebUrls();
+    }
+
+    private string TotpSecretValue() =>
+        new string((WebTotpSecretBox.Text ?? "").Where(char.IsLetterOrDigit).ToArray()).ToUpperInvariant();
+
+    private int TotpHours() =>
+        int.TryParse(WebTotpHoursBox.Text.Trim(), out var h) ? Math.Clamp(h, 1, 720) : 12;
+
+    private void UpdateTotpHint()
+    {
+        if (WebTotpHintText == null) return;
+        var secret = TotpSecretValue();
+        if (secret.Length == 0)
+        {
+            WebTotpUriText.Text = "";
+            WebTotpHintText.Text = "还没有密钥：点「生成新密钥」，再到手机验证器 App 里选「手动输入密钥（基于时间 / TOTP）」，把上面那串填进去。";
+            return;
+        }
+        WebTotpUriText.Text = Services.TotpService.OtpauthUri(secret, "web");
+        WebTotpHintText.Text = $"核对用当前动态码：{Services.TotpService.Code(secret)}（每 30 秒变一次）　·　验证一次后 {TotpHours()} 小时内免验证。";
+    }
+
+    private void OnGenTotpSecret(object sender, RoutedEventArgs e)
+    {
+        WebTotpSecretBox.Text = Services.TotpService.Group(Services.TotpService.NewSecret());
+        WebTotpCheck.IsChecked = true;
+        UpdateTotpPanel();
+        UpdateTotpHint();
+        WebTotpHintText.Text += "\n换过密钥后，手机验证器里要把旧的那条删掉、重新添加，否则码对不上。";
+    }
+
+    /// <summary>显示二维码：二维码由可选的插件生成（主程序不依赖任何二维码库）。</summary>
+    private void OnShowTotpQr(object sender, RoutedEventArgs e)
+    {
+        var secret = TotpSecretValue();
+        if (secret.Length == 0)
+        {
+            Views.InfoDialog.Show(this, "两步验证", "还没有密钥，先点「生成新密钥」。", icon: Views.InfoDialogIcon.Warning);
+            return;
+        }
+        var uri = Services.TotpService.OtpauthUri(secret, "web");
+        Services.PluginHost.EnsureLoaded();
+        var qr = Services.PluginHost.QrCode;
+        if (qr == null)
+        {
+            Views.InfoDialog.Show(this, "没装二维码插件",
+                "二维码是可选插件。把这两个文件放到下面任意一个 plugins 文件夹里，重启程序就能扫码了：\n" +
+                "· GalQuoteCollector.Plugins.Qr.dll\n· QRCoder.dll\n\n" +
+                "① 程序目录\\plugins\\\n" +
+                "② %LOCALAPPDATA%\\GalQuoteCollector\\plugins\\（单文件版用这个）\n\n" +
+                (Services.PluginHost.LastError is { Length: > 0 } err ? "上次加载失败：" + err + "\n\n" : "") +
+                "没有插件也能用：在验证器 App 里选「手动输入密钥」，把上面那串填进去。\n\n" +
+                "当前 otpauth 链接：\n" + uri,
+                icon: Views.InfoDialogIcon.Warning);
+            return;
+        }
+        try
+        {
+            var png = qr.RenderPng(uri, 8);
+            var hint = $"扫完在验证器 App 里会看到「Gal Quote Tool」。核对用当前动态码：{Services.TotpService.Code(secret)}（每 30 秒变一次）";
+            new Views.QrWindow(uri, png, hint) { Owner = this }.ShowDialog();
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "生成二维码失败", ex.Message + "\n可以改用「手动输入密钥」。", icon: Views.InfoDialogIcon.Warning);
+        }
+    }
+
+    private void OnCopyOtpauth(object sender, RoutedEventArgs e)
+    {
+        var secret = TotpSecretValue();
+        if (secret.Length == 0)
+        {
+            Views.InfoDialog.Show(this, "两步验证", "还没有密钥，先点「生成新密钥」。", icon: Views.InfoDialogIcon.Warning);
+            return;
+        }
+        try
+        {
+            Clipboard.SetText(Services.TotpService.OtpauthUri(secret, "web"));
+            WebTotpHintText.Text = "otpauth 链接已复制：贴到任何能生成二维码的工具里，手机扫一下就能添加。";
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "复制失败", ex.Message, icon: Views.InfoDialogIcon.Warning);
+        }
+    }
+
+    /// <summary>保存前的安全检查：公网开着却没访问码 / 开了两步验证却没密钥 —— 自动补上，别让用户裸奔。</summary>
+    private void EnsureWebSafety()
+    {
+        var notes = new List<string>();
+        if (WebAllowExternalCheck.IsChecked == true && WebCodeBox.Text.Trim().Length == 0)
+        {
+            const string alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+            var rnd = new Random();
+            WebCodeBox.Text = new string(Enumerable.Range(0, 24).Select(_ => alphabet[rnd.Next(alphabet.Length)]).ToArray());
+            notes.Add("· 自动生成了访问码：" + WebCodeBox.Text);
+        }
+        if (WebTotpCheck.IsChecked == true && TotpSecretValue().Length == 0)
+        {
+            WebTotpSecretBox.Text = Services.TotpService.Group(Services.TotpService.NewSecret());
+            notes.Add("· 自动生成了两步验证密钥：" + WebTotpSecretBox.Text);
+        }
+        if (WebAllowExternalCheck.IsChecked == true && SelectedTlsMode == 1)
+            notes.Add("· 提示：公网访问建议用「自动」或「仅 HTTPS」，明文 HTTP 的内容在公网上是裸奔的。");
+        if (notes.Count > 0)
+        {
+            UpdateTotpHint();
+            UpdateWebUrls();
+            Views.InfoDialog.Show(this, "网络与隐私",
+                "为了安全，下面这些已经帮你补上了：\n" + string.Join("\n", notes), icon: Views.InfoDialogIcon.Information);
+        }
+    }
+
     private void OnOpenWebPage(object sender, RoutedEventArgs e)
     {
         int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
         var code = WebCodeBox.Text.Trim();
-        var scheme = WebHttpsCheckBox.IsChecked == true ? "https" : "http";
+        // 自动模式下两种协议都通，用 http 打开（少一次证书警告）
+        var scheme = SelectedTlsMode == 2 ? "https" : "http";
         var url = $"{scheme}://127.0.0.1:{port}/" + (code.Length > 0 ? $"?k={Uri.EscapeDataString(code)}" : "");
         try
         {
@@ -703,29 +946,42 @@ public partial class SettingsWindow : Window
         }
     }
 
-    private void UpdateWebUrls()
+    /// <summary>0 = 自动、1 = 仅 HTTP、2 = 仅 HTTPS。</summary>
+    private int SelectedTlsMode => Math.Clamp(WebTlsCombo.SelectedIndex, 0, 2);
+
+    private void WebTlsCombo_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
     {
-        int port = int.TryParse(WebPortBox.Text.Trim(), out var p) && p >= 1024 && p <= 65535 ? p : 8088;
-        var code = WebCodeBox.Text.Trim();
-        var suffix = code.Length > 0 ? $"?k={code}" : "";
-        var urls = Services.WebServerService.LocalUrls(port, WebHttpsCheckBox.IsChecked == true).Take(3).Select(u => u + suffix);
-        WebUrlText.Text = "局域网地址：" + string.Join("    ", urls);
+        // 初始化期间 WebUrlText 可能还没建好
+        if (WebUrlText != null) UpdateWebUrls();
     }
 
     private void OnSaveClick(object sender, RoutedEventArgs e)
     {
+        EnsureWebSafety();
         _newConfig.AutoStart = AutoStartCheckBox.IsChecked == true;
         _newConfig.SwallowCaptureHotkey = SwallowHotkeyCheckBox.IsChecked == true;
-        _newConfig.CropBlackBars = CropBlackBarsCheckBox.IsChecked == true;
+        _newConfig.CaptureBarMode = Math.Max(0, BarModeCombo.SelectedIndex);
+        _newConfig.CropBlackBars = _newConfig.CaptureBarMode != 0; // 兼容旧字段
+        _newConfig.BarAdjustLeft = int.TryParse(BarAdjLBox.Text.Trim(), out var bl) ? bl : 0;
+        _newConfig.BarAdjustRight = int.TryParse(BarAdjRBox.Text.Trim(), out var br) ? br : 0;
+        _newConfig.BarAdjustTop = int.TryParse(BarAdjTBox.Text.Trim(), out var bt) ? bt : 0;
+        _newConfig.BarAdjustBottom = int.TryParse(BarAdjBBox.Text.Trim(), out var bb) ? bb : 0;
         _newConfig.BackupEnabled = BackupCheckBox.IsChecked == true;
         _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var k2) ? Math.Clamp(k2, 1, 30) : 3;
-        _newConfig.BackupDirectory = ""; // 固定用"安装目录上一级\Gal Quote Tool Backup"
+        _newConfig.BackupDirectory = BackupDirBox.Text.Trim();
+        _newConfig.BackupAsZip = BackupZipCheck.IsChecked == true;
         _newConfig.BackupKeepCount = int.TryParse(BackupKeepBox.Text.Trim(), out var keep)
             ? Math.Clamp(keep, 1, 30) : 3;
         _newConfig.WebEnabled = WebCheckBox.IsChecked == true;
         _newConfig.WebPort = int.TryParse(WebPortBox.Text.Trim(), out var wp) && wp >= 1024 && wp <= 65535 ? wp : 8088;
         _newConfig.WebAccessCode = WebCodeBox.Text.Trim();
-        _newConfig.WebUseHttps = WebHttpsCheckBox.IsChecked == true;
+        _newConfig.WebTlsMode = SelectedTlsMode;
+        _newConfig.WebUseHttps = SelectedTlsMode == 2; // 兼容旧版本读取
+        _newConfig.WebAllowLan = WebAllowLanCheck.IsChecked == true;
+        _newConfig.WebAllowExternal = WebAllowExternalCheck.IsChecked == true;
+        _newConfig.WebTotpEnabled = WebTotpCheck.IsChecked == true;
+        _newConfig.WebTotpSecret = TotpSecretValue();
+        _newConfig.WebTotpSessionHours = TotpHours();
         _newConfig.CaptureDelayMs = (int)DelaySlider.Value;
         _newConfig.SlideshowMode = SlideshowModeCombo.SelectedIndex;
         _newConfig.SlideshowLoop = SlideshowLoopCheckBox.IsChecked == true;

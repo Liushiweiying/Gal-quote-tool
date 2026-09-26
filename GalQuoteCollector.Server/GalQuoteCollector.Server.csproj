@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <!-- 关键：普通 net8.0（不是 net8.0-windows），所以能发布到 Linux / ARM64（Armbian 电视盒子） -->
+    <TargetFramework>net8.0</TargetFramework>
+    <AssemblyName>galquote-server</AssemblyName>
+    <RootNamespace>GalQuoteCollector.Server</RootNamespace>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Version>1.3.6</Version>
+    <RuntimeIdentifiers>win-x64;linux-x64;linux-arm64;linux-arm</RuntimeIdentifiers>
+    <InvariantGlobalization>false</InvariantGlobalization>
+    <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>
+    <!-- System.Drawing 在 Linux 上只会抛 PlatformNotSupported（黑边处理那一条路径），编译期允许 -->
+    <NoWarn>CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="8.0.0" />
+    <PackageReference Include="System.Drawing.Common" Version="8.0.0" />
+    <!-- Quote 等模型用了 [ObservableProperty]（纯源生成器，跨平台没问题） -->
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+  </ItemGroup>
+
+  <!--
+    无界面版直接复用 Windows 端的同一份源码（链接编译，不复制）。
+    好处：网页、API、访问码、两步验证、导入导出的行为与电脑端逐字节一致，改一处两边都生效。
+    注意：新增被链接文件时，两边都要能编译过（别引入 WPF / Registry / WinRT）。
+  -->
+  <ItemGroup>
+    <Compile Include="..\GalQuoteCollector\Models\*.cs" LinkBase="Models" />
+    <Compile Include="..\GalQuoteCollector\Services\AppLog.cs" LinkBase="Services" />
+    <Compile Include="..\GalQuoteCollector\Services\StorageService.cs" LinkBase="Services" />
+    <Compile Include="..\GalQuoteCollector\Services\ExportService.cs" LinkBase="Services" />
+    <Compile Include="..\GalQuoteCollector\Services\QuoteZipExporter.cs" LinkBase="Services" />
+    <Compile Include="..\GalQuoteCollector\Services\TotpService.cs" LinkBase="Services" />
+    <Compile Include="..\GalQuoteCollector\Services\WebPage.cs" LinkBase="Services" />
+    <Compile Include="..\GalQuoteCollector\Services\WebServerService.cs" LinkBase="Services" />
+  </ItemGroup>
+
+</Project>

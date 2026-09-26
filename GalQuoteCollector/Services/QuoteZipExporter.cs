@@ -46,6 +46,64 @@ public static class QuoteZipExporter
         return ms.ToArray();
     }
 
+    /// <summary>
+    /// 整个语录库打包（含截图文件），结构与桌面端「打包导出」一致：quotes.json + screenshots/。
+    /// 返回 zip 文件路径（调用方负责删除）。
+    /// </summary>
+    public static string BuildLibraryZip(
+        IEnumerable<(Quote quote, List<Tag> tags, List<QuoteGroup> groups, List<string> shots)> items,
+        string? targetZipPath = null)
+    {
+        var list = items.ToList();
+        var tempDir = Path.Combine(Path.GetTempPath(), $"galexport_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(tempDir);
+        var shotsDir = Path.Combine(tempDir, "screenshots");
+        Directory.CreateDirectory(shotsDir);
+
+        var exportQuotes = new List<Quote>();
+        var tagsByQuote = new Dictionary<int, List<Tag>>();
+        var groupsByQuote = new Dictionary<int, List<QuoteGroup>>();
+        var shotsByQuote = new Dictionary<int, List<string>>();
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var (quote, tags, groups, shots) in list)
+        {
+            exportQuotes.Add(new Quote
+            {
+                Id = quote.Id,
+                Text = quote.Text,
+                GameName = quote.GameName,
+                Notes = quote.Notes,
+                WindowTitle = quote.WindowTitle,
+                CapturedAt = quote.CapturedAt,
+                ScreenshotPath = quote.ScreenshotPath,
+            });
+            tagsByQuote[quote.Id] = tags;
+            groupsByQuote[quote.Id] = groups;
+
+            var rel = new List<string>();
+            foreach (var path in shots)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) continue;
+                var name = Path.GetFileName(path);
+                if (!used.Add(name)) name = $"{quote.Id}_{name}";
+                if (!used.Add(name)) continue;
+                File.Copy(path, Path.Combine(shotsDir, name), true);
+                rel.Add("screenshots/" + name);
+            }
+            shotsByQuote[quote.Id] = rel;
+        }
+
+        var json = new ExportService().ToJson(exportQuotes, tagsByQuote, groupsByQuote, shotsByQuote);
+        File.WriteAllText(Path.Combine(tempDir, "quotes.json"), json, new UTF8Encoding(false));
+
+        var zipPath = targetZipPath ?? Path.Combine(Path.GetTempPath(), $"galexport_{Guid.NewGuid():N}.zip");
+        if (File.Exists(zipPath)) File.Delete(zipPath);
+        ZipFile.CreateFromDirectory(tempDir, zipPath, CompressionLevel.Optimal, false);
+        try { Directory.Delete(tempDir, true); } catch { }
+        return zipPath;
+    }
+
     /// <summary>建议的文件名（游戏名 + 时间）。</summary>
     public static string SuggestFileName(Quote quote)
     {

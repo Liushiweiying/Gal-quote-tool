@@ -39,6 +39,9 @@ public partial class App : Application
             args.SetObserved();
         };
 
+        // 插件是可选能力（例如二维码），加载失败只写日志，绝不影响启动
+        try { Services.PluginHost.EnsureLoaded(); } catch (Exception ex) { Log("plugin: " + ex.Message); }
+
         // Single-instance check
         if (!_mutex.WaitOne(TimeSpan.Zero, true))
         {
@@ -231,13 +234,21 @@ public partial class App : Application
                 var files = Directory.Exists(src)
                     ? Directory.GetFiles(src, "*.png").Concat(Directory.GetFiles(src, "*.jpg")).ToArray()
                     : new[] { src };
+                var modeArg = 3;
+                if (e.Args.Length > cropIdx + 2 && int.TryParse(e.Args[cropIdx + 2], out var mv)) modeArg = Math.Clamp(mv, 0, 4);
                 foreach (var f in files)
                 {
-                    var target = outDir == null
-                        ? Path.Combine(Path.GetDirectoryName(f) ?? ".", Path.GetFileNameWithoutExtension(f) + "-crop.png")
-                        : Path.Combine(outDir, Path.GetFileNameWithoutExtension(f) + "-crop.png");
-                    var (cropped, detail) = Services.BlackBarCropper.Crop(f, target);
-                    Log($"--crop-bars: {detail}");
+                    if (modeArg <= 3)
+                    {
+                        var (changed, detail) = Services.BlackBarCropper.Apply(f, (Services.BarMode)modeArg, makeBackup: false);
+                        Log($"--crop-bars[{modeArg}]: {detail}");
+                    }
+                    else
+                    {
+                        var target = Path.Combine(Path.GetDirectoryName(f) ?? ".", Path.GetFileNameWithoutExtension(f) + "-crop.png");
+                        var (changed, detail) = Services.BlackBarCropper.Crop(f, target);
+                        Log($"--crop-bars[copy]: {detail}");
+                    }
                 }
             }
 

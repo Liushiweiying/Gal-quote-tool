@@ -1,0 +1,17 @@
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\bin\Debug\net8.0\GalQuoteCollector.Plugins.Qr.deps.json
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\bin\Debug\net8.0\GalQuoteCollector.Plugins.Qr.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\bin\Debug\net8.0\GalQuoteCollector.Plugins.Qr.pdb
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\bin\Debug\net8.0\GalQuoteCollector.Plugins.Abstractions.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\bin\Debug\net8.0\GalQuoteCollector.Plugins.Abstractions.pdb
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.csproj.AssemblyReference.cache
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.GeneratedMSBuildEditorConfig.editorconfig
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.AssemblyInfoInputs.cache
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.AssemblyInfo.cs
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.csproj.CoreCompileInputs.cache
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.sourcelink.json
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuote.B7F02D61.Up2Date
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\refint\GalQuoteCollector.Plugins.Qr.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\GalQuoteCollector.Plugins.Qr.pdb
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\obj\Debug\net8.0\ref\GalQuoteCollector.Plugins.Qr.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Qr\bin\Debug\net8.0\QRCoder.dll

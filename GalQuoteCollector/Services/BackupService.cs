@@ -49,7 +49,9 @@ public static class BackupService
         try
         {
             if (!Directory.Exists(dir)) return false;
-            return Directory.EnumerateDirectories(dir, "backup-" + DateTime.Now.ToString("yyyy-MM-dd") + "*").Any();
+            var prefix = "backup-" + DateTime.Now.ToString("yyyy-MM-dd");
+            return Directory.EnumerateDirectories(dir, prefix + "*").Any()
+                || Directory.EnumerateFiles(dir, prefix + "*.zip").Any();
         }
         catch { return false; }
     }
@@ -121,6 +123,23 @@ public static class BackupService
             }
             catch { }
 
+            // 选了"压缩包"：把文件夹打包成 zip（先写临时名再改名，避免半成品被当成有效备份）
+            if (cfg.BackupAsZip)
+            {
+                try
+                {
+                    var zipPath = target + ".zip";
+                    var tmpZip = zipPath + ".tmp";
+                    if (File.Exists(tmpZip)) File.Delete(tmpZip);
+                    System.IO.Compression.ZipFile.CreateFromDirectory(target, tmpZip, System.IO.Compression.CompressionLevel.Optimal, false);
+                    if (File.Exists(zipPath)) File.Delete(zipPath);
+                    File.Move(tmpZip, zipPath);
+                    Directory.Delete(target, true);
+                    target = zipPath;
+                }
+                catch (Exception ex) { AppLog.Write($"backup: 压缩失败，保留文件夹（{ex.Message}）"); }
+            }
+
             int removed = PruneOldBackups(dir, cfg.BackupKeepCount <= 0 ? DefaultKeep : cfg.BackupKeepCount);
             return (true, target, $"已备份 {copied} 个数据文件 + {shots} 张截图（{shotBytes / 1024 / 1024} MB）" +
                                   (removed > 0 ? $"，清理旧备份 {removed} 份" : ""));
@@ -131,6 +150,83 @@ public static class BackupService
         }
     }
 
+    /// <summary>现有备份份数。</summary>
+    public static int CountBackups(string dir)
+    {
+        try
+        {
+            if (!Directory.Exists(dir)) return 0;
+            return Directory.GetDirectories(dir, "backup-*").Length + Directory.GetFiles(dir, "backup-*.zip").Length;
+        }
+        catch { return 0; }
+    }
+
+    /// <summary>
+    /// 把已有备份从 <paramref name="fromDir"/> 迁移到 <paramref name="toDir"/>（用于换到 NAS 等新位置）。
+    /// 目标已存在同名备份时跳过；单个失败不影响其它。
+    /// </summary>
+    public static (int moved, int skipped, int failed, string detail) MigrateBackups(string fromDir, string toDir)
+    {
+        int moved = 0, skipped = 0, failed = 0;
+        var problems = new List<string>();
+        try
+        {
+            if (string.IsNullOrWhiteSpace(fromDir) || string.IsNullOrWhiteSpace(toDir))
+                return (0, 0, 0, "路径为空");
+            if (string.Equals(Path.GetFullPath(fromDir).TrimEnd('\\'), Path.GetFullPath(toDir).TrimEnd('\\'),
+                    StringComparison.OrdinalIgnoreCase))
+                return (0, 0, 0, "新旧位置相同，无需迁移");
+            if (!Directory.Exists(fromDir)) return (0, 0, 0, "原位置没有备份");
+
+            Directory.CreateDirectory(toDir);
+            foreach (var srcFile in Directory.GetFiles(fromDir, "backup-*.zip"))
+            {
+                var dstFile = Path.Combine(toDir, Path.GetFileName(srcFile));
+                try
+                {
+                    if (File.Exists(dstFile)) { skipped++; continue; }
+                    File.Move(srcFile, dstFile);
+                    moved++;
+                }
+                catch (Exception ex) { failed++; problems.Add($"{Path.GetFileName(srcFile)}: {ex.Message}"); }
+            }
+            foreach (var src in Directory.GetDirectories(fromDir, "backup-*"))
+            {
+                var name = Path.GetFileName(src);
+                var dst = Path.Combine(toDir, name);
+                try
+                {
+                    if (Directory.Exists(dst)) { skipped++; continue; }
+                    Directory.Move(src, dst);   // 同一卷秒移；跨卷（NAS）会自动退化为复制
+                    moved++;
+                }
+                catch
+                {
+                    // 跨卷 Move 可能报错 → 退化成复制再删
+                    try
+                    {
+                        CopyDirectory(src, dst);
+                        Directory.Delete(src, true);
+                        moved++;
+                    }
+                    catch (Exception ex2) { failed++; problems.Add($"{name}: {ex2.Message}"); }
+                }
+            }
+        }
+        catch (Exception ex) { return (moved, skipped, failed, "迁移失败: " + ex.Message); }
+        var detail = $"迁移完成：移动 {moved} 份，跳过（目标已存在）{skipped} 份，失败 {failed} 份";
+        if (problems.Count > 0) detail += "；" + string.Join("；", problems.Take(3));
+        return (moved, skipped, failed, detail);
+    }
+
+    private static void CopyDirectory(string from, string to)
+    {
+        Directory.CreateDirectory(to);
+        foreach (var file in Directory.GetFiles(from))
+            File.Copy(file, Path.Combine(to, Path.GetFileName(file)), true);
+        foreach (var dir in Directory.GetDirectories(from))
+            CopyDirectory(dir, Path.Combine(to, Path.GetFileName(dir)));
+    }
     /// <summary>只保留最近 <paramref name="keep"/> 份备份。</summary>
     public static int PruneOldBackups(string directory, int keep)
     {
@@ -138,11 +234,18 @@ public static class BackupService
         try
         {
             if (keep < 1) keep = 1;
-            var dirs = Directory.EnumerateDirectories(directory, "backup-*")
-                .OrderByDescending(d => Path.GetFileName(d), StringComparer.Ordinal).ToList();
-            foreach (var d in dirs.Skip(keep))
+            var items = Directory.EnumerateDirectories(directory, "backup-*")
+                .Concat(Directory.EnumerateFiles(directory, "backup-*.zip"))
+                .OrderByDescending(p => Path.GetFileName(p), StringComparer.Ordinal).ToList();
+            foreach (var item in items.Skip(keep))
             {
-                try { Directory.Delete(d, true); removed++; } catch { }
+                try
+                {
+                    if (Directory.Exists(item)) Directory.Delete(item, true);
+                    else File.Delete(item);
+                    removed++;
+                }
+                catch { }
             }
         }
         catch { }

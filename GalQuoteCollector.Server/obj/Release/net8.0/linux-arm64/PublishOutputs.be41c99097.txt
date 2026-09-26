@@ -1,0 +1,2 @@
+D:\Galgame-quote-tool\publish-server-linux-arm64\galquote-server.pdb
+D:\Galgame-quote-tool\publish-server-linux-arm64\galquote-server

@@ -26,11 +26,23 @@ public sealed class WebServerService : IDisposable
     private int _port;
     private string _code = "";
     private X509Certificate2? _cert;
+    private readonly object _certLock = new();
 
     public bool IsRunning => _listener != null;
     public int Port => _port;
     public bool RequiresCode => _code.Length > 0;
-    public bool UseHttps { get; private set; }
+    /// <summary>0 = 自动（HTTP / HTTPS 都接受）、1 = 仅 HTTP、2 = 仅 HTTPS。</summary>
+    public int TlsMode { get; private set; }
+    public bool UseHttps => TlsMode == 2;
+    public bool AllowLan { get; private set; }
+    /// <summary>是否允许经 tunnel / 反向代理进来的公网访问（false = 外部请求一律 403）。</summary>
+    public bool AllowExternal { get; private set; }
+    /// <summary>公网访问是否要求 TOTP 动态码。</summary>
+    public bool TotpEnabled => _totpSecret.Length > 0;
+    /// <summary>是否强制整个网页只读（局域网也不许改）——盒子/镜像模式用。</summary>
+    public bool ForceReadOnly { get; private set; }
+    private string _totpSecret = "";
+    private int _totpSessionHours = 12;
     public string CertPath => Path.Combine(_dataDir, "web-cert.pfx");
 
     public WebServerService(StorageService storage, string dataDir)
@@ -39,27 +51,58 @@ public sealed class WebServerService : IDisposable
         _dataDir = dataDir;
     }
 
-    /// <summary>启动（重复调用会先停掉旧的）。accessCode 留空 = 局域网免密；useHttps 用自签证书。</summary>
-    public (bool ok, string message) Start(int port, string accessCode, bool useHttps = false)
+    /// <summary>启动参数（设置界面里的「网页与手机」一页）。</summary>
+    public sealed record Options(
+        int Port,
+        string AccessCode,
+        int TlsMode,
+        bool AllowLan,
+        bool AllowExternal,
+        string TotpSecret,
+        int TotpSessionHours,
+        bool ForceReadOnly = false);
+
+    private static string ModeText(int mode) => mode switch
+    {
+        1 => "仅 HTTP",
+        2 => "仅 HTTPS",
+        _ => "HTTP + HTTPS 自动兼容",
+    };
+
+    /// <summary>启动（重复调用会先停掉旧的）。accessCode 留空 = 局域网免密；tlsMode 0=自动 1=仅HTTP 2=仅HTTPS。</summary>
+    public (bool ok, string message) Start(Options o)
     {
         Stop();
-        if (port < 1024 || port > 65535) return (false, "端口要在 1024-65535 之间");
+        if (o.Port < 1024 || o.Port > 65535) return (false, "端口要在 1024-65535 之间");
         try
         {
-            if (useHttps)
-            {
-                _cert = GetOrCreateCertificate();
-                UseHttps = true;
-            }
-            var listener = new TcpListener(IPAddress.Any, port);
+            TlsMode = Math.Clamp(o.TlsMode, 0, 2);
+            AllowLan = o.AllowLan;
+            AllowExternal = o.AllowExternal;
+            ForceReadOnly = o.ForceReadOnly;
+            _totpSecret = (o.TotpSecret ?? "").Trim().ToUpperInvariant();
+            _totpSessionHours = Math.Clamp(o.TotpSessionHours <= 0 ? 12 : o.TotpSessionHours, 1, 24 * 30);
+            // 仅 HTTPS：启动时就要证书（生成失败就直接报错）；自动模式等到真有 TLS 连接再生成
+            if (TlsMode == 2) GetCert();
+            // allowLan=false 时只监听本机回环（tunnel / 反向代理也只需本机可达）
+            var bindAddress = AllowLan ? IPAddress.Any : IPAddress.Loopback;
+            var listener = new TcpListener(bindAddress, o.Port);
             listener.Start();
             _listener = listener;
-            _port = port;
-            _code = (accessCode ?? "").Trim();
+            _port = o.Port;
+            _code = (o.AccessCode ?? "").Trim();
             _cts = new CancellationTokenSource();
             _ = Task.Run(() => AcceptLoopAsync(listener, _cts.Token));
-            AppLog.Write($"web: 已启动 {(UseHttps ? "https" : "http")}://0.0.0.0:{port}/ 访问码={(RequiresCode ? "需要" : "无")}");
-            return (true, $"已启动（{(UseHttps ? "HTTPS" : "HTTP")}），端口 {port}");
+            AppLog.Write($"web: 已启动 {bindAddress}:{o.Port}/ 协议={ModeText(TlsMode)} 访问码={(RequiresCode ? "需要" : "无")} " +
+                         $"局域网={AllowLan} 公网={AllowExternal}{(TotpEnabled ? " 公网两步验证=开" : "")}");
+            var scope = (AllowLan, AllowExternal) switch
+            {
+                (true, true) => "局域网 + 公网可访问",
+                (true, false) => "仅局域网可访问",
+                (false, true) => "仅公网（tunnel / 反代）可访问",
+                _ => "仅本机可访问",
+            };
+            return (true, $"已启动（{ModeText(TlsMode)}，{scope}）{(TotpEnabled ? "，公网需动态码" : "")}，端口 {o.Port}");
         }
         catch (Exception ex)
         {
@@ -67,6 +110,12 @@ public sealed class WebServerService : IDisposable
             AppLog.Write($"web: 启动失败 {ex.Message}");
             return (false, "启动失败: " + ex.Message);
         }
+    }
+
+    /// <summary>取证书（必要时生成），并发安全。</summary>
+    private X509Certificate2 GetCert()
+    {
+        lock (_certLock) { return _cert ??= GetOrCreateCertificate(); }
     }
 
     /// <summary>取出（必要时生成）自签证书：SAN 含机器名 + 所有本机 IPv4。</summary>
@@ -86,7 +135,7 @@ public sealed class WebServerService : IDisposable
         }
 
         using var rsa = RSA.Create(2048);
-        var req = new CertificateRequest("CN=Gal Quote Collector Web", rsa,
+        var req = new CertificateRequest("CN=Gal Quote Tool Web", rsa,
             HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var san = new SubjectAlternativeNameBuilder();
         san.AddDnsName(Environment.MachineName);
@@ -122,7 +171,7 @@ public sealed class WebServerService : IDisposable
     {
         try
         {
-            var cert = _cert ?? (_cert = GetOrCreateCertificate());
+            var cert = GetCert();
             using var store = new X509Store(StoreName.Root, StoreLocation.CurrentUser);
             store.Open(OpenFlags.ReadWrite);
             var found = store.Certificates.Find(X509FindType.FindByThumbprint, cert.Thumbprint, false);
@@ -138,10 +187,17 @@ public sealed class WebServerService : IDisposable
         }
     }
 
+    /// <summary>确保自签证书已生成（不启动监听、不占端口），返回 .pfx 路径。</summary>
+    public string EnsureCertificate()
+    {
+        GetCert();
+        return CertPath;
+    }
+
     /// <summary>把证书导出成 .cer（给手机安装用），返回文件路径。</summary>
     public string ExportCertificate()
     {
-        var cert = _cert ?? (_cert = GetOrCreateCertificate());
+        var cert = GetCert();
         var path = Path.Combine(_dataDir, "GalQuoteCollectorWeb.cer");
         File.WriteAllBytes(path, cert.Export(X509ContentType.Cert));
         return path;
@@ -154,7 +210,11 @@ public sealed class WebServerService : IDisposable
         _listener = null;
         _cts = null;
         _cert = null;
-        UseHttps = false;
+        TlsMode = 0;
+        AllowLan = false;
+        AllowExternal = false;
+        _totpSecret = "";
+        _totpSessionHours = 12;
         if (_port != 0) AppLog.Write("web: 已停止");
         _port = 0;
     }
@@ -194,6 +254,169 @@ public sealed class WebServerService : IDisposable
 
     private sealed record Request(string Method, string Path, Dictionary<string, string> Query,
         Dictionary<string, string> Headers, byte[] Body);
+
+    /// <summary>请求是否来自"外网"（局域网以外的直连，或经过 tunnel/反向代理）。</summary>
+    private static bool IsExternalRequest(Request req, System.Net.IPAddress? remote)
+    {
+        // 经过 tunnel / 反向代理时一定带这些头（cloudflared 会给 CF-Connecting-IP）
+        foreach (var h in new[] { "CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP", "CF-Ray" })
+            if (req.Headers.ContainsKey(h)) return true;
+
+        if (remote == null) return true;
+        if (System.Net.IPAddress.IsLoopback(remote)) return false;
+        var bytes = remote.GetAddressBytes();
+        if (remote.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork && bytes.Length == 4)
+        {
+            // 10/8, 172.16/12, 192.168/16, 169.254/16 → 局域网
+            if (bytes[0] == 10) return false;
+            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31) return false;
+            if (bytes[0] == 192 && bytes[1] == 168) return false;
+            if (bytes[0] == 169 && bytes[1] == 254) return false;
+            return true;
+        }
+        // IPv6：fc00::/7（ULA）与 loopback 视为内网
+        if (remote.AddressFamily == System.Net.Sockets.AddressFamily.InterNetworkV6)
+            return !(remote.IsIPv6LinkLocal || remote.IsIPv6SiteLocal || (bytes[0] & 0xFE) == 0xFC);
+        return true;
+    }
+
+    /// <summary>暴力破解防护：同一个来源 5 分钟内错 8 次，封 10 分钟。</summary>
+    private readonly Dictionary<string, (int fails, DateTime firstFail, DateTime blockedUntil)> _attempts = new();
+    private static readonly object _attemptLock = new();
+
+    private string ClientKey(Request req, System.Net.IPAddress? remote)
+    {
+        foreach (var h in new[] { "CF-Connecting-IP", "X-Forwarded-For", "X-Real-IP" })
+            if (req.Headers.TryGetValue(h, out var v) && !string.IsNullOrWhiteSpace(v))
+                return v.Split(',')[0].Trim();
+        return remote?.ToString() ?? "unknown";
+    }
+
+    private bool IsBlocked(string key)
+    {
+        lock (_attemptLock)
+        {
+            if (!_attempts.TryGetValue(key, out var a)) return false;
+            if (a.blockedUntil > DateTime.Now) return true;
+            if ((DateTime.Now - a.firstFail).TotalMinutes > 5) { _attempts.Remove(key); return false; }
+            return false;
+        }
+    }
+
+    private void NoteFailure(string key)
+    {
+        lock (_attemptLock)
+        {
+            var now = DateTime.Now;
+            if (!_attempts.TryGetValue(key, out var a) || (now - a.firstFail).TotalMinutes > 5)
+                a = (0, now, DateTime.MinValue);
+            a.fails++;
+            if (a.fails >= 8) a.blockedUntil = now.AddMinutes(10);
+            _attempts[key] = a;
+        }
+    }
+
+    private void NoteSuccess(string key)
+    {
+        lock (_attemptLock) { _attempts.Remove(key); }
+    }
+
+    // ── 登录 / 两步验证（TOTP）──
+
+    /// <summary>从 Cookie 里取一个值（没有就返回 null）。</summary>
+    private static string? GetCookie(Request req, string name)
+    {
+        if (!req.Headers.TryGetValue("Cookie", out var cookie)) return null;
+        foreach (var part in cookie.Split(';'))
+        {
+            var kv = part.Trim().Split('=', 2);
+            if (kv.Length == 2 && kv[0] == name) return Uri.UnescapeDataString(kv[1]);
+        }
+        return null;
+    }
+
+    /// <summary>请求里带的访问码（?k= 或 Cookie k=）对不对。定长比较，避免时序侧信道。</summary>
+    private bool CodeMatches(Request req)
+    {
+        var given = req.Query.TryGetValue("k", out var q) ? q : (GetCookie(req, "k") ?? "");
+        return FixedTimeEquals(given, _code);
+    }
+
+    private bool TotpSessionValid(Request req) =>
+        TotpService.ValidateSessionToken(_totpSecret, GetCookie(req, "t"));
+
+    /// <summary>表单字段：优先 application/x-www-form-urlencoded 的 body，其次 URL query。</summary>
+    private static Dictionary<string, string> FormFields(Request req)
+    {
+        var d = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var text = req.Body.Length > 0 ? Encoding.UTF8.GetString(req.Body) : "";
+        bool form = req.Headers.TryGetValue("Content-Type", out var ct) && ct.Contains("form-urlencoded");
+        if (form || (text.Length > 0 && text.Contains('=') && !text.Contains('\n')))
+        {
+            foreach (var pair in text.Split('&', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var kv = pair.Split('=', 2);
+                if (kv.Length == 2) d[Uri.UnescapeDataString(kv[0])] = Uri.UnescapeDataString(kv[1].Replace('+', ' '));
+            }
+        }
+        foreach (var kv in req.Query) if (!d.ContainsKey(kv.Key)) d[kv.Key] = kv.Value;
+        return d;
+    }
+
+    /// <summary>浏览器导航（要 HTML 登录页）还是页面里 fetch 的 API 请求（要纯文本 401）。</summary>
+    private static bool WantsHtml(Request req)
+        => req.Path is "/" or "/index.html"
+           || (!req.Path.StartsWith("/api/") && req.Headers.TryGetValue("Accept", out var a) && a.Contains("text/html"));
+
+    /// <summary>
+    /// 认证失败的统一出口：POST /login 校验访问码 + 动态码并下发 Cookie；
+    /// 浏览器导航回登录页；页面里的 fetch 回纯文本 401。总是已经应答过。
+    /// </summary>
+    private async Task TryHandleLoginAsync(Stream stream, Request req, string clientKey, bool external,
+        bool needCode, bool needTotp, CancellationToken ct)
+    {
+        if (req.Path == "/login" && req.Method == "POST")
+        {
+            var f = FormFields(req);
+            var givenCode = f.TryGetValue("k", out var k) ? k : "";
+            var givenTotp = (f.TryGetValue("code", out var c) ? c : "").Replace(" ", "").Replace("-", "");
+            bool okCode = !needCode || FixedTimeEquals(givenCode, _code);
+            bool okTotp = !needTotp || TotpService.Verify(_totpSecret, givenTotp);
+            if (okCode && okTotp)
+            {
+                NoteSuccess(clientKey);
+                var hours = _totpSessionHours;
+                var cookies = new StringBuilder();
+                if (needCode) cookies.Append($"Set-Cookie: k={Uri.EscapeDataString(_code)}; Path=/; Max-Age=31536000\r\n");
+                if (needTotp)
+                    cookies.Append($"Set-Cookie: t={Uri.EscapeDataString(TotpService.SessionToken(_totpSecret, TimeSpan.FromHours(hours)))}; " +
+                                   $"Path=/; Max-Age={hours * 3600}\r\n");
+                AppLog.Write($"web: 登录成功（来源={clientKey} 外网={external} 动态码={(needTotp ? "已验证" : "不要求")}，{hours} 小时内免验证）");
+                await WriteAsync(stream, 303, "See Other", "text/plain; charset=utf-8", Array.Empty<byte>(),
+                    cookies + "Location: /\r\n", ct);
+                return;
+            }
+            NoteFailure(clientKey);
+            AppLog.Write($"web: 登录失败（来源={clientKey} 外网={external} 访问码={(okCode ? "对" : "错")} " +
+                         $"动态码={(needTotp ? (okTotp ? "对" : "错") : "不要求")}）");
+            await WriteAsync(stream, 401, "Unauthorized", "text/html; charset=utf-8",
+                Encoding.UTF8.GetBytes(WebPage.Login(needCode, needTotp, failed: true)), null, ct);
+            return;
+        }
+
+        // 普通请求：只有真的提交过访问码才算一次失败，免得浏览器刷新几次就被封
+        if (req.Query.ContainsKey("k") || GetCookie(req, "k") != null) NoteFailure(clientKey);
+        AppLog.Write($"web: 需要登录（来源={clientKey} 外网={external} 访问码={needCode} 动态码={needTotp}）");
+        if (WantsHtml(req))
+        {
+            await WriteAsync(stream, 401, "Unauthorized", "text/html; charset=utf-8",
+                Encoding.UTF8.GetBytes(WebPage.Login(needCode, needTotp, failed: false)), null, ct);
+            return;
+        }
+        await ErrorAsync(stream, 401, needTotp
+            ? "需要访问码 + 动态码：请用浏览器打开首页登录（登录后 12 小时内免验证）"
+            : "需要访问码：在网址后加 ?k=你的访问码", ct);
+    }
 
     private static async Task<Request?> ReadRequestAsync(Stream stream, CancellationToken ct)
     {
@@ -282,6 +505,30 @@ public sealed class WebServerService : IDisposable
         => WriteAsync(s, status, status == 401 ? "Unauthorized" : "Bad Request", "text/plain; charset=utf-8",
             Encoding.UTF8.GetBytes(message), null, ct);
 
+    /// <summary>
+    /// 用 Peek 看连接的第一个字节是不是 TLS 的 ClientHello（0x16）——**不消耗数据**，
+    /// 所以 HTTP 明文解析和 SslStream 之后都能照常读到完整请求。
+    /// 自动模式下靠它让同一个端口同时接受 http:// 与 https://（tunnel / 反向代理的 origin 填哪个都行）。
+    /// </summary>
+    private static bool LooksLikeTls(TcpClient client, CancellationToken ct)
+    {
+        try
+        {
+            var sock = client.Client;
+            bool readable = false;
+            for (int i = 0; i < 30; i++) // 最多等 3 秒，等不到就当不是 TLS
+            {
+                if (sock.Poll(100_000, SelectMode.SelectRead)) { readable = true; break; }
+                if (ct.IsCancellationRequested) return false;
+            }
+            if (!readable) return false; // 连上却不发数据：直接当明文处理（下面的解析会立刻结束）
+            var one = new byte[1];
+            int n = sock.Receive(one, 0, 1, SocketFlags.Peek);
+            return n == 1 && one[0] == 0x16;
+        }
+        catch { return false; }
+    }
+
     private async Task HandleClientAsync(TcpClient client, CancellationToken ct)
     {
         try
@@ -291,14 +538,20 @@ public sealed class WebServerService : IDisposable
                 client.ReceiveTimeout = 15000;
                 client.SendTimeout = 30000;
                 Stream stream = client.GetStream();
-                if (UseHttps && _cert != null)
+                bool isTls = LooksLikeTls(client, ct);
+                if (isTls && TlsMode == 1)
+                {
+                    AppLog.Write("web: 收到 TLS 握手请求，但当前是「仅 HTTP」模式（tunnel / 反向代理的 origin 若填 https:// 就会失败）→ 设置里改成「自动」或「仅 HTTPS」");
+                    return;
+                }
+                if (isTls)
                 {
                     var ssl = new SslStream(stream, false);
                     try
                     {
                         await ssl.AuthenticateAsServerAsync(new SslServerAuthenticationOptions
                         {
-                            ServerCertificate = _cert,
+                            ServerCertificate = GetCert(),
                             EnabledSslProtocols = SslProtocols.Tls12 | SslProtocols.Tls13,
                             ClientCertificateRequired = false,
                         }, ct);
@@ -306,8 +559,9 @@ public sealed class WebServerService : IDisposable
                     }
                     catch (Exception ex)
                     {
-                        // 手机第一次会因为自签证书报错/用户点"继续"；握手失败很正常，记一行就够
-                        AppLog.Write($"web: TLS 握手失败 {ex.Message}");
+                        // 客户端不信任自签证书就会在这里断掉（云端的 tunnel 默认会校验证书）；
+                        // 手机浏览器第一次点「继续访问」是正常的，这里记一行日志就够
+                        AppLog.Write($"web: TLS 握手失败（自签证书未通过对方的证书校验）{ex.Message}");
                         ssl.Dispose();
                         return;
                     }
@@ -315,31 +569,64 @@ public sealed class WebServerService : IDisposable
                 var req = await ReadRequestAsync(stream, ct);
                 if (req == null) return;
 
-                // 授权：设了访问码就要求 ?k= 或 Cookie k=
-                bool authorized = !RequiresCode;
-                string? setCookie = null;
-                if (RequiresCode)
+                if (!isTls && TlsMode == 2)
                 {
-                    var given = req.Query.TryGetValue("k", out var k) ? k : "";
-                    if (given.Length == 0 && req.Headers.TryGetValue("Cookie", out var cookie))
-                    {
-                        foreach (var part in cookie.Split(';'))
-                        {
-                            var kv = part.Trim().Split('=', 2);
-                            if (kv.Length == 2 && kv[0] == "k") { given = Uri.UnescapeDataString(kv[1]); break; }
-                        }
-                    }
-                    authorized = string.Equals(given, _code, StringComparison.Ordinal);
-                    if (authorized) setCookie = $"Set-Cookie: k={Uri.EscapeDataString(_code)}; Path=/; Max-Age=31536000\r\n";
-                }
-                if (!authorized)
-                {
-                    await WriteAsync(stream, 401, "Unauthorized", "text/plain; charset=utf-8",
-                        Encoding.UTF8.GetBytes("需要访问码：在网址后加 ?k=你的访问码"), null, ct);
+                    // 仅 HTTPS 模式收到明文请求：回一条能被人看懂的提示（否则浏览器只会显示「连接被重置」）
+                    AppLog.Write($"web: 收到明文 HTTP 请求，但当前是「仅 HTTPS」模式（{req.Method} {req.Path}）");
+                    await WriteAsync(stream, 400, "Bad Request", "text/plain; charset=utf-8",
+                        Encoding.UTF8.GetBytes("这个端口只接受 HTTPS：请把网址改成 https:// 开头（自签证书第一次会提示「不安全」，选择继续访问即可）；" +
+                                               "或者到「设置 → 网页与手机 → 访问协议」里改成「自动」。"), null, ct);
                     return;
                 }
 
-                await RouteAsync(stream, req, setCookie, ct);
+                var remoteIp = (client.Client.RemoteEndPoint as System.Net.IPEndPoint)?.Address;
+                bool external = IsExternalRequest(req, remoteIp);
+                // 外网（含 tunnel）只读；ForceReadOnly 时局域网也只读（盒子镜像模式）
+                bool readOnly = external || ForceReadOnly;
+                var clientKey = ClientKey(req, remoteIp);
+                if (IsBlocked(clientKey))
+                {
+                    await ErrorAsync(stream, 429, "尝试次数过多，请稍后再试", ct);
+                    return;
+                }
+
+                // ① 公网开关：没开放公网时，外部请求一律拒绝（和「局域网访问」是两把独立的锁）
+                if (external && !AllowExternal)
+                {
+                    AppLog.Write($"web: 拒绝公网访问（未开启「允许公网访问」）来源={clientKey} {req.Method} {req.Path}");
+                    await WriteAsync(stream, 403, "Forbidden", "text/html; charset=utf-8",
+                        Encoding.UTF8.GetBytes(WebPage.Notice("未开放公网访问",
+                            "这台电脑没有开启「允许公网访问」。请让管理员在「设置 → 网页与手机」里打开它。")), null, ct);
+                    return;
+                }
+
+                // ② 认证：访问码（设了就要）+ 动态码（只对公网要求）
+                bool needCode = RequiresCode;
+                bool needTotp = external && TotpEnabled;
+                bool codeOk = !needCode || CodeMatches(req);
+                bool totpOk = !needTotp || TotpSessionValid(req);
+                if ((needCode || needTotp) && (!codeOk || !totpOk))
+                {
+                    await TryHandleLoginAsync(stream, req, clientKey, external, needCode, needTotp, ct);
+                    return; // 登录页 / 401 都已经应答
+                }
+                NoteSuccess(clientKey);
+                // 用 ?k= 进来的一次性地址：顺手把访问码记住，页面里的 fetch 就不用再带
+                string? setCookie = needCode && GetCookie(req, "k") is null
+                    ? $"Set-Cookie: k={Uri.EscapeDataString(_code)}; Path=/; Max-Age=31536000\r\n"
+                    : null;
+
+                // 外网只读：写操作一律拒绝（登录 POST 已经在上面处理掉了）
+                if (readOnly && req.Method is "PUT" or "DELETE" or "POST")
+                {
+                    AppLog.Write($"web: 拒绝写操作 {req.Method} {req.Path}（来源={clientKey} 外网={external} 强制只读={ForceReadOnly}）");
+                    await ErrorAsync(stream, 403, ForceReadOnly
+                        ? "这台设备是只读模式（只能查看和导出，不能修改）"
+                        : "非局域网访问：只能查看和导出，不能修改", ct);
+                    return;
+                }
+
+                await RouteAsync(stream, req, setCookie, ct, readOnly, external);
             }
         }
         catch (Exception ex)
@@ -348,9 +635,18 @@ public sealed class WebServerService : IDisposable
         }
     }
 
-    private async Task RouteAsync(Stream stream, Request req, string? setCookie, CancellationToken ct)
+    private async Task RouteAsync(Stream stream, Request req, string? setCookie, CancellationToken ct,
+        bool readOnly = false, bool external = false)
     {
         var path = req.Path;
+
+        // 需要登录时 /login 已经在认证阶段处理掉了；能走到这里说明不用登录
+        if (path == "/login")
+        {
+            await WriteAsync(stream, 303, "See Other", "text/plain; charset=utf-8", Array.Empty<byte>(),
+                "Location: /\r\n", ct);
+            return;
+        }
 
         if (path == "/" || path == "/index.html")
         {
@@ -367,6 +663,8 @@ public sealed class WebServerService : IDisposable
             await JsonAsync(stream, new
             {
                 total = quotes.Count,
+                canEdit = !readOnly,
+                isLan = !external,
                 games = quotes.Select(q => q.GameName).Where(g => !string.IsNullOrWhiteSpace(g))
                               .Distinct().OrderBy(g => g, StringComparer.CurrentCulture).ToList(),
                 tags,
@@ -790,6 +1088,46 @@ public sealed class WebServerService : IDisposable
             return;
         }
 
+        // 整库打包导出（含截图文件）→ 与桌面端「打包导出（含截图）」同格式，可直接被它的「打包导入」读回
+        if (path == "/api/export-zip" && req.Method == "GET")
+        {
+            try
+            {
+                var all = _storage.GetAllQuotes();
+                var tagMap = _storage.GetTagIdsByQuote();
+                var groupMap = _storage.GetGroupIdsByQuote();
+                var tagDict = _storage.GetAllTags().ToDictionary(x => x.Id, x => x);
+                var groupDict = _storage.GetAllGroups().ToDictionary(x => x.Id, x => x);
+
+                var items = all.Select(q =>
+                {
+                    var shots = new List<string>();
+                    if (!string.IsNullOrWhiteSpace(q.ScreenshotPath) && File.Exists(q.ScreenshotPath)) shots.Add(q.ScreenshotPath);
+                    try { foreach (var s in _storage.GetScreenshots(q.Id)) if (File.Exists(s.FilePath)) shots.Add(s.FilePath); } catch { }
+                    return (q,
+                        tagMap.GetValueOrDefault(q.Id, new List<int>()).Where(tagDict.ContainsKey).Select(i => tagDict[i]).ToList(),
+                        groupMap.GetValueOrDefault(q.Id, new List<int>()).Where(groupDict.ContainsKey).Select(i => groupDict[i]).ToList(),
+                        shots);
+                });
+
+                var zipPath = QuoteZipExporter.BuildLibraryZip(items);
+                var zipName = $"gal-quotes_{DateTime.Now:yyyy-MM-dd_HHmm}.zip";
+                var zipHeader = $"Content-Disposition: attachment; filename=\"{zipName}\"\r\n" + setCookie;
+                try
+                {
+                    var bytes = await File.ReadAllBytesAsync(zipPath, ct);
+                    await WriteAsync(stream, 200, "OK", "application/zip", bytes, zipHeader, ct);
+                }
+                finally { try { File.Delete(zipPath); } catch { } }
+            }
+            catch (Exception ex)
+            {
+                AppLog.Write($"web: 打包导出失败 {ex.Message}");
+                await ErrorAsync(stream, 500, "打包导出失败: " + ex.Message, ct);
+            }
+            return;
+        }
+
         await ErrorAsync(stream, 404, "没有这个地址: " + path, ct);
     }
 
@@ -803,6 +1141,16 @@ public sealed class WebServerService : IDisposable
         }
         catch { }
         return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyPictures), "GalQuoteCollector");
+    }
+
+    /// <summary>固定时间字符串比较（避免按字符比较泄露长度/前缀）。</summary>
+    private static bool FixedTimeEquals(string a, string b)
+    {
+        var ba = Encoding.UTF8.GetBytes(a ?? "");
+        var bb = Encoding.UTF8.GetBytes(b ?? "");
+        int diff = ba.Length ^ bb.Length;
+        for (int i = 0; i < ba.Length && i < bb.Length; i++) diff |= ba[i] ^ bb[i];
+        return diff == 0;
     }
 
     private static string Get(Request req, string key) => req.Query.TryGetValue(key, out var v) ? v : "";

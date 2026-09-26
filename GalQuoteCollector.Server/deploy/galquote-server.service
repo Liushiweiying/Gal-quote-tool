@@ -1,0 +1,31 @@
+[Unit]
+Description=Gal Quote Tool Server (headless web UI for the quote library)
+Documentation=https://github.com/Liushiweiying/Galgame-quote-tool
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+# 运行用户：建议用普通用户（默认 armbian），数据目录要有读写权限
+User=armbian
+Group=armbian
+
+# 二进制与数据目录（按实际改）
+ExecStart=/opt/galquote/galquote-server --data /opt/galquote/data --lan
+WorkingDirectory=/opt/galquote
+
+Restart=always
+RestartSec=5
+# 日志：journalctl -u galquote-server -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=galquote-server
+
+# 一点基本加固（数据目录之外只读）
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=read-only
+ReadWritePaths=/opt/galquote/data
+
+[Install]
+WantedBy=multi-user.target

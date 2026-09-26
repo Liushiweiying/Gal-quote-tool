@@ -153,7 +153,7 @@
                             <MenuItem Header="重新关联截图" Command="{Binding RematchScreenshotsCommand}"/>
                             <MenuItem Header="修复截图关联" Command="{Binding RepairScreenshotsCommand}"/>
                             <MenuItem Header="删除未关联截图" Command="{Binding DeleteUnassociatedScreenshotsCommand}"/>
-                            <MenuItem Header="裁掉截图黑边（全部）" Command="{Binding CropAllBlackBarsCommand}"/>
+                            <MenuItem Header="批量处理截图黑边" Command="{Binding CropAllBlackBarsCommand}"/>
                             <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                             <Separator/>

@@ -15,17 +15,53 @@ public class HotkeyConfig
     // 触发截图热键时是否吞掉这次按键（很多游戏引擎也用 Alt+E 之类的键，不吞会同时弹出游戏窗口）
     public bool SwallowCaptureHotkey { get; set; } = true;
     // 截图后自动裁掉四周纯黑边（游戏比例和显示器不一致时的左右/上下黑框）
-    public bool CropBlackBars { get; set; } = true;
+    public bool CropBlackBars { get; set; } = true; // 旧字段（仅兼容旧配置）
+    /// <summary>截图后对黑边的处理：0=不操作, 1=涂黑, 2=涂白, 3=裁掉（默认裁掉）</summary>
+    public int CaptureBarMode { get; set; } = 3;
+    /// <summary>四边微调像素：正数=多算黑边（多裁/多涂），负数=少算</summary>
+    public int BarAdjustLeft { get; set; }
+    public int BarAdjustRight { get; set; }
+    public int BarAdjustTop { get; set; }
+    public int BarAdjustBottom { get; set; }
     // 每天首次启动自动备份（quotes.db / usage.json / settings.json），只保留最近 3 天
     public bool BackupEnabled { get; set; } = true;
     public string BackupDirectory { get; set; } = ""; // 留空 = 安装目录上一级的 Gal Quote Tool Backup
     public int BackupKeepCount { get; set; } = 3; // 最多保留几份备份
+    /// <summary>备份格式：false=文件夹（默认，可浏览/单独还原），true=压缩包 zip（单文件，适合 NAS/网盘）</summary>
+    public bool BackupAsZip { get; set; }
     // 内网网页（手机/电脑访问）：默认关闭，端口可改，访问码留空 = 局域网免密
     public bool WebEnabled { get; set; }
     public int WebPort { get; set; } = 8088;
     public string WebAccessCode { get; set; } = "";
-    // 用 HTTPS（自签证书，手机第一次会提示不安全，继续访问即可；也可导出发到手机安装）
-    public bool WebUseHttps { get; set; } = true;
+    /// <summary>
+    /// 网页访问协议：0 = 自动（同一端口同时接受 http:// 与 https://，推荐；tunnel / 反向代理的 origin
+    /// 填 http 或 https 都能连）、1 = 仅 HTTP、2 = 仅 HTTPS（自签证书）。
+    /// 旧配置里没有这个字段（null）时按旧的 <see cref="WebUseHttps"/> 推导：true → 仅 HTTPS，false → 自动。
+    /// </summary>
+    public int? WebTlsMode { get; set; }
+    /// <summary>旧字段（v1.3.6 之前）：是否用 HTTPS 自签证书。现在统一看 <see cref="WebTlsMode"/>，保留仅为兼容旧配置。</summary>
+    public bool WebUseHttps { get; set; }
+    /// <summary>实际生效的协议模式（见 <see cref="WebTlsMode"/>）。</summary>
+    [JsonIgnore]
+    public int EffectiveTlsMode => Math.Clamp(WebTlsMode ?? (WebUseHttps ? 2 : 0), 0, 2);
+    /// <summary>是否允许局域网设备访问（false = 只监听 127.0.0.1；默认 false，最安全；要手机连就在设置里打开）</summary>
+    public bool WebAllowLan { get; set; }
+    /// <summary>是否允许公网访问（经 Cloudflare tunnel / 反向代理进来的请求）。默认 false：外部请求直接 403。
+    /// 与 <see cref="WebAllowLan"/> 相互独立：可以只给公网、只给内网、或都给。</summary>
+    public bool WebAllowExternal { get; set; }
+    /// <summary>公网访问是否要求两步验证（TOTP 动态码）。只对公网生效，局域网免验证。</summary>
+    public bool WebTotpEnabled { get; set; }
+    /// <summary>TOTP 密钥（Base32，见 <see cref="Services.TotpService"/>）。留空 = 没配置，等于没开两步验证。</summary>
+    public string WebTotpSecret { get; set; } = "";
+    /// <summary>通过两步验证后，浏览器免验证的有效小时数（默认 12）。</summary>
+    public int WebTotpSessionHours { get; set; } = 12;
+    /// <summary>强制整个网页只读（连局域网也不能改）。放在电视盒子/NAS 上当"镜像"时打开，
+    /// 保证同一时刻只有一个写入方（避免 SQLite 两边同时写、同步冲突）。</summary>
+    public bool WebReadOnly { get; set; }
+    /// <summary>实际生效的 TOTP 密钥（没打开两步验证就是空 = 不要求动态码）。</summary>
+    [JsonIgnore]
+    public string EffectiveTotpSecret =>
+        WebTotpEnabled ? (WebTotpSecret ?? "").Trim().ToUpperInvariant() : "";
     public int SlideshowMode { get; set; } // 0=时间顺序, 1=随机顺序
     public bool SlideshowLoop { get; set; }
     /// <summary>
@@ -190,13 +226,26 @@ public class HotkeyConfig
             CaptureDelayMs = CaptureDelayMs,
             SwallowCaptureHotkey = SwallowCaptureHotkey,
             CropBlackBars = CropBlackBars,
+            CaptureBarMode = CaptureBarMode,
+            BarAdjustLeft = BarAdjustLeft,
+            BarAdjustRight = BarAdjustRight,
+            BarAdjustTop = BarAdjustTop,
+            BarAdjustBottom = BarAdjustBottom,
             BackupEnabled = BackupEnabled,
             BackupDirectory = BackupDirectory,
             BackupKeepCount = BackupKeepCount,
+            BackupAsZip = BackupAsZip,
             WebEnabled = WebEnabled,
             WebPort = WebPort,
             WebAccessCode = WebAccessCode,
+            WebTlsMode = WebTlsMode,
             WebUseHttps = WebUseHttps,
+            WebAllowExternal = WebAllowExternal,
+            WebTotpEnabled = WebTotpEnabled,
+            WebTotpSecret = WebTotpSecret,
+            WebTotpSessionHours = WebTotpSessionHours,
+            WebReadOnly = WebReadOnly,
+            WebAllowLan = WebAllowLan,
             SlideshowMode = SlideshowMode,
             SlideshowLoop = SlideshowLoop,
             SlideshowBarsMode = SlideshowBarsMode,

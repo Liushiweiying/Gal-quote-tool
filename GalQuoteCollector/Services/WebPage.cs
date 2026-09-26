@@ -97,6 +97,34 @@ main{padding:12px;max-width:1100px;margin:0 auto}
   header .row{flex-wrap:wrap}
   header .row button{flex:1 1 44%;padding:10px 6px;font-size:13px}
 }
+
+/* ── 电视 / 大屏模式（电视盒子、投影、客厅大屏；遥控器方向键操作） ── */
+body.tv{font-size:18px}
+body.tv h1{font-size:26px}
+body.tv header{padding:14px 22px}
+body.tv main{max-width:1600px;padding:18px}
+body.tv .filters{gap:14px}
+body.tv .card{border-radius:18px;padding:18px 22px;margin-bottom:14px}
+body.tv .card .txt{font-size:22px;line-height:1.6}
+body.tv .card .meta{font-size:16px}
+body.tv .card .notes{font-size:17px}
+body.tv .chip{font-size:15px;padding:3px 12px}
+body.tv .thumb{max-height:480px}
+body.tv button{font-size:18px;padding:12px 20px;border-radius:12px}
+body.tv input,body.tv select,body.tv textarea{font-size:18px;padding:12px 14px}
+body.tv .acts button{font-size:16px}
+body.tv .count,body.tv .chk,body.tv .exrow{font-size:16px}
+body.tv .more{padding:16px;font-size:18px}
+body.tv #vQuote{font-size:28px}
+body.tv #vGame{font-size:19px}
+body.tv #vBar{height:82px}
+body.tv #vBar button{font-size:19px;min-width:82px;padding:13px 18px}
+body.tv #vPos{font-size:16px;padding:6px 14px}
+/* 遥控器没有鼠标，焦点必须看得见 */
+body.focusnav :focus{outline:4px solid var(--accent);outline-offset:3px}
+body.focusnav .card:focus-within{border-color:var(--accent);box-shadow:0 0 0 4px rgba(91,106,191,.25)}
+body.focusnav button:focus{background:#EEF0FA;border-color:var(--accent)}
+body.focusnav button.primary:focus{background:#4A58A8}
 </style>
 </head>
 <body>
@@ -105,8 +133,10 @@ main{padding:12px;max-width:1100px;margin:0 auto}
     <h1>语录收藏</h1>
     <button id="btnJson">导出 JSON</button>
     <button id="btnMd">导出 Markdown</button>
-    <button id="btnImport">导入</button>
+    <button id="btnZip">打包导出</button>
+    ${S.canEdit?`<button id="btnImport">导入</button>`:'}
     <button id="btnSlideshow">回想</button>
+    <button id="btnTv" title="电视 / 大屏模式：字号加大、可用遥控器方向键操作">大屏：关</button>
     <button id="btnReload">刷新</button>
   </div>
   <div class="row" style="margin-top:8px">
@@ -166,7 +196,7 @@ main{padding:12px;max-width:1100px;margin:0 auto}
 <div id="toast"></div>
 
 <script>
-const S={q:'',game:'',group:'',tag:'',offset:0,limit:20,total:0,meta:null,edit:null,
+const S={q:'',game:'',group:'',tag:'',offset:0,limit:20,total:0,meta:null,edit:null,canEdit:true,
          ex:{game:false,group:false,tag:false}};
 const $=id=>document.getElementById(id);
 const esc=s=>(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
@@ -176,6 +206,11 @@ function fmt(t){return (t||'').replace('T',' ').slice(0,16);}
 
 async function loadMeta(){
   S.meta=await api('/api/meta');
+  S.canEdit=(S.meta.canEdit!==false);
+  if(!S.canEdit){
+    const why=S.meta.isLan?'只读模式（这台设备设置为「只能看」）':'外网访问：只读模式';
+    document.body.insertAdjacentHTML('afterbegin','<div style="padding:10px 14px;background:#FFF4E5;color:#8A5A00;font-size:13px">'+why+'（可以查看、搜索、导出；修改请在电脑上操作）</div>');
+  }
   const fill=(el,arr,val,fmtf)=>{el.innerHTML='<option value="">'+val+'</option>'+arr.map(x=>`<option value="${esc(fmtf?fmtf(x):x)}">${esc(fmtf?fmtf(x):x)}</option>`).join('');};
   fill($('fGame'),S.meta.games,'全部游戏');
   $('fGroup').innerHTML='<option value="">全部分组</option>'+S.meta.groups.map(g=>`<option value="${g.id}">${esc(g.name)}</option>`).join('');
@@ -192,7 +227,7 @@ function card(it){
     ${it.notes?`<div class="notes">${esc(it.notes)}</div>`:''}
     ${it.hasShot?`<img class="thumb" loading="lazy" src="/api/shot/${it.id}" alt="">`:''}
     <div class="meta"><span class="game">${esc(it.gameName||'未标注')}</span><span>${fmt(it.capturedAt)}</span>${chips}</div>
-    <div class="acts"><button data-act="edit">编辑</button><button data-act="exp">导出JSON</button><button data-act="expzip">导出ZIP</button><button data-act="del" class="danger">删除</button></div>
+    <div class="acts"><button data-act="exp">导出JSON</button><button data-act="expzip">导出ZIP</button></div>
   </div>`;
 }
 
@@ -259,6 +294,7 @@ $('mask').onclick=e=>{if(e.target.id==='mask')closeEdit();};
 $('btnReload').onclick=()=>load(true);
 $('btnJson').onclick=()=>location.href='/api/export?format=json';
 $('btnMd').onclick=()=>location.href='/api/export?format=md';
+$('btnZip').onclick=()=>location.href='/api/export-zip';
 
 ['game','group','tag'].forEach(k=>{
   const btn=$('ex'+k[0].toUpperCase()+k.slice(1));
@@ -304,14 +340,25 @@ function showSlide(){
   $('vPos').textContent=(V.i+1)+' / '+V.list.length;
   $('vBars').textContent=['原样','裁掉黑边','黑边涂白'][V.bars];
   $('viewer').classList.toggle('white',V.bars!==0);
+  preload(V.i+1);preload(V.i-1);   // 电视盒子解码慢，提前把前后一张拉下来
+}
+function preload(i){
+  if(!V.list.length)return;
+  const it=V.list[(i+V.list.length)%V.list.length];
+  if(!it||!it.hasShot)return;
+  const im=new Image();im.src='/api/shot/'+it.id+'?bars='+V.bars;
 }
 const vNext=d=>{if(!V.list.length)return;V.i=(V.i+d+V.list.length)%V.list.length;showSlide();};
 function startAuto(){V.timer=setInterval(()=>vNext(1),5000);V.timerOn=true;$('vPlay').textContent='⏸ 暂停';}
 function stopAuto(){if(V.timer)clearInterval(V.timer);V.timer=null;V.timerOn=false;if($('vPlay'))$('vPlay').textContent='▶ 自动';}
 function onViewerKey(e){
   if(e.key==='ArrowRight'||e.key===' '){vNext(1);e.preventDefault();}
-  else if(e.key==='ArrowLeft'){vNext(-1);}
-  else if(e.key==='Escape'){closeViewer();}
+  else if(e.key==='ArrowLeft'){vNext(-1);e.preventDefault();}
+  else if(e.key==='ArrowDown'){vNext(1);e.preventDefault();}      // 遥控器上/下也翻页
+  else if(e.key==='ArrowUp'){vNext(-1);e.preventDefault();}
+  else if(e.key==='Enter'){V.timerOn?stopAuto():startAuto();e.preventDefault();}  // 遥控器 OK 键 = 自动播放开关
+  else if(e.key==='b'||e.key==='B'){V.bars=(V.bars+1)%3;showSlide();}
+  else if(e.key==='Escape'||e.key==='Backspace'){closeViewer();}
 }
 $('vPrev').onclick=e=>{e.stopPropagation();vNext(-1);};
 $('vPlay').onclick=e=>{e.stopPropagation();V.timerOn?stopAuto():startAuto();};
@@ -329,12 +376,163 @@ $('fGame').onchange=()=>{S.game=$('fGame').value;load(true);};
 $('fGroup').onchange=()=>{S.group=$('fGroup').value;load(true);};
 $('fTag').onchange=()=>{S.tag=$('fTag').value;load(true);};
 document.addEventListener('keydown',e=>{if(e.key==='Escape'){closeEdit();$('zoom').classList.remove('on');}});
-(async()=>{try{await loadMeta();await load(true);
-  // ?view=1 → 直接进回想（手机上可以收藏这个链接）
-  if(/[?&]view=1/.test(location.search))setTimeout(()=>openViewer(0),300);
-}catch(e){document.body.insertAdjacentHTML('afterbegin','<div style="padding:12px;color:#D9534F">加载失败：'+esc(e.message)+'</div>');}})();
+
+/* ── 电视 / 大屏模式 + 遥控器方向键导航 ──
+   电视盒子（Android TV / 各种 TV 浏览器）没有鼠标，方向键会变成 ArrowUp/Down/Left/Right，
+   OK 键 = Enter。原生焦点在按钮上时 Enter 会直接激活，所以只要把"焦点移动"补齐就能用遥控器操作。 */
+const TV={on:false};
+function detectTv(){
+  const q=new URLSearchParams(location.search).get('tv');
+  if(q==='1'||q==='0')return q==='1';
+  try{const saved=localStorage.getItem('galqt-tv');if(saved==='1'||saved==='0')return saved==='1';}catch(e){}
+  const ua=navigator.userAgent||'';
+  if(/Android ?TV|GoogleTV|SmartTV|SMART-TV|BRAVIA|AFT[BMN]|MiBOX|MiTV|HUAWEI ?TV|TV ?Browser|NetCast|Tizen|Web0S|AppleTV|Xbox/i.test(ua))return true;
+  return window.innerWidth>=1400&&window.innerHeight>=700&&!window.matchMedia('(pointer:fine)').matches;
+}
+function applyTv(){
+  document.body.classList.toggle('tv',TV.on);
+  document.body.classList.toggle('focusnav',TV.on);
+  const b=$('btnTv');if(b)b.textContent=TV.on?'大屏：开':'大屏：关';
+}
+$('btnTv').onclick=()=>{TV.on=!TV.on;try{localStorage.setItem('galqt-tv',TV.on?'1':'0');}catch(e){}applyTv();};
+
+function focusables(){
+  return [...document.querySelectorAll('button,input,select,textarea,[href]')].filter(el=>
+    !el.disabled&&el.offsetParent!==null&&el.getAttribute('aria-hidden')!=='true');
+}
+function moveFocus(dir){
+  const list=focusables();if(!list.length)return false;
+  const cur=list.includes(document.activeElement)?document.activeElement:null;
+  if(!cur){list[0].focus();return true;}
+  const a=cur.getBoundingClientRect(),ax=a.left+a.width/2,ay=a.top+a.height/2;
+  let best=null,bestScore=Infinity;
+  for(const el of list){
+    if(el===cur)continue;
+    const r=el.getBoundingClientRect();
+    const dx=(r.left+r.width/2)-ax,dy=(r.top+r.height/2)-ay;
+    let primary,secondary;
+    if(dir==='down'){primary=dy;secondary=dx;}
+    else if(dir==='up'){primary=-dy;secondary=dx;}
+    else if(dir==='right'){primary=dx;secondary=dy;}
+    else{primary=-dx;secondary=dy;}
+    if(primary<4)continue;                       // 不在这个方向上的直接跳过
+    const score=primary+Math.abs(secondary)*2.5; // 偏得越多分越高（优先正前方）
+    if(score<bestScore){bestScore=score;best=el;}
+  }
+  if(!best)return false;
+  best.focus();
+  try{best.scrollIntoView({block:'center'});}catch(e){best.scrollIntoView();}
+  return true;
+}
+document.addEventListener('keydown',e=>{
+  if($('viewer').classList.contains('on'))return;   // 回想模式有自己的按键处理
+  if($('mask').classList.contains('on'))return;     // 编辑弹窗里用原生 Tab
+  const tag=(document.activeElement&&document.activeElement.tagName)||'';
+  const inText=tag==='INPUT'||tag==='TEXTAREA'||tag==='SELECT';
+  const k=e.key;
+  if(inText){
+    // 输入框里左右键要移动光标；只有"下"才离开输入框（电视上很自然）
+    if(k==='ArrowDown'&&moveFocus('down')){e.preventDefault();document.activeElement.blur();}
+    return;
+  }
+  if(k==='ArrowDown'&&moveFocus('down'))e.preventDefault();
+  else if(k==='ArrowUp'&&moveFocus('up'))e.preventDefault();
+  else if(k==='ArrowRight'&&moveFocus('right'))e.preventDefault();
+  else if(k==='ArrowLeft'&&moveFocus('left'))e.preventDefault();
+});
+
+(async()=>{
+  TV.on=detectTv();applyTv();
+  try{await loadMeta();await load(true);
+    // ?view=1 → 直接进回想（手机/电视可以收藏这个链接）；&auto=1 → 进去就自动播放
+    if(/[?&]view=1/.test(location.search))setTimeout(async()=>{await openViewer(0);
+      if(/[?&]auto=1/.test(location.search))startAuto();},300);
+  }catch(e){document.body.insertAdjacentHTML('afterbegin','<div style="padding:12px;color:#D9534F">加载失败：'+esc(e.message)+'</div>');}})();
 </script>
 </body>
+</html>
+""";
+
+    /// <summary>
+    /// 登录页（公网访问时用）：要访问码和/或 6 位动态码。
+    /// 特意做得又大又简单——手机和电视遥控器都好操作（数字键盘、自动聚焦、Enter 直接提交）。
+    /// </summary>
+    public static string Login(bool needCode, bool needTotp, bool failed)
+    {
+        var codeField = needCode
+            ? """<div class="f"><label for="k">访问码</label><input id="k" name="k" type="password" autocomplete="current-password" placeholder="设置里那个访问码"></div>"""
+            : "";
+        var totpField = needTotp
+            ? """<div class="f"><label for="code">动态码（6 位）</label><input id="code" name="code" class="otp" inputmode="numeric" autocomplete="one-time-code" maxlength="6" placeholder="000000"></div>"""
+            : "";
+        var focusId = needTotp ? "code" : (needCode ? "k" : "");
+        var fail = failed
+            ? """<div class="err">访问码或动态码不对，再试一次。（连续错 8 次会暂时封锁）</div>"""
+            : "";
+        var hint = needTotp
+            ? "打开手机上的验证器 App（Microsoft / Google Authenticator、Aegis 等），输入「Gal Quote Tool」那一条的 6 位数字。验证一次后 12 小时内不用再输。"
+            : "输入设置里「网页与手机」页填的访问码，之后这个浏览器会记住。";
+        return $$"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#1D1D1F">
+<title>登录 · 语录收藏</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:linear-gradient(160deg,#1D1D1F,#3A3A5C);color:#1D1D1F;
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+.card{background:#fff;border-radius:20px;padding:26px 24px;width:min(430px,100%);box-shadow:0 18px 60px rgba(0,0,0,.35)}
+h1{margin:0 0 4px;font-size:22px}
+p.sub{margin:0 0 18px;color:#8E8E93;font-size:14px}
+.f{margin-bottom:14px}
+label{display:block;font-size:14px;color:#3C3C43;margin-bottom:6px}
+input{width:100%;font:inherit;font-size:18px;padding:14px 16px;border:1px solid #E5E5EA;border-radius:14px;background:#F7F7FA}
+input:focus{outline:3px solid #5B6ABF;outline-offset:1px;background:#fff}
+input.otp{letter-spacing:.42em;font-size:30px;text-align:center;font-weight:600;padding:12px 10px}
+button{width:100%;font:inherit;font-size:18px;font-weight:600;padding:15px;border:0;border-radius:14px;
+  background:#5B6ABF;color:#fff;cursor:pointer;margin-top:6px}
+button:focus{outline:3px solid #1D1D1F;outline-offset:2px}
+.err{background:#FFF1F0;color:#B3261E;border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:14px}
+.hint{color:#8E8E93;font-size:13px;margin:16px 0 0;line-height:1.55}
+</style>
+</head>
+<body>
+<form class="card" method="post" action="/login">
+  <h1>语录收藏</h1>
+  <p class="sub">{{(needTotp ? "这台设备来自公网：需要两步验证" : "需要访问码")}}</p>
+  {{fail}}
+  {{codeField}}
+  {{totpField}}
+  <button type="submit">进入</button>
+  <p class="hint">{{hint}}</p>
+</form>
+<script>var el=document.getElementById('{{focusId}}');if(el)el.focus();</script>
+</body>
+</html>
+""";
+    }
+
+    /// <summary>纯提示页（例如「未开放公网访问」）。</summary>
+    public static string Notice(string title, string message) => $$"""
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{title}}</title>
+<style>
+body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px;
+  background:#F2F2F7;color:#1D1D1F;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","Microsoft YaHei",sans-serif}
+.card{background:#fff;border-radius:18px;padding:24px;width:min(520px,100%);box-shadow:0 8px 30px rgba(0,0,0,.08)}
+h1{margin:0 0 10px;font-size:20px}
+p{margin:0;color:#3C3C43;white-space:pre-wrap}
+</style>
+</head>
+<body><div class="card"><h1>{{title}}</h1><p>{{message}}</p></div></body>
 </html>
 """;
 }

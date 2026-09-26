@@ -1,0 +1,33 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>GalQuoteCollector.Plugins.Qr</AssemblyName>
+    <RootNamespace>GalQuoteCollector.Plugins.Qr</RootNamespace>
+    <Version>1.3.6</Version>
+    <!-- 插件是普通类库，主程序用 Assembly.LoadFrom 加载，不需要拷贝依赖到主程序目录 -->
+    <EnableDynamicLoading>false</EnableDynamicLoading>
+    <!-- 类库默认不把 NuGet 依赖拷到输出目录，但插件是被"动态加载"的，必须自带 QRCoder.dll -->
+    <CopyLocalLockFileAssemblies>true</CopyLocalLockFileAssemblies>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="QRCoder" Version="1.6.0" />
+    <ProjectReference Include="..\GalQuoteCollector.Plugins.Abstractions\GalQuoteCollector.Plugins.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!-- 编译完自动把插件本体 + QRCoder 拷到主程序的 plugins\ 目录，省得手动搬 -->
+  <Target Name="CopyPluginToAppPlugins" AfterTargets="Build">
+    <ItemGroup>
+      <PluginFile Include="$(TargetDir)GalQuoteCollector.Plugins.Qr.dll" />
+      <PluginFile Include="$(TargetDir)QRCoder.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(PluginFile)"
+          DestinationFolder="$(MSBuildThisFileDirectory)..\GalQuoteCollector\bin\$(Configuration)\net8.0-windows10.0.19041.0\plugins\"
+          SkipUnchangedFiles="true" />
+    <Message Importance="high" Text="插件已拷贝到 GalQuoteCollector\bin\$(Configuration)\net8.0-windows10.0.19041.0\plugins\" />
+  </Target>
+
+</Project>

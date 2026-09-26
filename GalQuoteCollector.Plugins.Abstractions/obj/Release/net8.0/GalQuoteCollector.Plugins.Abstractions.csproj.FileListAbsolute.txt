@@ -1,0 +1,12 @@
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\bin\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.deps.json
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\bin\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\bin\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.pdb
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.GeneratedMSBuildEditorConfig.editorconfig
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.AssemblyInfoInputs.cache
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.AssemblyInfo.cs
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.csproj.CoreCompileInputs.cache
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.sourcelink.json
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\refint\GalQuoteCollector.Plugins.Abstractions.dll
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\GalQuoteCollector.Plugins.Abstractions.pdb
+D:\Galgame-quote-tool\GalQuoteCollector.Plugins.Abstractions\obj\Release\net8.0\ref\GalQuoteCollector.Plugins.Abstractions.dll

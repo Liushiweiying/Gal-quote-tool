@@ -1,4 +1,4 @@
-# Gal Quote Collector
+# Gal Quote Tool
 
 [中文](README.md) | [日本語](README.ja.md)
 
@@ -104,6 +104,17 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 ```
 
 ## Changelog
+
+### v1.3.6 (2026-09-26) · beta
+- **New: three web "access protocol" modes** — Auto (both `http://` and `https://` work on the same port, recommended) / HTTP only / HTTPS only. A mismatch between the app and a tunnel or reverse-proxy origin used to end in `SSL handshake failed` / 502; now either scheme is answered. The self-signed certificate is generated lazily, only when a TLS connection actually arrives.
+- **New: LAN and public access are two independent locks** (both off by default, safest). "Allow LAN" only controls the bind address (turn it off and a tunnel still works over loopback); "Allow public" only controls the request origin (external requests get 403 unless enabled). Any combination works.
+- **New: two-factor authentication (TOTP) for public access** — 6-digit codes from any authenticator app (Microsoft / Google Authenticator, Aegis, …). Public only; LAN stays code-free. After a successful login the browser is trusted for 12 hours (configurable), and 8 failed attempts block that source for 10 minutes. Settings can generate a secret, show a QR code and copy the `otpauth://` link, and also displays the current code so you can verify pairing.
+- **New: the QR code is now a plugin** (`plugins\GalQuoteCollector.Plugins.Qr.dll` + `QRCoder.dll`) — the main app depends on no QR library at all. Without the plugin you can still type the secret manually.
+- **New: TV / big-screen mode** — big fonts and remote-friendly navigation (arrow keys move focus, OK activates). In the slideshow the arrows flip pages and OK toggles autoplay. Settings shows the bookmarkable `?tv=1` and `?tv=1&view=1&auto=1` URLs.
+- **New: forced read-only web mode** (even on LAN) — handy together with one-way sync.
+- **New (beta): headless build for Linux / Armbian / NAS** (`galquote-server`) so phones and TVs keep working while the PC is off. Command-line options plus a systemd unit and a one-shot installer script.
+- **Fix:** "is this a LAN request?" is now derived from the request origin instead of "is editing allowed" — with forced read-only, LAN used to be misreported as external.
+- **Note:** this is a **beta**. Everything was verified on real hardware (access code / TOTP login, read-only mode, big-screen mode, read-only mirror), but small changes may still land before the stable release. **Auto-update only offers stable releases**, so grab betas manually.
 
 ### v1.3.5 (2026-09-23)
 - **Improved** Magpie re-scaling briefly after leaving fullscreen: instead of guessing whether Magpie already stopped, the app now sends one upscaling hotkey on exit to clean the state (the flash drops from ~1.5 s to ~0.4 s), plus one extra stop if it reappears within 2 s

@@ -2,6 +2,33 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## 项目结构（v1.3.6 起有 4 个项目）
+- `GalQuoteCollector/` —— Windows 端 WPF 应用（主程序）。
+- `GalQuoteCollector.Plugins.Abstractions/` —— 插件契约（net8.0、零依赖），主程序与插件都引用它。
+- `GalQuoteCollector.Plugins.Qr/` —— 可选二维码插件（QRCoder）。
+- `GalQuoteCollector.Server/` —— **无界面版**（net8.0，可发布到 linux-arm64 / linux-arm / linux-x64），
+  给 Armbian 电视盒子 / NAS 常驻跑网页服务用；网页链路那批源码是**链接编译**（`<Compile Include="..\...">`）
+  进来的，改一处两边都生效。细节见 `GalQuoteCollector.Server/README.md`。
+
+### 无界面版（v1.3.6 起，改动前先读这节）
+- **目的**：电脑关机后，手机 / 电视盒子仍能打开网页看语录（浏览、搜索、回想、导出；要不要允许改由开关决定）。
+- **跨平台边界**：网页链路里**只有黑边处理**是 Windows 专属（`BlackBarCropper` 依赖 WPF 的 `Rect` +
+  System.Drawing 像素操作，.NET 8 在 Linux 上直接抛 PlatformNotSupported）。所以在 server 项目里
+  用 `Shims/BlackBarCropper.Linux.cs` 顶替（返回"没有黑边"→ 照原图返回），
+  `Shims/SettingsService.Linux.cs` 顶替设置读取（只读 `settings.json`，不管开机自启/注册表）。
+  **新增链接文件前先确认它不引 WPF / Registry / WinRT**。
+- 链接清单在 `GalQuoteCollector.Server/GalQuoteCollector.Server.csproj`；Models 全量链接，Services 只链接
+  AppLog / StorageService / ExportService / QuoteZipExporter / TotpService / WebPage / WebServerService。
+- `--read-only`（对应 `HotkeyConfig.WebReadOnly`）会**连局域网也禁止写**（`WebServerService.Options.ForceReadOnly`）；
+  当只读镜像时必须打开，保证 SQLite 只有一个写入方。
+- `isLan` 必须按**来源判断**（`external`）算，不能用 `!readOnly`——加了 ForceReadOnly 后这两个不再等价
+  （v1.3.6 踩过：只读镜像下局域网被误报成"外网"，页面横幅文案也跟着错）。
+- 命令：`dotnet publish GalQuoteCollector.Server/GalQuoteCollector.Server.csproj -c Release -r linux-arm64 --self-contained true -p:PublishSingleFile=true -o publish-server-linux-arm64`（约 76 MB 单文件）。
+  32 位用 `-r linux-arm`。部署文件在 `GalQuoteCollector.Server/deploy/`（systemd + 一键安装脚本）。
+- **同步原则**：`quotes.db` 同一时刻只能有一个写入方（Syncthing 单向 / rclone 覆盖 / 电脑导入到盒子），
+  双向同步只对"只增不改"的截图目录安全。方案对比写在 server 的 README 里。
+
+
 ## Build & Run
 
 ```bash
@@ -98,6 +125,8 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **更新器按部署形态升级（v1.2.4 起）**：`UpdateService.DetectInstallForm()` 判定 Installer（有 unins000.exe 或注册表 InstallLocation 命中）/ SingleFile / Folder，并据此选择资产（Setup.exe / 同名 exe / publish-folder.zip）；`StartApply` 写一个 PowerShell 辅助脚本，等本进程退出后执行「运行安装器 / 替换自身 / 解压覆盖」并重启。改动更新逻辑时务必保持这三种形态都能原地升级。
 - 四种安装包：`Gal-quote-tool.exe`（FDD 单文件）、`Gal-quote-tool_selfcontained.exe`（SCD 单文件）、`Gal-quote-tool_Setup.exe`（Inno Setup，源目录 `publish-installer\*`）、`publish-folder.zip`（SCD 文件夹压缩）。生成后同步到仓库根目录。
 - 仓库卫生：`bin/`、`obj/`、`publish-*/`、根目录四个产物均已加入 `.gitignore`，不要提交构建产物。
+- **插件目录（v1.3.6 起）**：`dotnet publish` 会在输出目录旁边生成 `plugins\`（`GalQuoteCollector.Plugins.Qr.dll` + `QRCoder.dll`），由主程序 csproj 的 `AfterTargets="Publish"` 自动拷贝。**四种产物都要带上它**：Setup 的源目录 `publish-installer\`（`installer.iss` 已有 `recursesubdirs`，会自动打进去）、`publish-folder.zip`（整目录压缩，天然包含）；两个**单文件 exe 没法内嵌插件**，用户想要二维码就把这两个 dll 放进 `%LOCALAPPDATA%\GalQuoteCollector\plugins\`（程序两个目录都会扫）。打包后顺手确认 `publish-v1xx\plugins\` 存在。
+- 三个项目（`GalQuoteCollector`、`GalQuoteCollector.Plugins.Abstractions`、`GalQuoteCollector.Plugins.Qr`）都要**一起提交**；主程序 csproj 里仓库引用插件项目只是为了让 build/publish 顺带编译它（`ReferenceOutputAssembly=false`）。
 
 ### 教程与「关于」对话框 GUI 优化（✅ 已实现，2026-08-15）
 - 已改：新建 `Views/InfoDialog.xaml(.cs)`（无边框圆角卡片 + 阴影 + MDL2 主题色图标 + 蓝色主按钮/红色危险按钮 + 可拖动 + Enter/Esc），**替换了全应用 51 处 `MessageBox.Show`**（含教程三处、关于、版本更新、所有确认/文件处理弹窗），UI 完全统一。
@@ -175,15 +204,38 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 
 ### 内网网页 + 每日备份（v1.3.3 起，改动前先读这节）
 - **内网网页**（`Services/WebServerService.cs` + `Services/WebPage.cs`）：在**程序进程内**用 `TcpListener` 起一个极简 HTTP/1.1 服务（**不需要管理员、不需要 URL ACL**，便携版也能用），手机/电脑浏览器打开 `http://本机IP:端口/` 即可查看/搜索/修改/导出语录。
-  - 设置项（`HotkeyConfig`）：`WebEnabled`（默认 **false**）、`WebPort`（默认 8088）、`WebAccessCode`（默认空 = **局域网免密**；填了就要求 `?k=码`，页面响应会带 `Set-Cookie: k=…`）、`WebUseHttps`（默认 **true**）。
-  - **HTTPS**（用户要求）：同一端口上用 `SslStream`（TLS1.2/1.3）+ **自签证书**；证书首次启动自动生成到 `<数据目录>\web-cert.pfx`（CN=Gal Quote Collector Web，SAN = 机器名 + localhost + 127.0.0.1 + 所有本机 IPv4，5 年有效）。设置里有「导出证书（给手机安装）」→ 导出 `.cer` 并用 explorer `/select` 定位；Android 装到「CA 证书」、iPhone 装描述文件后到「证书信任设置」里打开开关。
-  - **注意**：开 HTTPS 后该端口只讲 TLS，浏览器必须写 `https://`（写 `http://` 会 ERR_EMPTY_RESPONSE）；不想用时设置里关掉即可回到明文 HTTP。
+  - 设置项（`HotkeyConfig`）：`WebEnabled`（默认 **false**）、`WebPort`（默认 8088）、`WebAccessCode`（默认空 = **局域网免密**；填了就要求 `?k=码`）、`WebTlsMode`（**0 = 自动（默认）/ 1 = 仅 HTTP / 2 = 仅 HTTPS**）、`WebAllowLan`（**默认 false**：true 才绑 0.0.0.0，否则只监听 127.0.0.1）、`WebAllowExternal`（**默认 false**：公网/tunnel 请求一律 403）、`WebTotpEnabled` + `WebTotpSecret` + `WebTotpSessionHours`（默认 12 小时）。旧配置里的 `WebUseHttps` 仍保留，`EffectiveTlsMode` 在没有 `WebTlsMode` 时按它推导（true→2，false→0）。
+  - **网络相关一律"默认关、最安全"**（用户要求，2026-09-26）：网页服务默认不开、局域网默认不绑、公网默认不放行、两步验证默认关；要手机/电视连必须自己去设置里打开。
+  - **局域网 / 公网是两把独立的锁**（v1.3.6 起，用户要求分开）：
+    - `WebAllowLan` 只管**监听范围**（0.0.0.0 vs 127.0.0.1）；关掉时 tunnel 照样能用（cloudflared 走本机回环）。
+    - `WebAllowExternal` 只管**来源判断**：请求若是公网/tunnel 进来的（带 `CF-Connecting-IP`/`X-Forwarded-For`/`X-Real-IP`/`CF-Ray`，或来源 IP 不在 10/8、172.16/12、192.168/16、169.254/16、回环、IPv6 ULA 段）→ 没开就直接 403（`WebPage.Notice` 页面）。
+    - 四种组合都验证过：只内网、只公网、都给、都不给。
+  - **公网两步验证（TOTP，v1.3.6）**（`Services/TotpService.cs`，RFC 6238，只用自带 HMAC，**无第三方依赖**）：**只对公网生效**，局域网免动态码（用户选定）。
+    - 认证链：`访问码（设了就要）` + `公网动态码（开了就要）` → 通过后 `POST /login` 下发 `Set-Cookie: k=` 和 `t=<过期时间>.<HMAC-SHA256>`（12 小时，服务端无状态，重启仍有效；篡改/过期/换密钥都会失效）。
+    - 失败处理：`/login` 失败 → 再回登录页（401）+ 计入暴力破解计数（同一个来源 5 分钟错 8 次封 10 分钟）；**普通 GET 不带凭据不算失败**（否则浏览器刷新几次就被封）。页面里 `fetch` 的 API 请求返回纯文本 401，浏览器导航请求才给登录页（`WantsHtml`）。
+    - 密钥用 Base32 保存，设置里有「生成新密钥 / 显示二维码 / 复制 otpauth 链接」，并显示**当前动态码**方便核对手机配对是否成功。
+    - `TotpService` 已用 RFC 6238 六组标准向量自测通过（`T=59 → 94287082` 等），测试方法见「已修的坑」。
+  - **插件机制（v1.3.6）**：主程序**不引用任何二维码库**，运行时用 `Services/PluginHost.cs` 扫描两个目录里的 DLL：① `<程序目录>\plugins\`（单文件版 exe 旁边就有这个目录）② `%LOCALAPPDATA%\GalQuoteCollector\plugins\`。只加载实现了 `GalQuoteCollector.Plugins.IGalQuotePlugin`（可选 `IQrCodePlugin`）的类型，加载失败只写日志、绝不影响启动。
+    - 契约在独立小项目 `GalQuoteCollector.Plugins.Abstractions`（net8.0、零依赖），**主程序和插件都引用它**才保证类型身份一致（别把接口直接放主程序里，否则插件得引用整个 WPF 程序）。
+    - 自带插件 `GalQuoteCollector.Plugins.Qr`（引用 `QRCoder` 1.6.0）→ 类库默认不拷依赖，必须 `CopyLocalLockFileAssemblies=true`，并把 `GalQuoteCollector.Plugins.Qr.dll` + `QRCoder.dll` 拷进主程序 `plugins\`（插件 csproj 的 AfterTargets=Build + 主程序 csproj 的 AfterTargets=Publish 各一份）。
+    - 二维码正确性用「QRCoder 生成 → ZXing.Net 独立解码 → 与 otpauth 原文比对」的往返测试验证过。
+  - **访问协议三选一**（v1.3.6 起，设置界面「访问协议」下拉）：`HandleClientAsync` 先用 `LooksLikeTls()`（`Socket.Poll` + `Receive(..., SocketFlags.Peek)`，**不消耗数据**，所以 HTTP 解析与 `SslStream` 都照常）看首字节是否 `0x16`（TLS ClientHello）。
+    - **自动**：同一个端口 http:// 与 https:// 都能连 —— 这样 Cloudflare tunnel / 反向代理的 origin 填 `http://127.0.0.1:8088` 或 `https://` 都不会再出现 `SSL handshake failed` / 502。证书**按需生成**（第一次真收到 TLS 连接才生成）。
+    - **仅 HTTPS**：明文请求会收到一条可读的 400 提示（「请把网址改成 https://…」）而不是连接被重置；证书在启动时就生成。
+    - **仅 HTTP**：收到 TLS 握手请求时写一行日志并断开（提示去设置里改成自动）。
+  - **HTTPS**（用户要求）：`SslStream`（TLS1.2/1.3）+ **自签证书**；证书生成到 `<数据目录>\web-cert.pfx`（CN=Gal Quote Tool Web，SAN = 机器名 + localhost + 127.0.0.1 + 所有本机 IPv4，5 年有效，CA=TRUE）。设置里有「在本机信任（消除浏览器警告）」「导出证书（给手机安装）」→ 导出 `.cer` 并用 explorer `/select` 定位；Android 装到「CA 证书」、iPhone 装描述文件后到「证书信任设置」里打开开关。这两个按钮现在**只生成证书、不启动监听**（`EnsureCertificate()`），不会再和正在运行的服务抢端口。
+  - **云端 tunnel / 反向代理**（用户已把 8088 挂到 Cloudflare tunnel，cloudflared 是 Windows 服务、token 托管，配置在 Cloudflare Zero Trust 面板里）：origin 建议填 `http://localhost:8088`；若填 `https://` 则必须在那边关掉证书校验（Cloudflare tunnel 的 **No TLS Verify**），否则它不信任自签证书 → 浏览器报 `SSL handshake failed` / 502。经 tunnel 进来的请求带 `CF-Connecting-IP`，会被判为「外网」→ **必须带访问码，且只读**（写操作 403）。
   - 连接排障（实测踩过）：本机 `http(s)://本机IP:端口` 通、防火墙规则也允许（`Gal-quote-tool` Allow + Profile=Private，WLAN 是 Private）时，手机连不上通常是**网络层**：AP 隔离/客户端隔离、访客网络、手机侧 VPN/代理（用户手机也装了代理类工具）、或电脑侧 FlClash 的 TUN 模式。设置界面已写这些提示。
   - 路由：`GET /`（内嵌单页）、`GET /api/meta`、`GET /api/quotes?q=&game=&group=&tag=&offset=&limit=`、`GET /api/quotes/{id}`、`PUT /api/quotes/{id}`（改 text/gameName/notes/capturedAt + groups/tags/newNames，按名字自动建分组标签）、`DELETE /api/quotes/{id}`、`GET /api/shot/{id}`（原图）、`GET /api/export?format=json|md`（复用 `ExportService`）。
   - **只改语录**（用户选定）：不暴露设置、映射、黑名单、游戏名规则。
   - 数据库安全：直接复用程序自己的 `StorageService`（它内部有 `_sync` 锁，线程安全），**不要**另外开第二个进程/连接写库。
   - `DELETE` **只删数据行，不删截图文件**（有意为之：截图更宝贵，误删可从「未关联截图」找回；2026-09-23 实测救回过一条误删语录——**每日备份真的有用**）。
   - 网页是单文件内嵌 HTML/CSS/JS（内网可能没外网，**不能用 CDN**）；响应式断点 720px（单列、弹窗贴底、缩略图 200px）与 520px（标题独占一行、按钮换行不裁切）；缩略图 `max-height` 桌面 280px / 手机 200px + 点击放大。
+  - **电视 / 大屏模式（v1.3.6，为电视盒子预备）**：`WebPage.cs` 里 `body.tv` + `body.focusnav` 两套类，字号/按钮/缩略图全部放大、回想文字 28px。
+    - 开启方式：`?tv=1` / `?tv=0` 强制；否则看 `localStorage['galqt-tv']`；再否则自动判断（UA 含 `Android TV / GoogleTV / SmartTV / BRAVIA / AFT* / MiBOX / MiTV / Tizen / Web0S / AppleTV / Xbox`，或 **宽 ≥1400 且高 ≥700 且没有精确指针**）。顶栏「大屏：开/关」按钮可手动切。
+    - **遥控器导航**：电视把方向键映射成 ArrowUp/Down/Left/Right、OK 键映射成 Enter。`moveFocus(dir)` 用几何打分（主轴距离 + 2.5×垂直偏移）在可见可聚焦元素里找下一个焦点，`Enter` 由浏览器原生激活按钮。焦点在输入框里时**不抢**左右键（要移光标），只有 ArrowDown 才离开输入框。
+    - 回想模式里：左右/上下都翻页、`Enter` 开关自动播放、`B` 切黑边、`Esc`/`Backspace` 退出；`showSlide()` 会预加载前后各一张（电视盒子解码慢）。
+    - 电视书签：`http://IP:8088/?tv=1`（浏览）或 `...&view=1&auto=1`（直接进回想并自动播放）；设置界面「网页与手机」里会实时显示这两条地址。
   - 安装版在 `installer.iss` 的 `[Run]` 里用 `netsh advfirewall` 放行 **8088**（profile=private）；用户改端口需要自己放行，便携版第一次启动 Windows 会弹防火墙允许框。
   - 想让公网访问：让用户**自己设访问码**（当前无 HTTPS/双因素），并建议走路由器端口映射 + 反向代理加 HTTPS。
 - **每日首次启动自动备份**（`Services/BackupService.cs`，v1.3.4 起按用户要求改规则）：`BackupEnabled`（默认 true）/`BackupDirectory`（留空 = **安装目录上一级**的 `Gal Quote Tool Backup`，写不进去退回数据目录）/`BackupKeepCount`（默认 3）。**只有语录库内容变了才备份**（内容哈希，不能用时间戳——SQLite 每次打开都会刷新它）；**不含设置，设置变动也不触发**；截图整份一起备份。
@@ -220,12 +272,18 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - `WebPage.cs` 里的 `#viewer` 全屏层：左右滑动/点击两侧切换、自动播放（5s）、显示游戏名+正文+位置、`原样/裁掉黑边/黑边涂白` 切换；`?view=1` 直接进回想（手机可收藏书签）；服务端 `GET /api/quotes/{id}/export|POST /api/import` 支持单条含图导入导出。
 ### 自动更新与代码签名（2026-08-21 起）
 - 自动更新：`Services/UpdateService.cs`（GitHub latest API → 优先 `*_Setup.exe` 资产直链 + sha256 digest 校验下载）+ `Views/UpdateDialog`（更新日志 / 进度条 / 下载 / 跳过此版本 / 立即安装→退出并启动安装器）。入口：「···」菜单 → 检查更新；启动时自动检查；跳过版本存 settings.json 的 `SkippedUpdateVersion`。
-- 代码签名：自签名证书 `CN=Gal Quote Collector`（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。
+- 代码签名：自签名证书 `CN=Gal Quote Collector`（证书是早先签发的、名字没改，属历史遗留；应用/安装包显示名统一为 **Gal Quote Tool**）（CurrentUser\My，指纹 `1C3987F6C7A8E67FF6C191AD220C7A6EDE4FC7A7`；pfx/cer 在本地 `cert/`，gitignored；pfx 密码 `GalQuote2026-CodeSign`）。signtool：`C:\Program Files (x86)\Windows Kits\10\bin\10.0.26100.0\x64\signtool.exe`，命令 `signtool sign /fd SHA256 /tr http://timestamp.digicert.com /td SHA256 /sha1 <指纹> <file>`。
 - **发布顺序（重要）**：打包 → 先签 `publish-installer\Gal-quote-tool.exe` → 再 Compress-Archive 生成 zip → 再跑 ISCC → 再签三个 exe（FDD/SCD/Setup）→ curl 上传（curl 需 `--ssl-no-revoke`；180MB 文件上传慢，后台任务 + 大超时）。
 - 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；**GitHub 令牌用 CredRead 从 Windows 凭据管理器读**（target `git:https://github.com`，用户 `Liushiweiying`，令牌 40 位）：`Advapi32!CredRead(target, 1, 0, out ptr)` + `CREDENTIAL.CredentialBlob`（Unicode）。**不要用 `"protocol=https..." | git credential fill`**——PowerShell 把字符串管道喂给 native exe 的 stdin 现在会失败，git 报 `refusing to work with credential missing protocol field`（v1.3.1 发布时踩过；`cmd /c "git credential fill < file"` 也可用，但 CredRead 更省事）。
 - **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法（**路径必须用正斜杠**：2026-09-23 实测 `"@D:\\a\\b.exe"` 的反斜杠被 curl 当转义吃掉，报 `Failed to open D:ab.exe`，之前"传上去的还是旧字节"就是这个原因）：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
 ### 已修的坑（避免重复踩）
+- **不要用 PowerShell 把网页 API 的返回「读出来再 PUT 回去」（2026-09-26 踩过）**：`curl.exe ... | ConvertFrom-Json` 拿到的中文没问题，但 `-d`/配置文件回传时 PowerShell 把参数按 GBK 编码喂给 curl，结果把 `[未识别到文字]` 写成了乱码 `[鏈嶈瘑鍒埌鏂囧瓧]`（真改坏了 quote 203，随后用 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` + `--data-binary @file` 修复）。要点：① body 一律写进文件再用 `--data-binary @文件`；② 命令里**不要出现非 ASCII 字面量**（用 `[char]0x672A` 这种拼）；③ 测试写操作尽量挑一条无关紧要的语录，或 PUT 回原文并立即复核。
+- **PowerShell `Set-Content -Encoding UTF8` 写 curl 配置文件会带 BOM**（curl 报 `config file option 'url' is unknown`）→ 用 `[System.IO.File]::WriteAllText(path, text, New-Object System.Text.UTF8Encoding($false))`。
+- **本机 WLAN IP 会变**（2026-09-26 实测从 192.168.2.33 变成 **192.168.2.43**，DHCP）：设置界面里的局域网地址是实时枚举的，不要照抄旧 IP 去测；手机连不上时先确认当前 IP。
+- **主程序项目的 `ImplicitUsings` 在 WPF 编译用的临时项目（`*_wpftmp.csproj`）里不生效**（2026-09-26 踩过）：新建的 .cs 文件**必须自己写 `using System; / System.IO; / System.Collections.Generic; / System.Linq;`**，否则 `Path`/`Directory`/`List<>` 会报 CS0103（现有文件都是显式 using，照抄它们的开头即可）。
+- **自测 TOTP / 网页认证的做法**（不碰用户设置、不用重启主程序）：在 `%TEMP%` 下建一个控制台项目 `ProjectReference` 主程序，直接 `new WebServerService(storage, 临时目录).Start(new WebServerService.Options(...))`，用 `HttpClient` 打各种组合（带 `CF-Connecting-IP` 模拟 tunnel、`AllowAutoRedirect=false` 看 303 与 `Set-Cookie`）。`TotpService` 的正确性用 RFC 6238 六组向量（`Base32Encode(ASCII("12345678901234567890"))` = `GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ`，`T=59` → `94287082`）。二维码用 QRCoder 生成后交给 **ZXing.Net** 解码比对原文。
+- **内嵌网页的 JS 改完要过 `node --check`**：`Get-Content WebPage.cs -Raw -Encoding UTF8`（**必须带 `-Encoding UTF8`**，否则中文会被按 GBK 读成乱码，误报语法错误）→ 截出 `<script>…</script>` → `node --check`。想验证运行期效果可以用 `msedge --headless=new --dump-dom "http://127.0.0.1:8088/?k=码&tv=1"`，看 `<body class="tv focusnav">` 与渲染出的卡片。
 - **网络**：用户平时挂加速器（代理）才能稳定访问 GitHub；**加速器没开时**会出现 `git credential fill` 报 `refusing to work with credential missing protocol field`、GitHub API/上传超时等怪现象。遇到这类报错先问一句是不是没开加速器，再考虑改代码/换方案。
 - **WPF Slider 的 `ValueChanged` 会在 `InitializeComponent()` 期间触发**（设置 `Minimum` 时把默认值 0 钳到 Minimum）。若处理器引用了 XAML 中**声明在后面**的元素 → NullReferenceException → 打开窗口即崩溃。已给 `SettingsWindow` 的 Jpeg/Delay 两个滑杆加空值保护。
 - `App.OnStartup` 已注册 `DispatcherUnhandledException` / `AppDomain.UnhandledException` / `TaskScheduler.UnobservedTaskException`，异常写入 `%LOCALAPPDATA%\GalQuoteCollector\startup.log`（UI 线程异常不再闪退）。

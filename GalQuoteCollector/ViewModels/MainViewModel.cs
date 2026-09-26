@@ -94,19 +94,22 @@ public partial class MainViewModel : ObservableObject
             if (hotkeyConfig.WebEnabled)
             {
                 _webServer ??= new Services.WebServerService(_storageService, _dataDir);
-                var (webOk, webMsg) = _webServer.Start(hotkeyConfig.WebPort, hotkeyConfig.WebAccessCode ?? "", hotkeyConfig.WebUseHttps);
+                var (webOk, webMsg) = _webServer.Start(WebOptions(hotkeyConfig));
                 AppLog.Write($"web: {(webOk ? "OK" : "失败")} {webMsg}");
             }
         }
         catch (Exception ex) { AppLog.Write($"web start failed: {ex.Message}"); }
 
-        // 每天首次启动自动备份（quotes.db / usage.json / settings.json，保留最近 3 天）
-        try
+        // 每天首次启动自动备份（语录库 + 使用记录 + 截图）。放后台线程：备份到 NAS 时也不会拖慢启动。
+        _ = Task.Run(() =>
         {
-            var (didBackup, backupMsg) = Services.BackupService.BackupIfNeeded(hotkeyConfig, _dataDir);
-            AppLog.Write($"backup: {(didBackup ? "已备份" : "跳过")} {backupMsg}");
-        }
-        catch (Exception ex) { AppLog.Write($"backup failed: {ex.Message}"); }
+            try
+            {
+                var (didBackup, backupMsg) = Services.BackupService.BackupIfNeeded(hotkeyConfig, _dataDir);
+                AppLog.Write($"backup: {(didBackup ? "已备份" : "跳过")} {backupMsg}");
+            }
+            catch (Exception ex) { AppLog.Write($"backup failed: {ex.Message}"); }
+        });
         _captureDelayMs = hotkeyConfig.CaptureDelayMs;
         _hideUnrecognized = hotkeyConfig.HideUnrecognized;
         _screenshotFormat = hotkeyConfig.ScreenshotFormat;
@@ -367,11 +370,13 @@ public partial class MainViewModel : ObservableObject
             var screenshotPath = shot.FilePath;
             var ocrConfig = _settingsService.LoadHotkeyConfig();
 
-            // 自动裁掉四周纯黑边（游戏比例和显示器不一致时会产生黑框）
-            if (ocrConfig.CropBlackBars)
+            // 按设置处理四周黑边（不操作 / 涂黑 / 涂白 / 裁掉 + 四边微调）
+            var barMode = (Services.BarMode)Math.Clamp(ocrConfig.CaptureBarMode, 0, 3);
+            if (barMode != Services.BarMode.None)
             {
-                var (cropped, cropDetail) = Services.BlackBarCropper.Crop(screenshotPath);
-                AppLog.Write($"capture crop: {cropDetail}");
+                var (cropped, cropDetail) = Services.BlackBarCropper.Apply(screenshotPath, barMode,
+                    ocrConfig.BarAdjustLeft, ocrConfig.BarAdjustRight, ocrConfig.BarAdjustTop, ocrConfig.BarAdjustBottom);
+                AppLog.Write($"capture bars: {cropDetail}");
                 if (cropped)
                 {
                     try
@@ -873,26 +878,29 @@ public partial class MainViewModel : ObservableObject
             return;
         }
 
-        var confirm = InfoDialog.Show(_window, "裁掉黑边",
+        var confirm = InfoDialog.Show(_window, "批量处理黑边",
             $"将检查 {files.Count} 张截图，把四周的纯黑边裁掉（就地覆盖原文件）。\n\n" +
             "只裁「整行 / 整列几乎全黑」的边缘；画面本身偏暗、或黑边占比过大的会自动跳过。\n\n继续吗？",
             InfoDialogButtons.YesNo, InfoDialogIcon.Question);
         if (confirm != InfoDialogResult.Yes) return;
 
         int cropped = 0, skipped = 0, failed = 0;
-        StatusText = "正在裁掉黑边…";
+        StatusText = "正在处理黑边…";
+        var cfgNow = _settingsService.LoadHotkeyConfig();
+        var modeNow = (Services.BarMode)Math.Clamp(cfgNow.CaptureBarMode, 0, 3);
         await Task.Run(() =>
         {
             foreach (var f in files)
             {
-                var (ok, detail) = Services.BlackBarCropper.Crop(f);
+                var (ok, detail) = Services.BlackBarCropper.Apply(f, modeNow,
+                    cfgNow.BarAdjustLeft, cfgNow.BarAdjustRight, cfgNow.BarAdjustTop, cfgNow.BarAdjustBottom);
                 AppLog.Write($"crop all: {detail}");
                 if (ok) cropped++;
                 else if (detail.Contains("失败")) failed++;
                 else skipped++;
             }
         });
-        StatusText = $"裁掉黑边完成：裁了 {cropped} 张，跳过 {skipped} 张，失败 {failed} 张";
+        StatusText = $"黑边处理完成：处理 {cropped} 张，跳过 {skipped} 张，失败 {failed} 张";
         RefreshQuotes();
         InfoDialog.Show(_window, "完成",
             $"裁了 {cropped} 张，跳过 {skipped} 张（没有黑边或画面偏暗），失败 {failed} 张。\n\n" +
@@ -1249,13 +1257,20 @@ public partial class MainViewModel : ObservableObject
                 return;
             }
             _webServer ??= new Services.WebServerService(_storageService, _dataDir);
-            if (_webServer.IsRunning && _webServer.Port == cfg.WebPort && _webServer.UseHttps == cfg.WebUseHttps && _webServer.RequiresCode == (cfg.WebAccessCode ?? "").Trim().Length > 0)
+            if (_webServer.IsRunning && _webServer.Port == cfg.WebPort && _webServer.TlsMode == cfg.EffectiveTlsMode
+                && _webServer.AllowLan == cfg.WebAllowLan && _webServer.AllowExternal == cfg.WebAllowExternal
+                && _webServer.TotpEnabled == (cfg.EffectiveTotpSecret.Length > 0)
+                && _webServer.RequiresCode == (cfg.WebAccessCode ?? "").Trim().Length > 0)
                 return;
-            var (ok, msg) = _webServer.Start(cfg.WebPort, cfg.WebAccessCode ?? "", cfg.WebUseHttps);
+            var (ok, msg) = _webServer.Start(WebOptions(cfg));
             AppLog.Write($"web: {(ok ? "OK" : "失败")} {msg}");
         }
         catch (Exception ex) { AppLog.Write($"web sync failed: {ex.Message}"); }
     }
+
+    private static Services.WebServerService.Options WebOptions(HotkeyConfig c) => new(
+        c.WebPort, c.WebAccessCode ?? "", c.EffectiveTlsMode, c.WebAllowLan, c.WebAllowExternal,
+        c.EffectiveTotpSecret, c.WebTotpSessionHours, c.WebReadOnly);
 
     private (bool ok, string msg) ApplySettings(HotkeyConfig cfg)
     {
