@@ -333,7 +333,8 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
   现在读写统一用 `SettingsService.JsonOpts`（含 `NaNDoubleConverter`：NaN/±Infinity ↔ `null`）。
   **新增任何序列化 HotkeyConfig 的地方都要带上这套选项。**
 
-### 网页版（WebPage.cs）改动的两条硬规矩（2026-09-26 踩过）- **静态 HTML 区（`<script>` 之前）里绝对不能出现 `${...}`**：C# 原样字符串不会求值它，但浏览器会把 `${S.canEdit?`<button id="btnImport">导入</button>`:''}` **当成"一段文字 + 一个真按钮 + 一段文字"**解析出来 —— 于是页面顶栏就明晃晃地显示 `${S.canEdit?` 和 `:''}` 两截字面量（顶栏那个 bug 存在了很久，2026-09-26 才修）。模板占位符只能写在 `<script>` 里的 JS 模板字符串中。
+### 网页版（WebPage.cs）改动的两条硬规矩（2026-09-26 踩过）
+- **静态 HTML 区（`<script>` 之前）里绝对不能出现 `${...}`**：C# 原样字符串不会求值它，但浏览器会把 `${S.canEdit?`<button id="btnImport">导入</button>`:''}` **当成"一段文字 + 一个真按钮 + 一段文字"**解析出来 —— 于是页面顶栏就明晃晃地显示 `${S.canEdit?` 和 `:''}` 两截字面量（顶栏那个 bug 存在了很久，2026-09-26 才修）。模板占位符只能写在 `<script>` 里的 JS 模板字符串中。
 - **每张卡片的操作栏必须有「编辑 / 删除」入口**（`card()` 里的 `editActs`，`S.canEdit` 为真才渲染）：服务端 `PUT/DELETE /api/quotes/{id}` 和前端 `openEdit/del` 一直都在，但按钮从来没渲染过，等于"网页能改"这个功能一直是死的（2026-09-26 恢复）。只读模式（公网 / `--read-only`）下不渲染，且「导入」按钮也会 `display:none`。
 - 验证方法：`msedge --headless=new --dump-dom "http://127.0.0.1:8098/?k=码"` **必须先把 `<script>…</script>` 剥掉再看**——否则内联 JS 源码里的字符串会让"有没有这个按钮"之类的正则全部误判（第一次验证就踩了这个坑）。
 - **不要用 PowerShell 把网页 API 的返回「读出来再 PUT 回去」（2026-09-26 踩过）**：`curl.exe ... | ConvertFrom-Json` 拿到的中文没问题，但 `-d`/配置文件回传时 PowerShell 把参数按 GBK 编码喂给 curl，结果把 `[未识别到文字]` 写成了乱码 `[鏈嶈瘑鍒埌鏂囧瓧]`（真改坏了 quote 203，随后用 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` + `--data-binary @file` 修复）。要点：① body 一律写进文件再用 `--data-binary @文件`；② 命令里**不要出现非 ASCII 字面量**（用 `[char]0x672A` 这种拼）；③ 测试写操作尽量挑一条无关紧要的语录，或 PUT 回原文并立即复核。
