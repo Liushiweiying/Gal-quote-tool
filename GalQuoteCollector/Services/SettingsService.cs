@@ -6,6 +6,14 @@ namespace GalQuoteCollector.Services;
 
 public class SettingsService
 {
+    /// <summary>读写设置共用的选项：NaN 写成 null（见 NaNDoubleConverter）。</summary>
+    internal static readonly JsonSerializerOptions JsonOpts = new()
+    {
+        WriteIndented = true,
+        PropertyNameCaseInsensitive = true,
+        Converters = { new NaNDoubleConverter() },
+    };
+
     private readonly string _filePath;
 
     public SettingsService(string dataDir)
@@ -21,7 +29,7 @@ public class SettingsService
                 return new HotkeyConfig(); // defaults
 
             var json = File.ReadAllText(_filePath);
-            var config = JsonSerializer.Deserialize<HotkeyConfig>(json);
+            var config = JsonSerializer.Deserialize<HotkeyConfig>(json, JsonOpts);
             if (config == null) return new HotkeyConfig();
 
             if (MigrateCaptureDefaults(config))
@@ -62,7 +70,7 @@ public class SettingsService
 
     public void SaveHotkeyConfig(HotkeyConfig config)
     {
-        var json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
+        var json = JsonSerializer.Serialize(config, JsonOpts);
         File.WriteAllText(_filePath, json);
     }
 }

@@ -15,8 +15,7 @@ public partial class SettingsWindow : Window
     public HotkeyConfig? Result { get; private set; }
 
     /// <summary>数据目录（备份功能要用）。</summary>
-    private static readonly string _dataDir = System.IO.Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GalQuoteCollector");
+    private static readonly string _dataDir = Services.AppPaths.DataDirectory;
 
     public SettingsWindow(Window owner, HotkeyConfig currentConfig, string currentDisplay)
     {
@@ -34,6 +33,11 @@ public partial class SettingsWindow : Window
         _newConfig = cfg.Clone();
         AutoStartCheckBox.IsChecked = cfg.AutoStart;
         SwallowHotkeyCheckBox.IsChecked = cfg.SwallowCaptureHotkey;
+        DataDirBox.Text = Services.AppPaths.DataDirectory;
+        DataDirHintText.Text = $"来源：{Services.AppPaths.Source}。" +
+            $"想换位置：把数据文件夹整体拷过去，再给这个系统设一个环境变量 {Services.AppPaths.EnvironmentVariableName}=新路径" +
+            "（或在程序目录旁建一个 data\\ 文件夹，变成绿色便携版），重启程序即可。" +
+            "双系统/多台电脑共用同一份数据时，都指向同一个文件夹就行 —— 但别让两个系统同时开着写同一份。";
         UpdatePrereleaseCheck.IsChecked = cfg.UpdateIncludePrerelease;
         UpdateChannelHint.Text = $"当前版本 {ViewModels.MainViewModel.AppVersion}"
             + (ViewModels.MainViewModel.AppVersion.Contains("-beta", StringComparison.OrdinalIgnoreCase)
@@ -308,11 +312,67 @@ public partial class SettingsWindow : Window
         JpegQualityLabel.Text = ((int)e.NewValue).ToString();
     }
 
+    /// <summary>
+    /// 切换数据目录：选一个文件夹 → 可选把现有数据搬过去 → 写用户环境变量 GALQUOTE_DATA。
+    /// 选「程序目录旁的 data」时就改成便携模式（写标记文件）。都需要重启程序才生效。
+    /// </summary>
+    private void OnChangeDataDir(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var current = Services.AppPaths.DataDirectory;
+            var chosen = BrowseForFolder("选择新的数据目录（例如双系统共用的 D:\\GalQuoteData）");
+            if (string.IsNullOrWhiteSpace(chosen)) return;
+            if (string.Equals(chosen.TrimEnd('\\'), current.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+            {
+                Views.InfoDialog.Show(this, "切换数据目录", "这就是当前正在用的目录，不用切换。", icon: Views.InfoDialogIcon.Information);
+                return;
+            }
+
+            var move = Views.InfoDialog.Show(this, "要顺便把现有数据搬过去吗？",
+                $"当前数据：{current}\n新位置：{chosen}\n\n" +
+                "· 选「是」：把 quotes.db / settings.json / usage.json / 证书一起复制到新位置（原目录保留不删，安全）\n" +
+                "· 选「否」：只在重启后改用新位置（适合新位置已经有数据的情况，比如双系统的另一套）",
+                Views.InfoDialogButtons.YesNo, Views.InfoDialogIcon.Question);
+            var doCopy = move == Views.InfoDialogResult.Yes;
+
+            if (doCopy)
+            {
+                System.IO.Directory.CreateDirectory(chosen);
+                int copied = 0;
+                foreach (var name in new[] { "quotes.db", "quotes.db-wal", "quotes.db-shm", "settings.json", "usage.json", "web-cert.pfx" })
+                {
+                    var src = System.IO.Path.Combine(current, name);
+                    if (!System.IO.File.Exists(src)) continue;
+                    System.IO.File.Copy(src, System.IO.Path.Combine(chosen, name), true);
+                    copied++;
+                }
+                Views.InfoDialog.Show(this, "已复制", $"复制了 {copied} 个数据文件到：\n{chosen}\n\n（截图目录在「截图与黑边」里单独设置，需要的话一并改。）",
+                    icon: Views.InfoDialogIcon.Information);
+            }
+
+            // 指向新位置：是本程序目录旁的 data\ 就走便携模式（写标记），否则写用户环境变量
+            var portable = Services.AppPaths.PortableDataDirectory;
+            string msg;
+            bool ok;
+            if (portable.Length > 0 && string.Equals(chosen.TrimEnd('\\'), portable.TrimEnd('\\'), StringComparison.OrdinalIgnoreCase))
+                ok = Services.AppPaths.EnablePortableMode(out msg);
+            else
+                ok = Services.AppPaths.SetEnvironmentDataDirectory(chosen, out msg);
+
+            Views.InfoDialog.Show(this, ok ? "已切换（重启生效）" : "切换失败",
+                msg + "\n\n重启程序后生效。想改回默认位置：删掉环境变量 GALQUOTE_DATA（或便携模式下的标记文件）再重启。",
+                icon: ok ? Views.InfoDialogIcon.Information : Views.InfoDialogIcon.Warning);
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "切换失败", ex.Message, icon: Views.InfoDialogIcon.Warning);
+        }
+    }
+
     private void OnOpenDataDir(object sender, RoutedEventArgs e)
     {
-        var dir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GalQuoteCollector");
+        var dir = Services.AppPaths.DataDirectory;
         try
         {
             Directory.CreateDirectory(dir);
@@ -929,6 +989,29 @@ public partial class SettingsWindow : Window
             UpdateWebUrls();
             Views.InfoDialog.Show(this, "网络与隐私",
                 "为了安全，下面这些已经帮你补上了：\n" + string.Join("\n", notes), icon: Views.InfoDialogIcon.Information);
+        }
+    }
+
+    /// <summary>设置界面里直接导出设置（和「···」菜单里那个一样的效果）。</summary>
+    private void OnExportSettingsHere(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "设置包 (*.zip)|*.zip",
+                FileName = $"GalQuote 设置-{DateTime.Now:yyyy-MM-dd}.zip",
+                Title = "导出设置"
+            };
+            if (dialog.ShowDialog() != true) return;
+            var path = Services.SettingsIo.ExportZip(_newConfig, dialog.FileName);
+            Views.InfoDialog.Show(this, "设置已导出",
+                $"文件：{path}\n\n含 settings.json（完整，注意保管）+ settings.md（摘要，已打码）。",
+                icon: Views.InfoDialogIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            Views.InfoDialog.Show(this, "导出设置失败", ex.Message, icon: Views.InfoDialogIcon.Warning);
         }
     }
 

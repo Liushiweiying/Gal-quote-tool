@@ -145,6 +145,11 @@
                             <MenuItem Header="打包导出（含截图）" Command="{Binding ExportBundledCommand}"/>
                             <MenuItem Header="打包导入（含截图）" Command="{Binding ImportBundledCommand}"/>
                             <Separator/>
+                            <MenuItem Header="导出设置…" Command="{Binding ExportSettingsCommand}"
+                                      ToolTip="把设置导出成一个 zip（settings.json + 人可读摘要），换系统 / 换电脑时用"/>
+                            <MenuItem Header="导入设置…" Command="{Binding ImportSettingsCommand}"
+                                      ToolTip="读回导出的设置包（.zip 或 .json），立即生效"/>
+                            <Separator/>
                             <MenuItem Header="时长" Command="{Binding OpenUsageStatsCommand}"/>
                             <MenuItem Header="统计" Command="{Binding ShowStatsCommand}"/>
                             <Separator/>

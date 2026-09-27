@@ -67,20 +67,15 @@ public partial class MainViewModel : ObservableObject
             Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
             "GalQuoteCollector");
 
-        // Always use %LOCALAPPDATA% for data. From now on everything is READ and
-        // WRITTEN under "GalQuoteCollector"; legacy "GalgameQuoteCollector" data is
-        // only READ once (copied below), never written to.
-        _dataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GalQuoteCollector");
+        // 数据目录：优先环境变量 GALQUOTE_DATA，其次 exe 旁的 data\（便携模式），最后 %LOCALAPPDATA%。
+        // 双系统 / 放共享盘时，两个系统设同一个 GALQUOTE_DATA 就能共用同一份语录库。
+        _dataDir = Services.AppPaths.DataDirectory;
 
         // Backward compatibility (Galgame -> Gal rename): if the legacy data dir holds
         // a real database and the new dir's DB is still empty, copy the legacy data
         // over so nothing is lost, then use the new dir exclusively. The old dir stays
         // untouched as a backup.
-        var oldDataDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "GalgameQuoteCollector");
+        var oldDataDir = Services.AppPaths.LegacyDataDirectory;
         var oldDbPath = Path.Combine(oldDataDir, "quotes.db");
         if (File.Exists(oldDbPath) && !DbHasQuotes(Path.Combine(_dataDir, "quotes.db")))
             MigrateDataDir(oldDataDir, _dataDir);
@@ -1052,13 +1047,20 @@ public partial class MainViewModel : ObservableObject
             var json = _exportService.ToJson(exportQuotes, tagsByQuote, groupsByQuote, screenshotsByQuote);
             File.WriteAllText(Path.Combine(tempDir, "quotes.json"), json);
 
-            // Include settings and usage data
+            // Include settings, usage data and a human-readable settings summary
             foreach (var fn in new[] { "settings.json", "usage.json" })
             {
                 var src = Path.Combine(_dataDir, fn);
                 if (File.Exists(src))
                     File.Copy(src, Path.Combine(tempDir, fn));
             }
+            try
+            {
+                File.WriteAllText(Path.Combine(tempDir, "settings.md"),
+                    Services.SettingsIo.BuildMarkdown(_settingsService.LoadHotkeyConfig(), maskSecrets: true),
+                    new System.Text.UTF8Encoding(false));
+            }
+            catch (Exception ex) { AppLog.Write($"export bundle: 写 settings.md 失败 {ex.Message}"); }
 
             var zipPath = dialog.FileName;
             if (File.Exists(zipPath)) File.Delete(zipPath);
@@ -1083,6 +1085,98 @@ public partial class MainViewModel : ObservableObject
         };
         if (dialog.ShowDialog() != true) return;
         ImportBundledFrom(dialog.FileName);
+    }
+
+    /// <summary>导出设置（settings.json + 人可读摘要）成一个 zip —— 换系统 / 换电脑时把配置一起带走。</summary>
+    [RelayCommand]
+    private void ExportSettings()
+    {
+        try
+        {
+            var cfg = _settingsService.LoadHotkeyConfig();
+            var dialog = new Microsoft.Win32.SaveFileDialog
+            {
+                Filter = "设置包 (*.zip)|*.zip",
+                FileName = $"GalQuote 设置-{DateTime.Now:yyyy-MM-dd}.zip",
+                Title = "导出设置"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            var path = Services.SettingsIo.ExportZip(cfg, dialog.FileName);
+            StatusText = "设置已导出: " + path;
+            InfoDialog.Show(_window, "设置已导出",
+                $"文件：{path}\n\n" +
+                "包里有三样东西：\n" +
+                "· settings.json —— 完整设置，可直接用「导入设置…」读回来\n" +
+                "· settings.md —— 人可读摘要，敏感字段已打码，可以拿去分享/排查\n" +
+                "· 说明.txt\n\n" +
+                "⚠ settings.json 里含网页访问码和两步验证密钥，属于敏感文件，别随便发出去。\n\n" +
+                "换到另一台机器 / 另一个系统后：「···」→「导入设置…」选这个 zip 即可。\n" +
+                "（语录库和截图不在这个包里 —— 要搬数据用「打包导出（含截图）」，或者直接拷数据目录）",
+                icon: InfoDialogIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            InfoDialog.Show(_window, "导出设置失败", ex.Message, icon: InfoDialogIcon.Error);
+        }
+    }
+
+    /// <summary>导入设置（.zip 或 .json），确认后立即生效。</summary>
+    [RelayCommand]
+    private void ImportSettings()
+    {
+        try
+        {
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Filter = "设置包 (*.zip;*.json)|*.zip;*.json|所有文件 (*.*)|*.*",
+                Title = "导入设置"
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            var cfg = Services.SettingsIo.Read(dialog.FileName);
+            if (cfg == null)
+            {
+                InfoDialog.Show(_window, "导入设置", "这个文件读不出设置内容（不是本程序导出的设置包？）",
+                    icon: InfoDialogIcon.Warning);
+                return;
+            }
+
+            var confirm = InfoDialog.Show(_window, "确认导入设置",
+                "将用这个文件里的设置覆盖当前设置。语录库、截图、使用记录都不受影响。\n\n" +
+                $"· 采集热键：{HotkeyText(cfg)}\n" +
+                $"· 截图目录：{(string.IsNullOrWhiteSpace(cfg.ScreenshotDirectory) ? "（默认）" : cfg.ScreenshotDirectory)}\n" +
+                $"· 网页：{(cfg.WebEnabled ? $"开，端口 {cfg.WebPort}" : "关")}{(cfg.WebAllowExternal ? "，允许公网" : "")}{(cfg.WebTotpEnabled ? "，公网需动态码" : "")}\n" +
+                $"· 自动备份：{(cfg.BackupEnabled ? $"开，保留 {cfg.BackupKeepCount} 份" : "关")}\n" +
+                $"· 游戏名规则：{cfg.GameNameRules.Count} 条\n\n" +
+                "导入后立即生效（网页服务会按新设置重启）。继续吗？",
+                Views.InfoDialogButtons.YesNo, Views.InfoDialogIcon.Question);
+            if (confirm != Views.InfoDialogResult.Yes) return;
+
+            _settingsService.SaveHotkeyConfig(cfg);
+            ApplyConfig(cfg);
+            InfoDialog.Show(_window, "设置已导入",
+                "设置已导入并生效。\n\n如果截图目录变了，程序会自动把已有截图搬过去；" +
+                "若想确认效果，可以打开设置窗口看一眼。", icon: InfoDialogIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            InfoDialog.Show(_window, "导入设置失败", ex.Message, icon: InfoDialogIcon.Error);
+        }
+    }
+
+    /// <summary>给确认对话框用的一行热键描述。</summary>
+    private static string HotkeyText(HotkeyConfig c)
+    {
+        var parts = new List<string>();
+        if (c.Control) parts.Add("Ctrl");
+        if (c.Alt) parts.Add("Alt");
+        if (c.Shift) parts.Add("Shift");
+        if (c.Win) parts.Add("Win");
+        string key;
+        try { key = System.Windows.Input.KeyInterop.KeyFromVirtualKey((int)c.VirtualKey).ToString(); }
+        catch { key = "0x" + c.VirtualKey.ToString("X2"); }
+        return parts.Count == 0 ? key : string.Join("+", parts) + "+" + key;
     }
 
     private void ImportBundledFrom(string zipPath)
@@ -1195,6 +1289,29 @@ public partial class MainViewModel : ObservableObject
             StatusText = skipped > 0
                 ? $"已导入 {imported} 条语录及截图（跳过重复 {skipped} 条）"
                 : $"已导入 {imported} 条语录及截图";
+
+            // 包里带着设置（settings.json）→ 问一下要不要一并应用，换机器时很省事
+            var bundledSettings = Path.Combine(tempDir, "settings.json");
+            if (File.Exists(bundledSettings))
+            {
+                var bundled = Services.SettingsIo.Read(bundledSettings);
+                if (bundled != null)
+                {
+                    var yes = InfoDialog.Show(_window, "顺便导入设置？",
+                        "这个压缩包里还带着一份设置（settings.json）。\n\n" +
+                        $"· 采集热键：{HotkeyText(bundled)}\n" +
+                        $"· 截图目录：{(string.IsNullOrWhiteSpace(bundled.ScreenshotDirectory) ? "（默认）" : bundled.ScreenshotDirectory)}\n" +
+                        $"· 网页：{(bundled.WebEnabled ? $"开，端口 {bundled.WebPort}" : "关")}\n\n" +
+                        "要把它也应用过来吗？（会覆盖当前设置，语录库不受影响）",
+                        Views.InfoDialogButtons.YesNo, Views.InfoDialogIcon.Question);
+                    if (yes == Views.InfoDialogResult.Yes)
+                    {
+                        _settingsService.SaveHotkeyConfig(bundled);
+                        ApplyConfig(bundled);
+                        StatusText = "语录与设置都已导入";
+                    }
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -1221,42 +1338,48 @@ public partial class MainViewModel : ObservableObject
         finally { _hotkeyService.Resume(); }
 
         if (settingsResult == true && dialog.Result != null)
+            ApplyConfig(dialog.Result);
+    }
+
+    /// <summary>
+    /// 把一份设置落地并立即生效：截图目录迁移、补拍热键、网页服务、采集热键、自启、规则。
+    /// 设置窗口保存与「导入设置」都走这里，保证两条路效果一致。
+    /// </summary>
+    private void ApplyConfig(HotkeyConfig newConfig)
+    {
+        _captureDelayMs = newConfig.CaptureDelayMs;
+
+        var newScreenshotDir = newConfig.ScreenshotDirectory;
+        if (!string.IsNullOrWhiteSpace(newScreenshotDir)
+            && !PathsEqual(newScreenshotDir, _screenshotDir))
         {
-            var newConfig = dialog.Result;
-            _captureDelayMs = newConfig.CaptureDelayMs;
+            Directory.CreateDirectory(newScreenshotDir);
+            // Move existing screenshots to the new directory, then recycle-bin the originals
+            MigrateScreenshots(newScreenshotDir);
+            _screenshotDir = newScreenshotDir;
+            _captureService = new CaptureService(_screenshotDir);
+            StatusText = $"截图目录已改为: {_screenshotDir}";
+        }
 
-            var newScreenshotDir = newConfig.ScreenshotDirectory;
-            if (!string.IsNullOrWhiteSpace(newScreenshotDir)
-                && !PathsEqual(newScreenshotDir, _screenshotDir))
-            {
-                Directory.CreateDirectory(newScreenshotDir);
-                // Move existing screenshots to the new directory, then recycle-bin the originals
-                MigrateScreenshots(newScreenshotDir);
-                _screenshotDir = newScreenshotDir;
-                _captureService = new CaptureService(_screenshotDir);
-                StatusText = $"截图目录已改为: {_screenshotDir}";
-            }
+        _hotkeyService.UpdateAddHotkey(newConfig.ToAddModifiers(), newConfig.AddShotVirtualKey);
+        _hotkeyService.SwallowHotkeys = newConfig.SwallowCaptureHotkey;
+        SyncWebServer(newConfig);
 
-            _hotkeyService.UpdateAddHotkey(newConfig.ToAddModifiers(), newConfig.AddShotVirtualKey);
-            _hotkeyService.SwallowHotkeys = newConfig.SwallowCaptureHotkey;
-            SyncWebServer(newConfig);
+        // UpdateHotkey returns false when the primary collides with the add-screenshot
+        // hotkey — the two must stay distinct so a single press can't fire both actions.
+        bool conflict = !_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey);
+        var (autoOk, autoMsg) = ApplySettings(newConfig);
 
-            // UpdateHotkey returns false when the primary collides with the add-screenshot
-            // hotkey — the two must stay distinct so a single press can't fire both actions.
-            bool conflict = !_hotkeyService.UpdateHotkey(newConfig.ToModifiers(), newConfig.VirtualKey);
-            var (autoOk, autoMsg) = ApplySettings(newConfig);
-
-            if (conflict)
-            {
-                InfoDialog.Show(_window, "提示", "采集热键与补拍热键冲突，请选择其他组合键",
-                    icon: InfoDialogIcon.Warning);
-                StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
-            }
-            else
-            {
-                StatusText = $"热键已更改为: {_hotkeyService.CurrentHotkeyDisplay}";
-                if (!autoOk) StatusText += $" | 自启失败: {autoMsg}";
-            }
+        if (conflict)
+        {
+            InfoDialog.Show(_window, "提示", "采集热键与补拍热键冲突，请选择其他组合键",
+                icon: InfoDialogIcon.Warning);
+            StatusText = autoOk ? $"自启: {autoMsg}" : $"自启失败: {autoMsg}";
+        }
+        else
+        {
+            StatusText = $"热键已更改为: {_hotkeyService.CurrentHotkeyDisplay}";
+            if (!autoOk) StatusText += $" | 自启失败: {autoMsg}";
         }
     }
 

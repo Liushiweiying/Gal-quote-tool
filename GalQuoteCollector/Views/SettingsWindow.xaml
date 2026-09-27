@@ -95,6 +95,24 @@
             <!-- ═══ General ═══ -->
             <Border Height="1" Background="#E5E5EA" Margin="0,22,0,0"/><TextBlock x:Name="SecHeaderGeneral" Text="常规" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,16,0,12"/>
 
+            <TextBlock Text="数据目录（语录库 / 设置 / 使用记录 / 证书都在这里）" FontSize="13" Foreground="#555" Margin="0,0,0,4"/>
+            <Grid Margin="0,0,0,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox Grid.Column="0" x:Name="DataDirBox" FontSize="12" Padding="6,5" IsReadOnly="True"
+                         Background="#F7F7FA" BorderBrush="#E0E0E0" VerticalContentAlignment="Center"/>
+                <Button Grid.Column="1" Content="打开" Click="OnOpenDataDir" Margin="6,0,0,0" Padding="10,5" FontSize="12"/>
+                <Button Grid.Column="2" Content="切换数据目录…" Click="OnChangeDataDir" Margin="6,0,0,0" Padding="10,5" FontSize="12"
+                        ToolTip="把数据目录换到别处（例如双系统共用的 D:\GalQuoteData）。会写用户环境变量 GALQUOTE_DATA，重启程序后生效。"/>
+                <Button Grid.Column="3" Content="导出设置…" Click="OnExportSettingsHere" Margin="6,0,0,0" Padding="10,5" FontSize="12"
+                        ToolTip="把配置导出成一个 zip，换电脑 / 另一个系统时带过去"/>
+            </Grid>
+            <TextBlock x:Name="DataDirHintText" Text="" Foreground="#BBB" FontSize="11" Margin="0,0,0,14" TextWrapping="Wrap"/>
+
             <CheckBox x:Name="AutoStartCheckBox" Content="开机时自动启动（最小化到任务栏）"
                       FontSize="13" Foreground="#333" Margin="0,0,0,10"/>
 
@@ -497,6 +515,7 @@
             <Grid Margin="0,0,0,4">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>

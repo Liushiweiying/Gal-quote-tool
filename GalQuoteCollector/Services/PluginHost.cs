@@ -38,9 +38,8 @@ public static class PluginHost
         try { dirs.Add(Path.Combine(AppContext.BaseDirectory, "plugins")); } catch { }
         try
         {
-            var dataDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "GalQuoteCollector");
-            dirs.Add(Path.Combine(dataDir, "plugins"));
+            // 数据目录可能被 GALQUOTE_DATA / 便携模式改过，统一走 AppPaths 解析
+            dirs.Add(Path.Combine(AppPaths.DataDirectory, "plugins"));
         }
         catch { }
         Directories = dirs;

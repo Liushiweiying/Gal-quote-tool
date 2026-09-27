@@ -197,9 +197,7 @@ public partial class App : Application
                     int.TryParse(e.Args[fixIdx + 3], out fromHour);
                     int.TryParse(e.Args[fixIdx + 4], out toHour);
                 }
-                var dataDir = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "GalQuoteCollector");
+                var dataDir = Services.AppPaths.DataDirectory;
                 var (ok, detail) = Services.UsageRepair.MoveLockToApp(dataDir, date, key, fromHour, toHour);
                 Log($"--fix-lock: ok={ok} {detail}");
             }
@@ -218,9 +216,7 @@ public partial class App : Application
                     int.TryParse(e.Args[moveIdx + 4], out fromHour);
                     int.TryParse(e.Args[moveIdx + 5], out toHour);
                 }
-                var dataDir2 = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "GalQuoteCollector");
+                var dataDir2 = Services.AppPaths.DataDirectory;
                 var (ok2, detail2) = Services.UsageRepair.MoveUsage(dataDir2, date, fromKey, toKey, fromHour, toHour);
                 Log($"--move-usage: ok={ok2} {detail2}");
             }
