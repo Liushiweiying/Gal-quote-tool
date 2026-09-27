@@ -281,6 +281,8 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **正式版要包含的内容** = `v1.3.6-beta.2` 的全部 + 之后提交的这些：
   - `6b6f35b` 网页顶栏去掉残留的 `${S.canEdit?...}` 字面量 + 恢复卡片「编辑 / 删除」入口（`S.canEdit` 为真才渲染）+ 只读时隐藏「导入」。
   - TLS 握手失败日志改成可操作提示（origin 填 http://127.0.0.1:8088 或开 No TLS Verify）。
+  - c24e339 数据目录可配置（AppPaths / GALQUOTE_DATA / 便携标记）+ 设置导出导入（SettingsIo）+ NaN 保存崩溃修复。
+  - d904de1 「修复截图路径（换了盘/搬了目录）」（RelinkScreenshots + StorageService.RelinkScreenshotPaths + tools/）。
 - **发布时必须注意**：
   1. **不要**再传 `-p:InformationalVersion=...`（那是预发布专供）。正式版发布命令不带它，程序自报 `v1.3.6`，这样已经装了 `1.3.6-beta.2` 的人（包括用户自己）才会收到「有正式版」的提醒（`1.3.6` > `1.3.6-beta.2`）。
   2. tag/名用 **`v1.3.6`**、`prerelease: false` —— 这样它才会成为 GitHub 的 `releases/latest`，被所有老用户的自动更新看到。
