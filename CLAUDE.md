@@ -291,7 +291,49 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 网页版修完的**验证方式**（发之前可以再跑一遍）：`GalQuoteCollector.Server` 起 8098（`--lan --code X` / 再加 `--read-only` 对照），`msedge --headless=new --dump-dom`，**先把 `<script>` 剥掉**再判断卡片里有没有 `data-act="edit"`。
 
 
-- **静态 HTML 区（`<script>` 之前）里绝对不能出现 `${...}`**：C# 原样字符串不会求值它，但浏览器会把 `${S.canEdit?`<button id="btnImport">导入</button>`:''}` **当成"一段文字 + 一个真按钮 + 一段文字"**解析出来 —— 于是页面顶栏就明晃晃地显示 `${S.canEdit?` 和 `:''}` 两截字面量（顶栏那个 bug 存在了很久，2026-09-26 才修）。模板占位符只能写在 `<script>` 里的 JS 模板字符串中。
+### 截图路径失效（换盘 / 搬目录 / 清空分区）——2026-09-27 踩过，改动前先读
+- **事件**：E 盘被清空（文件搬到 `D:\E_Remote\`），数据库里 69 条截图路径全部指向已不存在的
+  `E:\GalQuoteCollection` → 缩略图、回想、网页全部显示不出图（用户报「图片不显示」）。
+- **程序自带的两个命令治不了这种情况**：
+  - `RematchScreenshots`（重新关联截图）开头就 `if (GetScreenshots(id).Count > 0 || File.Exists(ScreenshotPath)) continue;`
+    —— **跳过已有截图记录的语录**，只服务"没记录"的；我们的记录都在、只是路径死了 → 全被跳过。
+  - `RepairScreenshots`（修复截图关联）只在"没有 Screenshots 行"时用 `ScreenshotPath` 补一行，同样不覆盖已有行。
+  - 结论：**换盘/搬目录要用「修复截图路径（换了盘/搬了目录）」**（`MainViewModel.RelinkScreenshots` →
+    `StorageService.RelinkScreenshotPaths(dir)`）：把"文件确实已不存在"的路径按**同名文件**改指到当前截图目录，
+    同时改 `Screenshots.FilePath` 与 `Quotes.ScreenshotPath`（缩略图用旧字段）；事务提交、幂等、
+    找不到文件的保持原样。实测（数据库副本）：可修 2 条就修 2 条、找不到的 67 条一动不动、总数不变、重跑 0 修复。
+  - 命令行版 `tools/RelinkScreenshots`（`relink-screenshots <db> <新目录> [--apply]`，默认 dry-run）——
+    给无界面版 / 盒子 / 批量场景用，逻辑与程序内一致。
+- **改用户数据前的规矩**（这次照做了，继续保持）：先备份 `quotes.db`（另存一份到别处，带时间戳），
+  先 dry-run 看会改几条，再 `--apply`，最后**复核**（再 dry-run 应为 0 可修），并用程序自己的接口端到端验证
+  （`curl "http://127.0.0.1:8088/api/shot/<id>?k=码"` → 200 + 数 MB，抽样 5 条）。
+- 顺带发现：`Quotes.ScreenshotPath` 里还有 39 条指向更早的 `C:\Users\...\OneDrive\Pictures\Galgame Quote Collection\`
+  （历史遗留字段，真实图片以 `Screenshots` 表为准），一并修掉了。
+- 用户当前截图目录 = `D:\E_Remote\GalQuoteCollection`。**以后搬到双系统共享目录后要再跑一次这个修复。**
+
+### 数据目录与便携模式（2026-09-27 起，AppPaths）
+- 优先级：**环境变量 `GALQUOTE_DATA`** > **`<exe>\data\` 里有标记文件 `.galquote-portable`** > 默认 `%LOCALAPPDATA%\GalQuoteCollector`。
+- **便携模式只认标记文件、不认"文件夹是否存在"**：实测 build 输出目录里有个 5 月遗留的无关 `data\` 文件夹，
+  按"存在即便携"的写法会让程序把数据目录悄悄搬过去，用户看到的是"语录全没了"（空库）。
+  设置 → 常规 的「切换数据目录…」会自动写标记 / 写用户环境变量（选 exe 旁的 data 走标记，选别处走环境变量）。
+- 解析结果进程内缓存一次；`AppLog` / `PluginHost`（插件第 2 个目录）/ `MainViewModel._dataDir` /
+  `App.xaml.cs` 的两个历史修正开关 / `SettingsWindow._dataDir` 全走 `AppPaths`（**别再自己拼 `%LOCALAPPDATA%`**）。
+- 双系统共用同一份数据：两个系统都指向同一个文件夹即可（双系统不会同时运行 → 天然单写者）。
+  **别把这块盘挂到另一台机器上同时开写。**
+
+### 设置导出 / 导入（2026-09-27 起，Services.SettingsIo）
+- `导出设置…`（「···」菜单 + 设置 → 常规）→ zip：`settings.json`（完整，含网页访问码与 TOTP 密钥，
+  **敏感文件**）+ `settings.md`（人可读摘要，访问码/密钥**打码**，可安全分享）+ `说明.txt`。
+- `导入设置…`（「···」菜单）接受 `.zip` 或裸 `.json`，确认后走 `ApplyConfig()`（与设置窗口保存同一条路，
+  热键 / 网页服务 / 自启 / 规则立即生效）。
+- `打包导出（含截图）` 现在附带 `settings.md`；`打包导入` 时若包里带 `settings.json`，会**询问**是否一并应用。
+- 网页端**不带**设置导出（避免把访问码/动态码密钥泄露给局域网访客或公网只读用户）。
+- **NaN 坑**：`HotkeyConfig.WindowLeft/Top/Width/Height` 默认 `double.NaN`，而 `JsonSerializer` 默认
+  **写不出 NaN**（抛 "cannot be written as valid JSON"）→ 全新安装第一次保存设置就会抛异常（平时窗口尺寸已写入才没暴露）。
+  现在读写统一用 `SettingsService.JsonOpts`（含 `NaNDoubleConverter`：NaN/±Infinity ↔ `null`）。
+  **新增任何序列化 HotkeyConfig 的地方都要带上这套选项。**
+
+### 网页版（WebPage.cs）改动的两条硬规矩（2026-09-26 踩过）- **静态 HTML 区（`<script>` 之前）里绝对不能出现 `${...}`**：C# 原样字符串不会求值它，但浏览器会把 `${S.canEdit?`<button id="btnImport">导入</button>`:''}` **当成"一段文字 + 一个真按钮 + 一段文字"**解析出来 —— 于是页面顶栏就明晃晃地显示 `${S.canEdit?` 和 `:''}` 两截字面量（顶栏那个 bug 存在了很久，2026-09-26 才修）。模板占位符只能写在 `<script>` 里的 JS 模板字符串中。
 - **每张卡片的操作栏必须有「编辑 / 删除」入口**（`card()` 里的 `editActs`，`S.canEdit` 为真才渲染）：服务端 `PUT/DELETE /api/quotes/{id}` 和前端 `openEdit/del` 一直都在，但按钮从来没渲染过，等于"网页能改"这个功能一直是死的（2026-09-26 恢复）。只读模式（公网 / `--read-only`）下不渲染，且「导入」按钮也会 `display:none`。
 - 验证方法：`msedge --headless=new --dump-dom "http://127.0.0.1:8098/?k=码"` **必须先把 `<script>…</script>` 剥掉再看**——否则内联 JS 源码里的字符串会让"有没有这个按钮"之类的正则全部误判（第一次验证就踩了这个坑）。
 - **不要用 PowerShell 把网页 API 的返回「读出来再 PUT 回去」（2026-09-26 踩过）**：`curl.exe ... | ConvertFrom-Json` 拿到的中文没问题，但 `-d`/配置文件回传时 PowerShell 把参数按 GBK 编码喂给 curl，结果把 `[未识别到文字]` 写成了乱码 `[鏈嶈瘑鍒埌鏂囧瓧]`（真改坏了 quote 203，随后用 `[IO.File]::WriteAllText(..., UTF8Encoding($false))` + `--data-binary @file` 修复）。要点：① body 一律写进文件再用 `--data-binary @文件`；② 命令里**不要出现非 ASCII 字面量**（用 `[char]0x672A` 这种拼）；③ 测试写操作尽量挑一条无关紧要的语录，或 PUT 回原文并立即复核。
