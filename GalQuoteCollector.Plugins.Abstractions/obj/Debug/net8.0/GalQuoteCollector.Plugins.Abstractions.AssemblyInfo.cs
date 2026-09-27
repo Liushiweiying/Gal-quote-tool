@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("GalQuoteCollector.Plugins.Abstractions")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.3.6.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.3.6+9abb5f9e23d609f574fb26b50d528e2c0c5a4495")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.3.6+c24e339a958b3e6e51bd16225cb82e98f738e839")]
 [assembly: System.Reflection.AssemblyProductAttribute("GalQuoteCollector.Plugins.Abstractions")]
 [assembly: System.Reflection.AssemblyTitleAttribute("GalQuoteCollector.Plugins.Abstractions")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.3.6.0")]

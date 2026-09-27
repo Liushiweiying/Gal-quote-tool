@@ -157,6 +157,8 @@
                             <Separator/>
                             <MenuItem Header="重新关联截图" Command="{Binding RematchScreenshotsCommand}"/>
                             <MenuItem Header="修复截图关联" Command="{Binding RepairScreenshotsCommand}"/>
+                            <MenuItem Header="修复截图路径（换了盘/搬了目录）" Command="{Binding RelinkScreenshotsCommand}"
+                                      ToolTip="数据库里记的截图路径如果指向已经不存在的文件（换盘符、搬目录、双系统换盘后很常见），按同名文件改指到当前截图目录"/>
                             <MenuItem Header="删除未关联截图" Command="{Binding DeleteUnassociatedScreenshotsCommand}"/>
                             <MenuItem Header="批量处理截图黑边" Command="{Binding CropAllBlackBarsCommand}"/>
                             <Separator/>

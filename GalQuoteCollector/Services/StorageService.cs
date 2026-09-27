@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using Microsoft.Data.Sqlite;
 using GalQuoteCollector.Models;
 
@@ -487,6 +489,86 @@ public class StorageService : IDisposable
             while (reader.Read())
                 list.Add(reader.GetString(0));
             return list;
+        }
+    }
+
+    /// <summary>
+    /// 换了盘符 / 搬了截图目录以后修复路径：数据库里**文件已不存在**的截图路径，
+    /// 按同名文件改指到 <paramref name="dir"/> 里的那一份。
+    /// 返回 (修复条数, 新目录里找不到文件条数)；只改"原来的文件确实不在"的记录，不会误伤。
+    /// </summary>
+    public (int fixedCount, int missing) RelinkScreenshotPaths(string dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir)) return (0, 0);
+
+        // 文件名 → 新路径（大小写不敏感）
+        var byName = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var f in Directory.GetFiles(dir))
+            byName[Path.GetFileName(f)] = f;
+
+        lock (_sync)
+        {
+            int fixedCount = 0, missing = 0;
+            using var tx = _connection!.BeginTransaction();
+
+            // ① Screenshots 表
+            var shotUpdates = new List<(long id, string path)>();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT Id, FilePath FROM Screenshots";
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    var id = r.GetInt64(0);
+                    var p = r.IsDBNull(1) ? "" : r.GetString(1);
+                    if (p.Length > 0 && File.Exists(p)) continue;
+                    var name = Path.GetFileName(p);
+                    if (name.Length > 0 && byName.TryGetValue(name, out var np)) shotUpdates.Add((id, np));
+                    else missing++;
+                }
+            }
+            foreach (var (id, path) in shotUpdates)
+            {
+                using var c = _connection.CreateCommand();
+                c.Transaction = tx;
+                c.CommandText = "UPDATE Screenshots SET FilePath = @P WHERE Id = @I";
+                c.Parameters.AddWithValue("@P", path);
+                c.Parameters.AddWithValue("@I", id);
+                c.ExecuteNonQuery();
+            }
+            fixedCount += shotUpdates.Count;
+
+            // ② Quotes.ScreenshotPath（列表缩略图用这个旧字段）
+            var quoteUpdates = new List<(long id, string path)>();
+            using (var cmd = _connection.CreateCommand())
+            {
+                cmd.Transaction = tx;
+                cmd.CommandText = "SELECT Id, ScreenshotPath FROM Quotes WHERE ScreenshotPath IS NOT NULL AND ScreenshotPath <> ''";
+                using var r = cmd.ExecuteReader();
+                while (r.Read())
+                {
+                    var id = r.GetInt64(0);
+                    var p = r.GetString(1);
+                    if (File.Exists(p)) continue;
+                    var name = Path.GetFileName(p);
+                    if (name.Length > 0 && byName.TryGetValue(name, out var np)) quoteUpdates.Add((id, np));
+                }
+            }
+            foreach (var (id, path) in quoteUpdates)
+            {
+                using var c = _connection.CreateCommand();
+                c.Transaction = tx;
+                c.CommandText = "UPDATE Quotes SET ScreenshotPath = @P WHERE Id = @I";
+                c.Parameters.AddWithValue("@P", path);
+                c.Parameters.AddWithValue("@I", id);
+                c.ExecuteNonQuery();
+            }
+            fixedCount += quoteUpdates.Count;
+
+            tx.Commit();
+            AppLog.Write($"relink: 目录={dir} 修复={fixedCount}（Screenshots {shotUpdates.Count} + Quotes {quoteUpdates.Count}）找不到={missing}");
+            return (fixedCount, missing);
         }
     }
 

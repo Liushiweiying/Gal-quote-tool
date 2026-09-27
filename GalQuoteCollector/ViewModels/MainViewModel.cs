@@ -741,6 +741,38 @@ public partial class MainViewModel : ObservableObject
         DoExport([SelectedQuote]);
     }
 
+    /// <summary>
+    /// 换了盘符 / 搬了截图目录以后修复路径：把数据库里指向已消失文件的截图，
+    /// 按同名文件改指到当前截图目录（公网/盒子搬数据后最常用）。
+    /// </summary>
+    [RelayCommand]
+    private void RelinkScreenshots()
+    {
+        if (!Directory.Exists(_screenshotDir))
+        {
+            InfoDialog.Show(_window, "修复截图路径",
+                $"当前截图目录不存在：\n{_screenshotDir}\n\n请先在设置里把截图目录改成实际存放截图的文件夹。",
+                icon: InfoDialogIcon.Warning);
+            return;
+        }
+
+        var confirm = InfoDialog.Show(_window, "修复截图路径",
+            $"将把数据库里**文件已不存在**的截图路径，按同名文件改指到这个目录：\n{_screenshotDir}\n\n" +
+            "只会改「原来的文件确实不在」的记录，不会动其他数据。继续吗？",
+            Views.InfoDialogButtons.YesNo, Views.InfoDialogIcon.Question);
+        if (confirm != Views.InfoDialogResult.Yes) return;
+
+        var (fixedCount, missing) = _storageService.RelinkScreenshotPaths(_screenshotDir);
+        RefreshQuotes();
+        if (SelectedQuote != null) RefreshCurrentScreenshots();
+        StatusText = fixedCount > 0
+            ? $"已修复 {fixedCount} 条截图路径" + (missing > 0 ? $"（另有 {missing} 个文件找不到）" : "")
+            : "没有需要修复的截图路径";
+        InfoDialog.Show(_window, "修复截图路径",
+            $"修复 {fixedCount} 条。" + (missing > 0 ? $"\n还有 {missing} 个截图在当前目录里找不到对应文件（这些语录会显示不出图）。" : ""),
+            icon: missing > 0 ? InfoDialogIcon.Warning : InfoDialogIcon.Information);
+    }
+
     /// <summary>把选中这条语录导出成 ZIP（含截图文件本身），可直接用「打包导入」读回。</summary>
     [RelayCommand]
     private void ExportSelectedZip()
