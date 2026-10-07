@@ -8,7 +8,7 @@
     <RootNamespace>GalQuoteCollector.Server</RootNamespace>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <Version>1.3.6</Version>
+    <Version>1.3.7</Version>
     <RuntimeIdentifiers>win-x64;linux-x64;linux-arm64;linux-arm</RuntimeIdentifiers>
     <InvariantGlobalization>false</InvariantGlobalization>
     <SatelliteResourceLanguages>en;zh-Hans</SatelliteResourceLanguages>

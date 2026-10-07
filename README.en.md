@@ -105,6 +105,20 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.7 (2026-10-07)
+- **Stable release**: includes everything from the v1.3.6 beta line (HTTP/HTTPS auto-detect, TOTP for public access, TV mode, QR plugin, headless server) plus the fixes below
+- **Fixed: web page edit/delete buttons** - the per-card action buttons were never rendered, so editing quotes from your phone never worked; a leftover template placeholder in the header is gone too
+- **New: configurable data directory** (Settings - General): use the `GALQUOTE_DATA` environment variable, or drop a marked `data\` folder next to the exe for a portable install. Two Windows installs / a NAS can share one library by pointing at the same folder
+- **New: export / import settings** ("..." - Export settings): produces a zip with the full `settings.json` plus a human-readable `settings.md` with secrets masked; import it on another machine and everything (hotkey, web, backup) applies immediately
+- **New: repair screenshot paths** ("..." menu): after a drive letter change or folder move, dead paths in the database are re-pointed to the same-named files in the current screenshot directory (only genuinely broken rows are touched)
+- **New: restore original screenshots** ("..." menu): the pre-processing originals are kept in `_originals`, so you can undo a crop at any time
+- **Fixed: additional (re-capture) screenshots ignored black-bar handling** - they now use the same pipeline as normal captures
+- **Improved: clearer black-bar results** - batch processing now reports processed / no bars / skipped (dark frame) / failed separately, with file names
+- **Improved: cleaner black-bar removal** - the 1px anti-aliasing line at capture borders is now trimmed, while dark artwork (night skies, dark scenes) is no longer mistaken for bars
+- **Fixed: first settings save on a fresh install could fail** (NaN window bounds cannot be serialized to JSON)
+- **Fixed: auto-start broke when the Windows user name contains non-ASCII characters** (the launcher script is now written as UTF-16LE with BOM)
+- **Improved**: TLS handshake failures through a tunnel / reverse proxy now log an actionable hint (use `http://127.0.0.1:port` as origin, or enable No TLS Verify)
+
 ### v1.3.6 (2026-09-26) · beta
 - **New: three web "access protocol" modes** — Auto (both `http://` and `https://` work on the same port, recommended) / HTTP only / HTTPS only. A mismatch between the app and a tunnel or reverse-proxy origin used to end in `SSL handshake failed` / 502; now either scheme is answered. The self-signed certificate is generated lazily, only when a TLS connection actually arrives.
 - **New: "include betas" update channel** (Settings → General, off by default). With it on, the update check also considers pre-releases; leave it off to get stable builds only. Pre-release builds report a `-beta` version, so **beta users are still notified when the stable release lands**.

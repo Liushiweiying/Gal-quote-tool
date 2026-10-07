@@ -277,14 +277,17 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；**GitHub 令牌用 CredRead 从 Windows 凭据管理器读**（target `git:https://github.com`，用户 `Liushiweiying`，令牌 40 位）：`Advapi32!CredRead(target, 1, 0, out ptr)` + `CREDENTIAL.CredentialBlob`（Unicode）。**不要用 `"protocol=https..." | git credential fill`**——PowerShell 把字符串管道喂给 native exe 的 stdin 现在会失败，git 报 `refusing to work with credential missing protocol field`（v1.3.1 发布时踩过；`cmd /c "git credential fill < file"` 也可用，但 CredRead 更省事）。
 - **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法（**路径必须用正斜杠**：2026-09-23 实测 `"@D:\\a\\b.exe"` 的反斜杠被 curl 当转义吃掉，报 `Failed to open D:ab.exe`，之前"传上去的还是旧字节"就是这个原因）：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
-### 待发：正式版 v1.3.6（用户 2026-09-26 定：网页修复攒着和正式版一起发）
+### 已发布 v1.3.7（2026-10-07）——原「待发 v1.3.6」里的东西全在这里
 - **正式版要包含的内容** = `v1.3.6-beta.2` 的全部 + 之后提交的这些：
   - `6b6f35b` 网页顶栏去掉残留的 `${S.canEdit?...}` 字面量 + 恢复卡片「编辑 / 删除」入口（`S.canEdit` 为真才渲染）+ 只读时隐藏「导入」。
   - TLS 握手失败日志改成可操作提示（origin 填 http://127.0.0.1:8088 或开 No TLS Verify）。
   - c24e339 数据目录可配置（AppPaths / GALQUOTE_DATA / 便携标记）+ 设置导出导入（SettingsIo）+ NaN 保存崩溃修复。
   - d904de1 「修复截图路径（换了盘/搬了目录）」（RelinkScreenshots + StorageService.RelinkScreenshotPaths + tools/）。
 - **发布时必须注意**：
-  1. **不要**再传 `-p:InformationalVersion=...`（那是预发布专供）。正式版发布命令不带它，程序自报 `v1.3.6`，这样已经装了 `1.3.6-beta.2` 的人（包括用户自己）才会收到「有正式版」的提醒（`1.3.6` > `1.3.6-beta.2`）。
+  0. **正式版发布命令不要传 ``-p:InformationalVersion``**（那是预发布专供），程序自报 csproj 里的版本号。
+   **⚠ 版本号必须比"用户当前在跑的自报版本"更高**：2026-10-07 这次，用户自己编译的构建自报 ``1.3.6``，
+   若按原计划发 ``v1.3.6`` 他**收不到更新提醒**（同号不算新）→ 因此改发 **``v1.3.7``**。
+   发布前先确认用户当前版本：``(Get-Item <他跑的那个exe>).VersionInfo.ProductVersion``。
   2. tag/名用 **`v1.3.6`**、`prerelease: false` —— 这样它才会成为 GitHub 的 `releases/latest`，被所有老用户的自动更新看到。
   3. README 三种语言里 v1.3.6 那段把「· beta」和那句"自动更新只推正式版"的说明改成正式版口径。
   4. 四个产物照旧（记得 `publish-v136\plugins\` 要在）+ 签名 + curl 上传 + 逐个核对 digest。
@@ -383,6 +386,14 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - **beta 发布约定（2026-09-26 起）**：tag/名用 `vX.Y.Z-beta[.N]` + `prerelease: true`。GitHub 的 `releases/latest`（`UpdateService` 默认看的那个）**不含预发布**，所以 beta 不会自动推给用户。
   - **beta 构建必须自报预发布版本号**：发布时加 `-p:InformationalVersion=1.3.6-beta.2`（**和 tag 去掉 v 后完全一致**，否则会自己提示自己）。`MainViewModel.AppVersion` 优先读 InformationalVersion（会去掉 `+commit` 段），所以：`1.3.6`（正式）> `1.3.6-beta.2` > `1.3.6-beta`，beta 用户以后能正常收到正式版提醒。版本比较在 `UpdateService.CompareVersions`，有单测脚本覆盖。
   - 已发布：`v1.3.6-beta`（**没有** beta 频道开关，自报 `1.3.6`，别用）、`v1.3.6-beta.2`（有开关，自报 `1.3.6-beta.2`，从这个开始用）。
+- **PowerShell 写 ``git commit -m`` 时消息里带英文双引号会被拆参**（2026-10-07 踩过）：``git commit -m @'…"…"'@`` 里出现 ``"`` 后，
+  PowerShell 重新拼命令行时把消息截断，剩下的当成 pathspec → ``error: pathspec '…' did not match any file(s)``（提交根本没发生）。
+  **正确做法：把消息写进文件（UTF-8 无 BOM）再 ``git commit -F <文件>``。**
+- **用字节级方式改文本文件时小心"双 BOM"**（2026-10-07 踩过，直接把 csproj 写坏、``dotnet publish`` 报
+  ``MSB4025: Data at the root level is invalid``）：``UTF8Encoding.GetString(bytes)`` **会把 BOM 当成 U+FEFF 字符**读进字符串，
+  再用 ``New-Object System.Text.UTF8Encoding($true)`` 写回就会**再写一个 BOM** → 文件头变成两个 BOM，XML 解析直接失败。
+  正确做法：读的时候用 ``UTF8Encoding($false).GetString()``（或 ``GetString`` 后 ``TrimStart([char]0xFEFF)``），
+  或者用 ``[System.IO.File]::ReadAllBytes`` 时先剥掉 BOM 再处理。改完 csproj/iss 之类文件后**立刻验证能解析**。
 - **直连 github.com 被墙时用本地 FlClash 代理推 git（2026-09-26 实测）**：本机 `api.github.com` / `uploads.github.com` 直连正常（所以 API 调用、上传资产都没问题），但 **`github.com:443` 超时**（`git push` 报 `Failed to connect to github.com port 443`）。FlClash 的混合代理口在本机 **127.0.0.1:7890**，所以：
   `git -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 push origin master`
   排查顺序：`curl -sS -o NUL -w "%{http_code}" https://github.com`（000 = 不通）→ `Get-Process | ? ProcessName -match "clash|v2ray|sing-box"` + 扫 7890/7897/10809 等端口找代理。
