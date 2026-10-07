@@ -277,6 +277,24 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 上传发布附件：删除旧附件（DELETE /releases/assets/{id}）→ POST `upload_url?name=xxx`；**GitHub 令牌用 CredRead 从 Windows 凭据管理器读**（target `git:https://github.com`，用户 `Liushiweiying`，令牌 40 位）：`Advapi32!CredRead(target, 1, 0, out ptr)` + `CREDENTIAL.CredentialBlob`（Unicode）。**不要用 `"protocol=https..." | git credential fill`**——PowerShell 把字符串管道喂给 native exe 的 stdin 现在会失败，git 报 `refusing to work with credential missing protocol field`（v1.3.1 发布时踩过；`cmd /c "git credential fill < file"` 也可用，但 CredRead 更省事）。
 - **上传务必用 curl 配置文件（`curl.exe --ssl-no-revoke -sS -K xxx.cfg`）**：本机 shell 会把带空格的参数拆开（`-H "Authorization: token gho_..."` 被拆成 3 个参数 → curl 把 token 当成 URL → `curl: (3) URL rejected: Bad hostname`，**四个文件全部静默失败**，而 PowerShell 仍打印自定义的“uploaded”）。cfg 写法（**路径必须用正斜杠**：2026-09-23 实测 `"@D:\\a\\b.exe"` 的反斜杠被 curl 当转义吃掉，报 `Failed to open D:ab.exe`，之前"传上去的还是旧字节"就是这个原因）：`url = "https://uploads.github.com/repos/<owner>/<repo>/releases/<id>/assets?name=<name>"` / `request = "POST"` / `header = "Authorization: token <token>"` / `header = "Content-Type: application/octet-stream"` / `data-binary = "@D:/path/file.exe"`（路径用正斜杠，避免 cfg 里的反斜杠转义）。上传后必须用 API 复核 `assets` 的 name/size/state，别只看脚本自己的日志。
 
+### 更新器（2026-10-07 v1.3.8 修的两个真 bug）
+- **绝不要把更新包下到「运行目录 / 下载目录」里的同名文件上**：单文件版常常就跑在
+  `C:\Users\…\Downloads\Gal-quote-tool.exe`，而资产名也是 `Gal-quote-tool.exe` → 下载目标就是**正在运行的 exe**
+  → Windows 文件锁 → `The process cannot access the file … being used by another process`（用户实测报错）。
+  现在 `DownloadAsync` 统一下到 `%TEMP%\gal-update-<guid>\`；替换/解压交给 `StartApply` 的 PowerShell 助手
+  在本进程退出后做（helper 里 replace/extract 完成后再删这个临时目录；`run`=安装器不删，它自己还在跑）。
+- **升级形态要"看得出、能改"**：`UpdateDialog` 现在有「升级方式」下拉（**只列 release 里真实存在的包**）
+  ＋一行「检测到的形态 → 将下载 xxx」，用户手动改过会标注。判定顺序（`DetectInstallForm`）：
+  `unins000.exe` / `unins000.dat` → 注册表 `InstallLocation`（含按 `DisplayName` 兜底遍历，
+  安装目录被搬动过、AppId 变了也认得出）→ 同目录有 `Gal-quote-tool.dll` + `deps.json` = 文件夹版 → 否则单文件版。
+- **单文件版必须区分 FDD / SCD**：只看文件名不够（用户会把 `_selfcontained` 改名成 `Gal-quote-tool.exe`），
+  再加体积判断（>80MB 视为自包含），否则自包含版会被换成"需要 .NET 运行时"的包 → 替换后可能起不来。
+  可测入口 `PreferredAssetName(form, exeName, size)`。
+- **`BuildUpdateInfo(tag, body, assets, form)` 是纯函数**（资产列表 + 形态 → 选出包 + 登记各形态可用资产），
+  单测直接喂资产列表即可，不用联网；`CheckAsync` 只负责取 JSON 再调它。
+- 验证方式（本次用的）：`%TEMP%` 下建控制台项目 `ProjectReference` 主程序 →
+  ① 断言五种"名字/体积 → 选包"组合；② 用**线上真实 release** 跑 `CheckAsync` 与 `BuildUpdateInfo` 三种形态；
+  ③ 真下一次并核对 sha256 与体积、确认落在 `gal-update-*` 临时目录里。
 ### 已发布 v1.3.7（2026-10-07）——原「待发 v1.3.6」里的东西全在这里
 - **正式版要包含的内容** = `v1.3.6-beta.2` 的全部 + 之后提交的这些：
   - `6b6f35b` 网页顶栏去掉残留的 `${S.canEdit?...}` 字面量 + 恢复卡片「编辑 / 删除」入口（`S.canEdit` 为真才渲染）+ 只读时隐藏「导入」。

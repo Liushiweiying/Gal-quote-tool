@@ -16,6 +16,13 @@
         <StackPanel Margin="22,18">
             <TextBlock x:Name="TitleText" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" TextWrapping="Wrap"/>
             <TextBlock x:Name="VersionText" FontSize="12" Foreground="#888" Margin="0,5,0,0"/>
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                <TextBlock Text="升级方式：" FontSize="12" Foreground="#888" VerticalAlignment="Center"/>
+                <ComboBox x:Name="FormCombo" FontSize="12" MinWidth="220" VerticalAlignment="Center"
+                          SelectionChanged="OnFormChanged"
+                          ToolTip="默认按当前程序的部署形态自动选择；也可以手动换成别的包"/>
+                <TextBlock x:Name="PlanText" FontSize="12" Foreground="#888" Margin="10,0,0,0" VerticalAlignment="Center"/>
+            </StackPanel>
             <TextBox x:Name="BodyBox" IsReadOnly="True" Height="190" Margin="0,12,0,0"
                      VerticalScrollBarVisibility="Auto" TextWrapping="Wrap"
                      Background="#FAFAFA" BorderBrush="#E0E0E0" FontSize="12" Foreground="#444"/>

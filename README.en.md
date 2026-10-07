@@ -105,6 +105,11 @@ dotnet publish -r win-x64 -c Release --self-contained true -p:PublishSingleFile=
 
 ## Changelog
 
+### v1.3.8 (2026-10-07)
+- **Fixed: single-file installs failed to update with "the file is being used by another process"** - the package used to be downloaded into your Downloads folder under the same name, and a single-file install often *runs from* `Downloads\Gal-quote-tool.exe`, so the download target was the running executable and Windows blocked it. Downloads now go to a private temp folder and are applied after the app exits (the temp folder is cleaned up afterwards)
+- **Improved: you can see (and change) which package will be downloaded** - the dialog now has an "Upgrade method" dropdown (installer / folder / single-file, listing only the packages this release actually provides) plus an explicit "detected form -> will download X" line. A relocated install directory is now also recognised as an installer build via its registry display name
+- **Fixed: a renamed self-contained build would download the runtime-dependent package** - single-file updates now detect self-contained builds by file size as well as by name (about 27 MB = needs .NET, about 181 MB = self-contained)
+
 ### v1.3.7 (2026-10-07)
 - **Stable release**: includes everything from the v1.3.6 beta line (HTTP/HTTPS auto-detect, TOTP for public access, TV mode, QR plugin, headless server) plus the fixes below
 - **Fixed: web page edit/delete buttons** - the per-card action buttons were never rendered, so editing quotes from your phone never worked; a leftover template placeholder in the header is gone too

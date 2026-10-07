@@ -13,7 +13,7 @@
     "D:\\visual studio share\\NuGetPackages": {}
   },
   "project": {
-    "version": "1.3.7",
+    "version": "1.3.8",
     "restore": {
       "projectUniqueName": "D:\\Galgame-quote-tool\\GalQuoteCollector.Plugins.Abstractions\\GalQuoteCollector.Plugins.Abstractions.csproj",
       "projectName": "GalQuoteCollector.Plugins.Abstractions",

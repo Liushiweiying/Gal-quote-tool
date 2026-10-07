@@ -30,21 +30,81 @@ public partial class UpdateDialog : Window
         _onSkipped = onSkipped;
 
         TitleText.Text = $"发现新版本 {info.Tag}";
-        VersionText.Text = $"当前版本: {currentVersion}　·　升级方式: {UpdateService.FormLabel(info.Form)}";
         BodyBox.Text = string.IsNullOrWhiteSpace(info.Body) ? "（无更新说明）" : info.Body;
-        DownloadBtn.Content = info.Form == InstallForm.Installer ? "下载并安装" : "下载并更新";
 
-        if (string.IsNullOrWhiteSpace(info.AssetUrl))
+        // 让用户看得见「检测到什么部署形态 / 会下哪个包」，也能手动换成别的包
+        // （以前只写"将下载 publish-folder.zip"，用户会以为下错了）
+        _loadingForms = true;
+        foreach (var f in new[] { InstallForm.Installer, InstallForm.Folder, InstallForm.SingleFile })
         {
+            if (!info.CanUse(f)) continue;
+            FormCombo.Items.Add(new System.Windows.Controls.ComboBoxItem
+            {
+                Content = UpdateService.FormLabel(f),
+                Tag = f
+            });
+        }
+        _loadingForms = false;
+
+        var selected = -1;
+        for (int i = 0; i < FormCombo.Items.Count; i++)
+            if (FormCombo.Items[i] is System.Windows.Controls.ComboBoxItem it && it.Tag is InstallForm f && f == info.Form)
+                selected = i;
+        if (selected < 0 && FormCombo.Items.Count > 0) selected = 0;
+        if (selected >= 0) FormCombo.SelectedIndex = selected;
+        else FormCombo.IsEnabled = false;
+
+        VersionText.Text = $"当前版本: {currentVersion}";
+        RefreshPlanText();
+    }
+
+    private bool _loadingForms;
+
+    /// <summary>把「检测到的形态 → 将下载的包」写清楚。</summary>
+    private void RefreshPlanText()
+    {
+        var detected = UpdateService.FormLabel(_info.DetectedForm);
+        if (string.IsNullOrWhiteSpace(_info.AssetUrl))
+        {
+            FormCombo.IsEnabled = false;
+            PlanText.Text = "（这个版本没有可下载的包）";
             DownloadBtn.IsEnabled = false;
             StatusText.Text = "未找到可下载的更新包";
+            return;
         }
-        else
+
+        var chosen = UpdateService.FormLabel(_info.Form);
+        PlanText.Text = chosen == detected
+            ? $"将下载 {_info.AssetName}"
+            : $"将下载 {_info.AssetName}（检测到的是「{detected}」，已手动改为「{chosen}」）";
+        if (_info.FellBackToSetup)
+            PlanText.Text += "　·　当前形态没有对应的包，已改用安装包";
+        DownloadBtn.Content = _info.Form == InstallForm.Installer ? "下载并安装" : "下载并更新";
+        DownloadBtn.IsEnabled = true;
+    }
+
+    /// <summary>用户手动换了升级方式 → 切到那个形态的资产。</summary>
+    private void OnFormChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
+    {
+        if (_loadingForms) return;
+        if (FormCombo.SelectedItem is not System.Windows.Controls.ComboBoxItem item) return;
+        if (item.Tag is not InstallForm form) return;
+        if (form == _info.Form) { RefreshPlanText(); return; }
+
+        // 已经下载完了才换方式 → 之前的下载作废，要求重新下载
+        if (_downloadedPath != null)
         {
-            StatusText.Text = info.FellBackToSetup
-                ? $"将下载 {info.AssetName}（未找到与当前部署形态匹配的包，改用安装包）"
-                : $"将下载 {info.AssetName}";
+            _downloadedPath = null;
+            ProgressBar.Visibility = Visibility.Collapsed;
+            ProgressBar.Value = 0;
+            DownloadBtn.Content = "下载并更新";
+            CancelBtn.Content = "取消";
         }
+
+        StatusText.Text = _info.UseForm(form)
+            ? ""
+            : "这个版本里没有该形态的包";
+        RefreshPlanText();
     }
 
     private async void OnDownload(object sender, RoutedEventArgs e)
@@ -73,9 +133,8 @@ public partial class UpdateDialog : Window
 
         try
         {
-            var destDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-            _downloadedPath = await Task.Run(() => _updateService.DownloadAsync(_info, destDir, progress));
+            // 下到独立临时目录（绝不覆盖正在运行的 exe —— 单文件版就跑在 Downloads 里，同名会撞锁）
+            _downloadedPath = await Task.Run(() => _updateService.DownloadAsync(_info, progress));
 
             ProgressBar.Value = 100;
             var how = _info.Form switch

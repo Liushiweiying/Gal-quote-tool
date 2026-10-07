@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -39,6 +40,31 @@ public class UpdateService
         public InstallForm Form { get; set; } = InstallForm.Installer;
         /// <summary>True when the form-matching asset was missing and Setup.exe was used instead.</summary>
         public bool FellBackToSetup { get; set; }
+
+        /// <summary>检测到的部署形态（界面显示用；用户可以在界面上改成别的形态）。</summary>
+        public InstallForm DetectedForm { get; set; } = InstallForm.Installer;
+
+        /// <summary>这个 release 里真正存在的、各部署形态可用的资产（形态 → 资产名）。</summary>
+        public Dictionary<InstallForm, string> AvailableAssets { get; } = new();
+
+        /// <summary>资产名 → (下载地址, sha256 digest)。</summary>
+        internal Dictionary<string, (string url, string digest)> AssetMap { get; } =
+            new(StringComparer.OrdinalIgnoreCase);
+
+        public bool CanUse(InstallForm form) => AvailableAssets.ContainsKey(form);
+
+        /// <summary>切换到某个部署形态对应的资产（用户在界面上手动选的时候调）。</summary>
+        public bool UseForm(InstallForm form)
+        {
+            if (!AvailableAssets.TryGetValue(form, out var name)) return false;
+            if (!AssetMap.TryGetValue(name, out var a)) return false;
+            Form = form;
+            AssetName = name;
+            AssetUrl = a.url;
+            Digest = a.digest;
+            FellBackToSetup = false;
+            return true;
+        }
     }
 
     private const string LatestApi =
@@ -54,16 +80,31 @@ public class UpdateService
         _ => "文件夹版（覆盖目录）"
     };
 
-    /// <summary>Which release asset this deployment should update from.</summary>
+    /// <summary>
+    /// 哪种资产对应这种部署形态。
+    /// 单文件版要注意**自包含版**必须下 `_selfcontained`（否则替换完没有 .NET 运行时可能起不来）：
+    /// 光看文件名不够（用户可能把它改名成 Gal-quote-tool.exe），所以再按体积判断（FDD ~27MB / SCD ~181MB）。
+    /// </summary>
     public static string PreferredAssetName(InstallForm form)
+    {
+        var exe = Environment.ProcessPath ?? "";
+        long size = 0;
+        try { if (File.Exists(exe)) size = new FileInfo(exe).Length; } catch { }
+        return PreferredAssetName(form, Path.GetFileName(exe), size);
+    }
+
+    /// <summary>
+    /// 同上，但显式传入 exe 名字与体积（抽出来是为了能单测：
+    /// **改名后的自包含版必须仍然下 `_selfcontained`**，否则替换完没有 .NET 运行时可能起不来）。
+    /// </summary>
+    public static string PreferredAssetName(InstallForm form, string exeName, long exeSizeBytes)
     {
         if (form == InstallForm.Installer) return "Gal-quote-tool_Setup.exe";
         if (form == InstallForm.Folder) return "publish-folder.zip";
 
-        var exeName = Path.GetFileName(Environment.ProcessPath ?? "Gal-quote-tool.exe");
-        return exeName.Contains("selfcontained", StringComparison.OrdinalIgnoreCase)
-            ? "Gal-quote-tool_selfcontained.exe"
-            : "Gal-quote-tool.exe";
+        var looksSelfContained = (exeName ?? "").Contains("selfcontained", StringComparison.OrdinalIgnoreCase)
+                                 || exeSizeBytes > 80L * 1024 * 1024;
+        return looksSelfContained ? "Gal-quote-tool_selfcontained.exe" : "Gal-quote-tool.exe";
     }
 
     /// <summary>
@@ -77,6 +118,7 @@ public class UpdateService
         {
             var dir = AppContext.BaseDirectory.TrimEnd(Path.DirectorySeparatorChar);
             if (File.Exists(Path.Combine(dir, "unins000.exe"))) return InstallForm.Installer;
+            if (File.Exists(Path.Combine(dir, "unins000.dat"))) return InstallForm.Installer;
             if (IsRegisteredInstallLocation(dir)) return InstallForm.Installer;
 
             if (File.Exists(Path.Combine(dir, "Gal-quote-tool.dll")) &&
@@ -84,7 +126,6 @@ public class UpdateService
                 return InstallForm.Folder;
         }
         catch { }
-
         return InstallForm.SingleFile;
     }
 
@@ -95,6 +136,11 @@ public class UpdateService
             $@"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1",
             $@"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{AppId}_is1"
         };
+        string[] uninstallRoots =
+        {
+            @"SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall",
+            @"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall"
+        };
         var roots = new[] { Registry.LocalMachine, Registry.CurrentUser };
         foreach (var root in roots)
         {
@@ -103,17 +149,36 @@ public class UpdateService
                 try
                 {
                     using var key = root.OpenSubKey(sk);
-                    var loc = key?.GetValue("InstallLocation") as string;
-                    if (string.IsNullOrWhiteSpace(loc)) continue;
-                    if (string.Equals(loc.TrimEnd(Path.DirectorySeparatorChar), dir,
-                            StringComparison.OrdinalIgnoreCase))
-                        return true;
+                    if (MatchesLocation(key?.GetValue("InstallLocation") as string, dir)) return true;
+                }
+                catch { }
+            }
+
+            // 兜底：遍历卸载项按显示名匹配 —— AppId 变过、或者安装目录被搬过（记的是老路径）也能认出来
+            foreach (var ur in uninstallRoots)
+            {
+                try
+                {
+                    using var un = root.OpenSubKey(ur);
+                    if (un == null) continue;
+                    foreach (var sub in un.GetSubKeyNames())
+                    {
+                        using var k = un.OpenSubKey(sub);
+                        var dn = k?.GetValue("DisplayName") as string;
+                        if (string.IsNullOrEmpty(dn) ||
+                            !dn.Contains("Gal Quote", StringComparison.OrdinalIgnoreCase)) continue;
+                        if (MatchesLocation(k!.GetValue("InstallLocation") as string, dir)) return true;
+                    }
                 }
                 catch { }
             }
         }
         return false;
     }
+
+    private static bool MatchesLocation(string? location, string dir)
+        => !string.IsNullOrWhiteSpace(location)
+           && string.Equals(location.TrimEnd(Path.DirectorySeparatorChar), dir, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>Returns update info when a newer version exists, otherwise null.
     /// <paramref name="includePrerelease"/> = true 时改用 releases 列表端点，把测试版（beta）也算进来。</summary>
@@ -156,44 +221,55 @@ public class UpdateService
         if (string.IsNullOrWhiteSpace(tag)) return null;
         if (!IsNewer(tag, currentVersion)) return null;
 
-        var form = DetectInstallForm();
-        var preferred = PreferredAssetName(form);
-        var info = new UpdateInfo { Tag = tag, Form = form };
-        info.Body = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() ?? "" : "";
-
-        if (root.TryGetProperty("assets", out var assets) && assets.ValueKind == JsonValueKind.Array)
+        var body = root.TryGetProperty("body", out var bodyEl) ? bodyEl.GetString() ?? "" : "";
+        var assets = new List<(string name, string url, string digest)>();
+        if (root.TryGetProperty("assets", out var assetsEl) && assetsEl.ValueKind == JsonValueKind.Array)
         {
-            string? fallbackUrl = null, fallbackName = null, fallbackDigest = null;
-            foreach (var a in assets.EnumerateArray())
+            foreach (var a in assetsEl.EnumerateArray())
             {
-                var name = a.GetProperty("name").GetString() ?? "";
-                var url = a.GetProperty("browser_download_url").GetString() ?? "";
-                var digest = a.TryGetProperty("digest", out var d) ? d.GetString() ?? "" : "";
-
-                if (string.Equals(name, preferred, StringComparison.OrdinalIgnoreCase))
-                {
-                    info.AssetUrl = url;
-                    info.AssetName = name;
-                    info.Digest = digest;
-                    break;
-                }
-                if (name.EndsWith("_Setup.exe", StringComparison.OrdinalIgnoreCase))
-                {
-                    fallbackUrl = url;
-                    fallbackName = name;
-                    fallbackDigest = digest;
-                }
+                assets.Add((
+                    a.GetProperty("name").GetString() ?? "",
+                    a.GetProperty("browser_download_url").GetString() ?? "",
+                    a.TryGetProperty("digest", out var d) ? d.GetString() ?? "" : ""));
             }
+        }
+        return BuildUpdateInfo(tag, body, assets, DetectInstallForm());
+    }
 
-            // Form-matching asset missing (older release) → fall back to the installer
-            if (string.IsNullOrEmpty(info.AssetUrl) && fallbackUrl != null)
-            {
-                info.AssetUrl = fallbackUrl;
-                info.AssetName = fallbackName!;
-                info.Digest = fallbackDigest ?? "";
-                info.FellBackToSetup = form != InstallForm.Installer;
-                AppLog.Write($"update: '{preferred}' not found, falling back to {info.AssetName}");
-            }
+    /// <summary>
+    /// 从 release 的资产列表里挑出与部署形态匹配的那个。
+    /// （抽成纯函数是为了能单测：直接喂「资产列表 + 形态」，不依赖本机环境。）
+    /// 规则：优先当前形态对应的包；没有就退回安装包并标记 <see cref="UpdateInfo.FellBackToSetup"/>；
+    /// 同时把各形态可用的资产登记进 <see cref="UpdateInfo.AvailableAssets"/>，界面据此让用户手动切换。
+    /// </summary>
+    public static UpdateInfo BuildUpdateInfo(string tag, string body,
+        IEnumerable<(string name, string url, string digest)> assets, InstallForm form)
+    {
+        var info = new UpdateInfo { Tag = tag, Body = body, DetectedForm = form, Form = form };
+        foreach (var a in assets)
+            if (!string.IsNullOrWhiteSpace(a.name))
+                info.AssetMap[a.name] = (a.url, a.digest);
+
+        // 登记各形态可用的资产（单文件版有两种可能的名字，看 release 里实际有哪个）
+        foreach (var f in new[] { InstallForm.Installer, InstallForm.Folder, InstallForm.SingleFile })
+        {
+            var preferred = PreferredAssetName(f);
+            if (info.AssetMap.ContainsKey(preferred)) { info.AvailableAssets[f] = preferred; continue; }
+            if (f != InstallForm.SingleFile) continue;
+            foreach (var alt in new[] { "Gal-quote-tool.exe", "Gal-quote-tool_selfcontained.exe" })
+                if (info.AssetMap.ContainsKey(alt)) { info.AvailableAssets[f] = alt; break; }
+        }
+
+        if (info.UseForm(form)) return info;
+
+        if (info.UseForm(InstallForm.Installer))
+        {
+            info.FellBackToSetup = form != InstallForm.Installer;
+            AppLog.Write($"update: '{PreferredAssetName(form)}' 在 release 里不存在，改用 {info.AssetName}");
+        }
+        else
+        {
+            AppLog.Write($"update: release 里没有任何可用资产（tag={tag}）");
         }
         return info;
     }
@@ -240,13 +316,19 @@ public class UpdateService
     }
 
     /// <summary>
-    /// Download the asset to <paramref name="destDir"/> with progress reporting,
-    /// verifying the sha256 digest when the release provides one.
+    /// 下载更新包到**独立的临时目录**，返回下载到的文件路径（sha256 校验在下载后立即做）。
+    ///
+    /// ⚠ 千万不要下到运行目录或「下载」文件夹里的同名文件上：单文件版常常就跑在
+    /// `C:\Users\…\Downloads\Gal-quote-tool.exe`，而资产名恰好也是 `Gal-quote-tool.exe`，
+    /// 于是 File.Create 的目标就是**正在运行的 exe** → Windows 文件锁 →
+    /// “The process cannot access the file … because it is being used by another process”（2026-10-07 用户实测）。
+    /// 替换/解压统一交给 <see cref="StartApply"/> 的 PowerShell 助手，在本进程退出后再做。
     /// </summary>
-    public async Task<string> DownloadAsync(UpdateInfo info, string destDir, IProgress<double>? progress = null)
+    public async Task<string> DownloadAsync(UpdateInfo info, IProgress<double>? progress = null)
     {
-        Directory.CreateDirectory(destDir);
-        var dest = Path.Combine(destDir, info.AssetName);
+        var dir = Path.Combine(Path.GetTempPath(), "gal-update-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var dest = Path.Combine(dir, info.AssetName);
 
         using var http = new HttpClient { Timeout = Timeout.InfiniteTimeSpan };
         http.DefaultRequestHeaders.UserAgent.ParseAdd("Gal-quote-tool/update");
@@ -330,6 +412,15 @@ public class UpdateService
                     Expand-Archive -LiteralPath $Source -DestinationPath $Target -Force
                     Start-Process -FilePath $Exe
                   }
+                }
+                # 清理下载用的临时目录（'run' 时不删：安装器还在跑，它自己从那儿启动的）
+                if ($Action -ne 'run') {
+                  try {
+                    $tmpDir = Split-Path -Parent $Source
+                    if ($tmpDir -and (Test-Path -LiteralPath $tmpDir) -and $tmpDir -like '*gal-update-*') {
+                      Remove-Item -LiteralPath $tmpDir -Recurse -Force -ErrorAction SilentlyContinue
+                    }
+                  } catch {}
                 }
                 Remove-Item -LiteralPath $PSCommandPath -Force -ErrorAction SilentlyContinue
                 """;

@@ -1,6 +1,6 @@
 ; Gal Quote Tool — Inno Setup Script
 #define MyAppName "Gal Quote Tool"
-#define MyAppVersion "1.3.7"
+#define MyAppVersion "1.3.8"
 #define MyAppPublisher "Liushiweiying"
 #define MyAppURL "https://github.com/Liushiweiying/Gal-quote-tool"
 #define MyAppExeName "Gal-quote-tool.exe"
@@ -14,7 +14,7 @@ AppPublisherURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableDirPage=no
 DisableProgramGroupPage=yes
-OutputDir=publish-v137
+OutputDir=publish-v138
 OutputBaseFilename=Gal-quote-tool_Setup
 Compression=lzma
 SolidCompression=yes
