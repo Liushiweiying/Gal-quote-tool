@@ -262,7 +262,7 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
 - 逻辑（用户要求，保持简单）：Magpie 在跑 → 直接发超分热键；**按之前若正在缩放别的窗口**（窗口枚举可见）→ 再补发一次（热键是开关语义，第一下只会停掉原会话）；Magpie 没跑 → 只提示一句，不做别的放大。
 - 退出全屏：先等缩放窗口消失（Magpie 会自己结束），再决定是否补发；`WaitForScalingWindowAsync(false, 2500)`。
 
-### 截图黑边 + 回想白底（v1.3.3 起）
+### 截图黑边 + 回想白底（v1.3.3 起；**判据 2026-10-07 已升级为两段式，见上面「黑边处理」一节**）
 - `Services/BlackBarCropper.cs`：检测四周"整行/整列 ≥98.5% 像素 RGB<34"的黑边；裁掉面积 >45% 或剩余过小 → 判定暗色画面，放弃。
   - 文件级：`Crop(path)`（就地，先写 `.crop.tmp` 再替换）、`WhiteFill(path)`（涂白、尺寸不变）；采集后自动裁（配置 `CropBlackBars`，默认开）；「···」→「裁掉截图黑边（全部）」批量；诊断开关 `--crop-bars <文件|目录>`。
 - 回想显示级（**不改文件**）：`Views/Controls/SlideshowImageBars.Apply(bitmap, mode)`，mode 0 原样 / 1 `CroppedBitmap` / 2 复制像素把黑边写成白；顶栏按钮或 `B` 键切换，配置 `SlideshowBarsMode` 记忆；全屏背景随模式黑/白。诊断开关 `--bars-test <文件> <0|1|2>`。
@@ -311,6 +311,39 @@ Converters/     — BoolToVisibilityConverter, ThumbnailConverter, SearchHighlig
   （历史遗留字段，真实图片以 `Screenshots` 表为准），一并修掉了。
 - 用户当前截图目录 = `D:\E_Remote\GalQuoteCollection`。**以后搬到双系统共享目录后要再跑一次这个修复。**
 
+### 黑边处理（v1.3.6 追加，2026-10-07 实测重做，改动前必读）
+用户报的三个问题与真实原因（都用他 89 张真图 + 合成用例量过）：
+1. **补拍不裁剪**（真 bug）：`MainViewModel.CaptureAdditional()` 以前只截图、**完全不调用黑边处理**，
+   而主采集 `CaptureAsync()` 会调。现在两条路都走同一个 `ProcessCaptureBars(path, cfg)`
+   （内部调 `BlackBarCropper.ApplyEx`），日志前缀统一是 `bars[文件名]: 结果 …`，
+   Toast/状态栏都会写「黑边已处理 → WxH / 无黑边（原样）/ 跳过：疑似暗色画面」。
+   **以后新增任何"往截图目录写图"的入口，都要记得调它。**
+2. **「成功失败反了」**：根因是 `Apply` 只返回 `(bool changed, string detail)`，界面只好用
+   `detail.Contains("失败")` 去分类 —— "没有检测到黑边""黑边占比过大跳过"都被塞进同一个「跳过」桶，
+   而"改了文件"才算成功，于是**用户看到有黑带的图被报成「跳过（没有黑边）」**。
+   现在 `ApplyEx` 返回 `BarOutcome`（Changed / NoBars / TooDark / Missing / Error / Disabled），
+   批量对话框按它分四类统计（已处理 / 本来就没黑边 / 疑似暗色画面跳过 / 失败）并列出前 3 个文件名；
+   `Apply` 保留为兼容包装。
+3. **「没裁干净」**：截图边界常残留 1 像素抗锯齿过渡行 —— 老判据要求「≥98.5% 像素 RGB < 34」，
+   那条行只有 71% 达标 → 不裁 → 白底回想里能看到一条细黑线。实测：残留行 平均亮度 31.7、
+   **极差 30.8、标准差 6.5**；而真实暗色画作（星空/头发）的列 平均 12.7~23.2、**极差 54~55、标准差 9~18**。
+   → 所以**"整行都暗"根本区分不出黑边和暗画面**（暗画面也全都 < 64），
+   正解是**两段式**：① 纯黑边（RGB 三通道 < 34 且 ≥98.5%）**无上限**；② 边缘残留（平均亮度 < 45 且 ≥98% 像素 < 64）
+   **每边最多 4 像素**（`ResidueMaxPx`）。
+   - **不要**把 ② 放成无上限！踩过：一度用"max < 64 就算黑边"的无上限版本，
+     真图扫描显示会把 `2026-07-05_112916_540.jpg`（星空画作）左边**吃掉 26 像素**。
+   - 现版本真图回归：89 张里 60 张不动、29 张只清 ≤4 像素、**超过限量 0 张**。
+   - 引擎若用**深灰**（而非纯黑）画边，只会清 4 像素 → 让用户用「四边微调」（正数=多裁）手工补。
+- **`Detect` 只有一份实现**（`DetectCore`），GDI+ `Bitmap` 与 WPF `BitmapSource` 两个重载都调它，
+  改判据只改一处；网页 `?bars=1` 与回想显示级处理都跟着受益。
+- **`_originals` 备份**：处理前会备份原图（`makeBackup` 默认 true，已存在则不覆盖 → 永远是"最初的原图"）。
+  已接 UI：「···」→「**还原截图原图（黑边处理前）**」→ `RestoreScreenshotOriginals`（先确认，再 `Restore` 逐张还原）。
+  往返测试过：还原后与原始**逐字节一致**；重裁不会覆盖最初备份；无备份时明确报错。
+- **给用户的验图入口**：`Gal-quote-tool.exe --crop-bars <文件或目录> [0-3]`（就地改，测试用请先拷贝），
+  `--bars-test <文件> <0|1|2>`（只看显示级效果，不改文件）。
+- 自测方式（本次用的）：`%TEMP%` 下建控制台项目 `ProjectReference` 主程序，
+  ① 合成用例（纯黑边 80px / 抗锯齿残留行 / 深灰边 / 暗色画面带亮点 / 黑边占比 87% / 干净图 / 有黑边图），
+  ② 真图 dry-run 扫描统计「每边会裁掉多少像素」，**必须确认没有图被深挖（>4 像素）**。
 ### 数据目录与便携模式（2026-09-27 起，AppPaths）
 - 优先级：**环境变量 `GALQUOTE_DATA`** > **`<exe>\data\` 里有标记文件 `.galquote-portable`** > 默认 `%LOCALAPPDATA%\GalQuoteCollector`。
 - **便携模式只认标记文件、不认"文件夹是否存在"**：实测 build 输出目录里有个 5 月遗留的无关 `data\` 文件夹，

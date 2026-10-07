@@ -284,7 +284,7 @@
                 <TextBlock Text="下" FontSize="12" VerticalAlignment="Center" Margin="10,0,4,0"/>
                 <TextBox x:Name="BarAdjBBox" Width="46" FontSize="12" Padding="6,4" Background="White" BorderBrush="#DDD"/>
             </StackPanel>
-            <TextBlock Text="批量：主界面「···」→「批量处理截图黑边」；单条：右键语录 →「黑边处理…」（可微调 + 还原原图）"
+            <TextBlock Text="批量：主界面「···」→「批量处理截图黑边」。个别图裁多了/裁少了，用上面的四边微调再处理一次（正数=多裁一点，负数=留一点）；原图备份在截图目录的 _originals 里，可「···」→「还原截图原图」找回。"
                        FontSize="11" Foreground="#BBB" Margin="0,0,0,12" TextWrapping="Wrap"/>
 
             <Border Height="1" Background="#E5E5EA" Margin="0,22,0,0"/><TextBlock x:Name="SecHeaderBackup" Text="数据与备份" FontSize="16" FontWeight="SemiBold" Foreground="#1D1D1F" Margin="0,16,0,12"/><CheckBox x:Name="BackupCheckBox"

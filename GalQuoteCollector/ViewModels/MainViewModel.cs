@@ -382,22 +382,11 @@ public partial class MainViewModel : ObservableObject
             var ocrConfig = _settingsService.LoadHotkeyConfig();
 
             // 按设置处理四周黑边（不操作 / 涂黑 / 涂白 / 裁掉 + 四边微调）
-            var barMode = (Services.BarMode)Math.Clamp(ocrConfig.CaptureBarMode, 0, 3);
-            if (barMode != Services.BarMode.None)
+            var (barOutcome, barDetail, barW, barH) = ProcessCaptureBars(screenshotPath, ocrConfig);
+            if (barOutcome == Services.BarOutcome.Changed && barW > 0 && barH > 0)
             {
-                var (cropped, cropDetail) = Services.BlackBarCropper.Apply(screenshotPath, barMode,
-                    ocrConfig.BarAdjustLeft, ocrConfig.BarAdjustRight, ocrConfig.BarAdjustTop, ocrConfig.BarAdjustBottom);
-                AppLog.Write($"capture bars: {cropDetail}");
-                if (cropped)
-                {
-                    try
-                    {
-                        using var fixedShot = System.Drawing.Image.FromFile(screenshotPath);
-                        shot.Width = fixedShot.Width;
-                        shot.Height = fixedShot.Height;
-                    }
-                    catch { }
-                }
+                shot.Width = barW;
+                shot.Height = barH;
             }
             var text = ocrConfig.OcrEngine switch
             {
@@ -440,7 +429,7 @@ public partial class MainViewModel : ObservableObject
             toast.Show();
 
             restoreWindow = false;
-            StatusText = $"已采集: {quote.PreviewText}   ·   {shot.Width}×{shot.Height} {shot.ModeLabel}";
+            StatusText = $"已采集: {quote.PreviewText}   ·   {shot.Width}×{shot.Height} {shot.ModeLabel}   ·   {BarStatusText(barOutcome, barW, barH)}";
         }
         catch (Exception ex)
         {
@@ -900,9 +889,8 @@ public partial class MainViewModel : ObservableObject
         }
     }
 
-    /// <summary>把已有截图里的黑边统一裁掉（就地覆盖，先弹确认）。</summary>
-    [RelayCommand]
-    private async Task CropAllBlackBars()
+    /// <summary>当前库里所有"文件确实存在"的截图路径（去重）；批量处理与还原都用它。</summary>
+    private List<string> CollectScreenshotFiles()
     {
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var q in _allQuotes)
@@ -914,6 +902,48 @@ public partial class MainViewModel : ObservableObject
                 if (!string.IsNullOrWhiteSpace(p) && File.Exists(p)) files.Add(p);
         }
         catch { }
+        return files.ToList();
+    }
+
+    /// <summary>把截图从 _originals 备份还原成处理前的原图（裁多了、想换模式重裁时用）。</summary>
+    [RelayCommand]
+    private void RestoreScreenshotOriginals()
+    {
+        var withBackup = CollectScreenshotFiles().Where(Services.BlackBarCropper.HasOriginal).ToList();
+        if (withBackup.Count == 0)
+        {
+            InfoDialog.Show(_window, "还原截图原图",
+                "没有找到原图备份。只有被「黑边处理」改过、且当时备份成功的截图才有备份（在截图目录的 _originals 子目录里）。",
+                icon: InfoDialogIcon.Warning);
+            return;
+        }
+
+        if (InfoDialog.Show(_window, "还原截图原图",
+                $"将把 {withBackup.Count} 张截图还原成处理之前的原图（覆盖当前文件）。\n\n" +
+                "还原后可以再用「批量处理截图黑边」按新设置重裁一次。继续吗？",
+                InfoDialogButtons.YesNo, InfoDialogIcon.Question) != InfoDialogResult.Yes) return;
+
+        int ok = 0, failed = 0;
+        foreach (var f in withBackup)
+        {
+            var (success, detail) = Services.BlackBarCropper.Restore(f);
+            AppLog.Write($"restore: {detail}");
+            if (success) ok++; else failed++;
+        }
+
+        RefreshQuotes();
+        if (SelectedQuote != null) RefreshCurrentScreenshots();
+        StatusText = $"已还原 {ok} 张截图原图" + (failed > 0 ? $"，失败 {failed} 张" : "");
+        InfoDialog.Show(_window, "还原完成",
+            $"还原 {ok} 张" + (failed > 0 ? $"，失败 {failed} 张（详见 startup.log）" : "") + "。",
+            icon: failed > 0 ? InfoDialogIcon.Warning : InfoDialogIcon.Information);
+    }
+
+    /// <summary>把已有截图里的黑边统一裁掉（就地覆盖，先弹确认）。</summary>
+    [RelayCommand]
+    private async Task CropAllBlackBars()
+    {
+        var files = CollectScreenshotFiles();
 
         if (files.Count == 0)
         {
@@ -922,34 +952,105 @@ public partial class MainViewModel : ObservableObject
         }
 
         var confirm = InfoDialog.Show(_window, "批量处理黑边",
-            $"将检查 {files.Count} 张截图，把四周的纯黑边裁掉（就地覆盖原文件）。\n\n" +
-            "只裁「整行 / 整列几乎全黑」的边缘；画面本身偏暗、或黑边占比过大的会自动跳过。\n\n继续吗？",
+            $"将检查 {files.Count} 张截图，按当前设置处理四周黑边（就地覆盖原文件）。\n\n" +
+            "· 整行 / 整列几乎纯黑的边缘 → 按设置裁掉 / 涂黑 / 涂白\n" +
+            "· 边缘最多再清 4 像素的抗锯齿残留线\n" +
+            "· 画面本身偏暗、或黑边占比过大的自动跳过（不会误裁暗色画面）\n\n继续吗？",
             InfoDialogButtons.YesNo, InfoDialogIcon.Question);
         if (confirm != InfoDialogResult.Yes) return;
 
-        int cropped = 0, skipped = 0, failed = 0;
+        int changed = 0, noBars = 0, tooDark = 0, failed = 0;
+        var failedNames = new List<string>();
+        var tooDarkNames = new List<string>();
         StatusText = "正在处理黑边…";
         var cfgNow = _settingsService.LoadHotkeyConfig();
         var modeNow = (Services.BarMode)Math.Clamp(cfgNow.CaptureBarMode, 0, 3);
+        var modeName = modeNow switch
+        {
+            Services.BarMode.Crop => "裁掉黑边",
+            Services.BarMode.FillBlack => "黑边涂黑",
+            Services.BarMode.FillWhite => "黑边涂白",
+            _ => "不操作",
+        };
+        if (modeNow == Services.BarMode.None)
+        {
+            InfoDialog.Show(_window, "批量处理黑边",
+                "当前设置是「不操作」，先到「设置 → 截图与黑边」里选一种处理方式（推荐「裁掉黑边」）再试。",
+                icon: InfoDialogIcon.Warning);
+            return;
+        }
         await Task.Run(() =>
         {
             foreach (var f in files)
             {
-                var (ok, detail) = Services.BlackBarCropper.Apply(f, modeNow,
+                var (outcome, detail, w, h) = Services.BlackBarCropper.ApplyEx(f, modeNow,
                     cfgNow.BarAdjustLeft, cfgNow.BarAdjustRight, cfgNow.BarAdjustTop, cfgNow.BarAdjustBottom);
-                AppLog.Write($"crop all: {detail}");
-                if (ok) cropped++;
-                else if (detail.Contains("失败")) failed++;
-                else skipped++;
+                AppLog.Write($"crop all: {outcome} {detail}");
+                switch (outcome)
+                {
+                    case Services.BarOutcome.Changed:
+                        changed++;
+                        break;
+                    case Services.BarOutcome.NoBars:
+                        noBars++;
+                        break;
+                    case Services.BarOutcome.TooDark:
+                        tooDark++;
+                        if (tooDarkNames.Count < 3) tooDarkNames.Add(Path.GetFileName(f));
+                        break;
+                    default:
+                        failed++;
+                        if (failedNames.Count < 3) failedNames.Add(Path.GetFileName(f));
+                        break;
+                }
             }
         });
-        StatusText = $"黑边处理完成：处理 {cropped} 张，跳过 {skipped} 张，失败 {failed} 张";
+        StatusText = $"黑边处理（{modeName}）完成：处理 {changed} 张，无黑边 {noBars} 张，跳过 {tooDark} 张，失败 {failed} 张";
         RefreshQuotes();
+        var extra = "";
+        if (tooDarkNames.Count > 0)
+            extra += $"\n\n跳过（疑似暗色画面，未改动）：{string.Join("、", tooDarkNames)}{(tooDark > 3 ? " 等" : "")}";
+        if (failedNames.Count > 0)
+            extra += $"\n\n失败：{string.Join("、", failedNames)}{(failed > 3 ? " 等" : "")}（详情见 startup.log）";
         InfoDialog.Show(_window, "完成",
-            $"裁了 {cropped} 张，跳过 {skipped} 张（没有黑边或画面偏暗），失败 {failed} 张。\n\n" +
-            "截图已被就地替换，可点「修复截图关联」让列表刷新缩略图。",
-            icon: InfoDialogIcon.Information);
+            $"模式：{modeName}\n\n" +
+            $"· 已处理（改动了文件）：{changed} 张\n" +
+            $"· 本来就没有黑边：{noBars} 张\n" +
+            $"· 跳过（疑似暗色画面）：{tooDark} 张\n" +
+            $"· 失败：{failed} 张" + extra +
+            "\n\n截图已被就地替换（原图在 _originals 子目录里，可还原）。",
+            icon: failed > 0 ? InfoDialogIcon.Warning : InfoDialogIcon.Information);
     }
+    /// <summary>
+    /// 按设置处理一张截图的四周黑边（采集与补拍共用同一入口，保证两条路一致）。
+    /// 结果同时写日志，返回 (结果分类, 说明, 处理后宽, 处理后高)。
+    /// </summary>
+    private (Services.BarOutcome outcome, string detail, int width, int height) ProcessCaptureBars(
+        string screenshotPath, HotkeyConfig cfg)
+    {
+        var mode = (Services.BarMode)Math.Clamp(cfg.CaptureBarMode, 0, 3);
+        if (mode == Services.BarMode.None)
+        {
+            AppLog.Write($"bars[{Path.GetFileName(screenshotPath)}]: 设置=不操作，跳过");
+            return (Services.BarOutcome.Disabled, "不操作", 0, 0);
+        }
+        var (outcome, detail, w, h) = Services.BlackBarCropper.ApplyEx(screenshotPath, mode,
+            cfg.BarAdjustLeft, cfg.BarAdjustRight, cfg.BarAdjustTop, cfg.BarAdjustBottom);
+        AppLog.Write($"bars[{Path.GetFileName(screenshotPath)}]: {outcome} {detail}");
+        return (outcome, detail, w, h);
+    }
+
+    /// <summary>黑边处理结果的一句话（状态栏/提示用，明确区分「处理了 / 本来就没黑边 / 跳过 / 失败」）。</summary>
+    private static string BarStatusText(Services.BarOutcome outcome, int w, int h) => outcome switch
+    {
+        Services.BarOutcome.Changed => w > 0 && h > 0 ? $"黑边已处理 → {w}×{h}" : "黑边已处理",
+        Services.BarOutcome.NoBars => "无黑边（原样）",
+        Services.BarOutcome.TooDark => "黑边跳过：疑似暗色画面",
+        Services.BarOutcome.Missing => "黑边未处理：截图文件不存在",
+        Services.BarOutcome.Error => "黑边处理失败（详见日志）",
+        _ => "黑边：未处理",
+    };
+
     private void ImportItems(List<ImportItem> items)
     {
         if (items.Count == 0)
@@ -1716,7 +1817,11 @@ public partial class MainViewModel : ObservableObject
                 // Write a VBScript to startup folder — no admin rights needed, no console flash
                 var vbsPath = Path.Combine(startupFolder, "Gal-quote-tool.vbs");
                 var vbsContent = $"CreateObject(\"WScript.Shell\").Run \"\"\"{exePath}\"\" --minimized\", 0, False";
-                File.WriteAllText(vbsPath, vbsContent);
+                // WScript.exe decodes BOM-less .vbs using the system ANSI codepage. When the
+                // user name is non-ASCII (e.g. C:\Users\未时\...) the path turns into mojibake
+                // and the launcher fails silently, so auto-start never actually works.
+                // UTF-16LE writes a BOM and is natively supported by WSH on every locale.
+                File.WriteAllText(vbsPath, vbsContent, System.Text.Encoding.Unicode);
 
                 if (!File.Exists(vbsPath))
                     return (false, "无法创建启动脚本");
@@ -2269,13 +2374,23 @@ public partial class MainViewModel : ObservableObject
                 forceFullscreen: !string.IsNullOrWhiteSpace(gameName), jpegQuality: _jpegQuality,
                 captureMode: EffectiveCaptureMode());
             var screenshotPath = shot.FilePath;
+
+            // 补拍以前完全不走黑边处理（用户反馈：补拍的图不裁剪）；现在和主采集走同一条路
+            var (barOutcome, barDetail, barW, barH) = ProcessCaptureBars(screenshotPath, _settingsService.LoadHotkeyConfig());
+            if (barOutcome == Services.BarOutcome.Changed && barW > 0 && barH > 0)
+            {
+                shot.Width = barW;
+                shot.Height = barH;
+            }
+
             _storageService.AddScreenshot(SelectedQuote.Id, screenshotPath, nextOrder);
 
-            var toast = new Views.ToastWindow("已补拍截图", $"第 {nextOrder} 张 · {shot.Width}×{shot.Height}", 2000);
+            var toast = new Views.ToastWindow("已补拍截图",
+                $"第 {nextOrder} 张 · {shot.Width}×{shot.Height} · {BarStatusText(barOutcome, barW, barH)}", 2000);
             toast.Show();
 
             restoreWindow = false;
-            StatusText = $"已为语录补拍第 {nextOrder} 张截图   ·   {shot.Width}×{shot.Height} {shot.ModeLabel}";
+            StatusText = $"已为语录补拍第 {nextOrder} 张截图   ·   {shot.Width}×{shot.Height} {shot.ModeLabel}   ·   {BarStatusText(barOutcome, barW, barH)}";
         }
         catch (Exception ex)
         {

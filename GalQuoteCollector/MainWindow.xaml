@@ -161,6 +161,8 @@
                                       ToolTip="数据库里记的截图路径如果指向已经不存在的文件（换盘符、搬目录、双系统换盘后很常见），按同名文件改指到当前截图目录"/>
                             <MenuItem Header="删除未关联截图" Command="{Binding DeleteUnassociatedScreenshotsCommand}"/>
                             <MenuItem Header="批量处理截图黑边" Command="{Binding CropAllBlackBarsCommand}"/>
+                            <MenuItem Header="还原截图原图（黑边处理前）" Command="{Binding RestoreScreenshotOriginalsCommand}"
+                                      ToolTip="把截图还原成黑边处理之前的原图（从截图目录的 _originals 备份里取），可换模式重新处理"/>
                             <Separator/>
                             <MenuItem Header="批量删除" Click="OnBatchDelete"/>
                             <Separator/>
